@@ -16,8 +16,10 @@ Treat the current directory as a teaching workspace. Workspace paths (`./lessons
 - `RESOURCES.md`: A list of resources which can be explored to ground your teaching in contextual knowledge, or to acquire knowledge and wisdom. Use the format in [RESOURCES-FORMAT.md](./RESOURCES-FORMAT.md).
 - `./learning-records/*.md`: A directory of learning records, which capture what the user has learned. These are loosely equivalent to architectural decision records in software development - they capture non-obvious lessons and key insights that may need to be revised later, or drive future sessions. These should be used to calculate the zone of proximal development. They are titled `0001-<dash-case-name>.md`, where the number increments each time. Use the format in [LEARNING-RECORD-FORMAT.md](./LEARNING-RECORD-FORMAT.md).
 - `./lessons/*.html`: A directory of lessons. A **lesson** is a single, self-contained HTML output that teaches one tightly-scoped thing tied to the mission. This is the primary unit of teaching in this workspace.
+- `./index.html`: The root course landing page for GitHub Pages hosting, linking to all published lessons (via `.lesson-grid` / `.lesson-card` cards with mutation scoreboards and runnable app paths) and `./reference/*.html` sheets.
 - `./apps/<NNNN-lesson-slug>/`: For software/coding courses, a series of runnable application directories where each directory represents the exact state of the project after completing the corresponding lesson (`./lessons/<NNNN-lesson-slug>.html`).
 - `./assets/*`: Reusable **components** shared across lessons. See [Assets](#assets).
+- `README.md`: Repository overview linking to the live GitHub Pages site, published lessons, reference sheets, `./LICENSE.txt`, and the disclaimer `This is not an official Google product.`
 - `NOTES.md`: A scratchpad for you to jot down user preferences, or working notes.
 
 ## Philosophy
@@ -62,8 +64,21 @@ For coding courses, back every lesson with a real, runnable application director
 A lesson should be **beautiful**, with clean, readable typography and layout, since the user will return to these later to review. Think Tufte:
 
 - **Dark mode by default**: Use dark mode across all lessons and `./reference/*.html` documents (`<meta name="color-scheme" content="dark">` in `<head>` and `:root { color-scheme: dark; }` in the shared stylesheet), paired with a `@media print` light-mode override so lessons and reference documents still print cleanly on paper. Pair `scrollbar-color` on `:root` with `scrollbar-width: thin` (required on macOS so custom scrollbars render) and wrap legacy `::-webkit-scrollbar` fallbacks in `@supports not (scrollbar-color: auto)`. Use high-contrast `accent-color` tokens for interactive form controls with `@supports not (accent-color: ...)` fallbacks for range inputs.
+- **Modern web typography, transitions, and accessibility**: Enable cross-document view transitions (`@view-transition { navigation: auto; }` inside `@media (prefers-reduced-motion: no-preference)`), style focus rings with `:focus-visible` and `outline-offset: 2px` via `:where(...)` (never bare `:focus`), apply `text-wrap: balance` to headings/table headers (`h1, h2, h3, th`) and `text-wrap: pretty` to body copy (`p, li, blockquote`), use semantic HTML landmarks (`<header>`, `<nav>`, `<main>`, `<article>`, `<footer>`), and ensure scrollable `<pre>` code blocks receive `tabindex="0"` for keyboard scrolling (handled automatically in `./assets/course.js`).
 - **Prism.js for syntax highlighting**: Format all code blocks with Prism.js (`<pre><code class="language-...">`), and load the Prism `keep-markup` plugin when embedding interactive `<input>` blanks inside code blocks. Never hand-roll syntax `<span>` tags.
 - **Mermaid.js for diagrams**: Use Mermaid.js (`<pre class="mermaid">` configured with `theme: "dark"`) for architecture, lifecycle, and flow diagrams instead of ASCII-art diagrams.
+
+### Course Index, Navigation & GitHub Pages Hosting
+
+Keep the course navigable both locally and on GitHub Pages:
+
+1. **Synchronize Navigation & Index on Every New Lesson:** Whenever you add a lesson (`./lessons/<NNNN-slug>.html`) or reference sheet (`./reference/*.html`):
+   - Include `<a href="../index.html">Index</a>` as the first link in `<nav class="course-nav">` across all lessons and reference pages, and add the new lesson link (`NNNN`) to `.course-nav` in `./index.html`, `./lessons/*.html`, and `./reference/*.html`.
+   - Add a `.lesson-card` entry to `./index.html` (showing the lesson number, `cargo mutants` caught score badge, `egui` skill, Rust concept, and `./apps/<NNNN-slug>` path) and add the live link to `README.md`.
+   - Preserve the license link (`[Apache License, Version 2.0](./LICENSE.txt)`) and the `This is not an official Google product.` disclaimer in `README.md`.
+2. **GitHub Pages Deployment (`.github/workflows/pages.yml` & `.nojekyll`):**
+   - Stage only the static course web files (`index.html`, `.nojekyll`, `assets/`, `lessons/`, `reference/`) into `_site/` in `.github/workflows/pages.yml` (`actions/configure-pages@v5` with `enablement: true`, `actions/upload-pages-artifact@v3`, and `actions/deploy-pages@v4`) so companion Rust crates (`apps/`) and internal markdown files are excluded from the web artifact.
+   - When enabling GitHub Pages on a new repository, configure workflow-based Pages via `gh api repos/<owner>/<repo>/pages -X POST -f build_type=workflow`. If the initial `push` workflow run executes before the Pages API endpoint is enabled, trigger `gh workflow run pages.yml` after enabling Pages.
 
 The lesson should be short, and completable very quickly. Learners' working memory is very small, and we need to stay within it. But each lesson should give the user a single tangible win that they can build on. It should be directly tied to the mission, and should be in the user's zone of proximal development.
 
