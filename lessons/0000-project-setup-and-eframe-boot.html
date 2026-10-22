@@ -14,6 +14,7 @@
       <a href="./0001-the-immediate-mode-loop.html">Lesson 0001</a>
       <a href="../reference/glossary.html">Glossary</a>
       <a href="../reference/immediate-mode-cheatsheet.html">Immediate-Mode Cheat Sheet</a>
+      <a href="../reference/testing-and-mutation-cheatsheet.html">Testing &amp; Mutation Cheat Sheet</a>
     </div>
     <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
   </nav>
@@ -128,6 +129,20 @@ impl eframe::App for PcbReviewerApp {
             ui.heading("PCB Viewport Ready");
         });
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_enables_physical_layers_and_hides_ratsnest() {
+        let app = PcbReviewerApp::default();
+        assert!(app.show_top_copper);
+        assert!(app.show_bottom_copper);
+        assert!(app.show_silkscreen);
+        assert!(!app.show_ratsnest);
+    }
 }</code></pre>
 
       <h3>Three Rust Details Worth Unpacking</h3>
@@ -142,34 +157,72 @@ impl eframe::App for PcbReviewerApp {
           <strong>The App Creator Closure (<code>Box::new(|_cc| Ok(Box::new(...)))</code>):</strong> <a href="https://docs.rs/eframe/latest/eframe/fn.run_native.html" target="_blank" rel="noopener"><code>eframe::run_native</code></a> takes a factory closure that runs <em>once</em> after the GPU context (`_cc: &amp;CreationContext`) is ready, allocating your <code>PcbReviewerApp</code> on the heap (<a href="https://doc.rust-lang.org/book/ch15-01-box.html" target="_blank" rel="noopener"><code>Box::new</code></a>) and handing ownership to <code>eframe</code>.
         </li>
       </ol>
+
+      <h2>4. Continuous Verification &amp; Mutation Testing from Day 1</h2>
+
+      <p>
+        Across every lesson in this course, we don't just run the window—we prove our logic is tested with <code>cargo test</code> and monitor our assertion coverage using <a href="https://mutants.rs/" target="_blank" rel="noopener"><code>cargo-mutants</code></a> (<a href="../reference/testing-and-mutation-cheatsheet.html">Testing &amp; Mutation Cheat Sheet</a>).<span class="sidenote-number"></span><span class="sidenote">Why mutation testing? Standard line coverage only checks whether a line of code <em>ran</em> during a test. <a href="https://mutants.rs/" target="_blank" rel="noopener"><code>cargo-mutants</code></a> deliberately flips booleans, signs, and return values in your code and verifies that <code>cargo test</code> actually fails (a <strong>Caught Mutant</strong>) rather than silently passing (a <strong>Missed Mutant</strong>).</span>
+      </p>
+
+      <p>
+        Look at the <code>#[cfg(test)] mod tests</code> block at the bottom of <code>src/main.rs</code> above. The attribute <code>#[cfg(test)]</code> tells <code>rustc</code> to compile that module only when you run <code>cargo test</code> (<a href="https://doc.rust-lang.org/book/ch11-01-writing-tests.html" target="_blank" rel="noopener">Rust Book §11.1</a>). If someone accidentally changes <code>show_top_copper: true</code> to <code>false</code>—or replaces our custom <code>impl Default</code> with <code>#[derive(Default)]</code>—<code>assert!(app.show_top_copper)</code> immediately fails.
+      </p>
+
+      <p>
+        To configure <code>cargo-mutants</code> so it mutates our application state logic without trying to launch the blocking OS window in <code>fn main()</code>, add a five-line <code>.cargo/mutants.toml</code> file to your project:
+      </p>
+
+      <pre><code class="language-toml"># .cargo/mutants.toml
+# Skip the OS window launcher and raw panel draw loop until Lesson 0006
+# introduces headless UI testing with egui_kittest.
+exclude_re = [
+    "fn main",
+    "impl eframe::App for PcbReviewerApp::update",
+]</code></pre>
     </div>
 
-    <!-- Interactive Skill 1: Hands-On Project Setup Checklist -->
+    <!-- Interactive Skill 1: Hands-On Project Setup & Cargo Verification Checklist -->
     <section class="full-width-panel">
       <div class="panel-header">
-        <span class="panel-title">Interactive Lab 1: Optional Local Crate Setup</span>
-        <span class="panel-badge">Hands-On Steps • Cargo 1.97</span>
+        <span class="panel-title">Interactive Lab 1: Crate Setup &amp; Cargo Verification Gate</span>
+        <span class="panel-badge">cargo test + cargo mutants</span>
       </div>
       <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-        If you want to run the code locally alongside these lessons, check off each step as you run it in your terminal:
+        Every lesson includes a <strong>Cargo Verification &amp; Mutation Coverage</strong> gate. Check off each step in your terminal to establish your baseline:
       </p>
+
+      <div class="mutation-scoreboard">
+        <div class="mutation-stat tier">
+          <div class="stat-label">Verification Tier</div>
+          <div class="stat-value">Tier 2: Unit Tests</div>
+        </div>
+        <div class="mutation-stat caught">
+          <div class="stat-label">Target Caught Mutants</div>
+          <div class="stat-value">1 / 1 (100%)</div>
+        </div>
+        <div class="mutation-stat missed">
+          <div class="stat-label">Target Missed Mutants</div>
+          <div class="stat-value">0 Missed</div>
+        </div>
+      </div>
+
       <ul class="step-checklist">
         <li>
           <input type="checkbox" id="step-1">
           <label for="step-1">
-            <strong>1. Scaffold the binary crate:</strong> Run <code>cargo new pcb-reviewer &amp;&amp; cd pcb-reviewer</code> in a scratch folder (or inside this workspace).
+            <strong>1. Scaffold the binary crate:</strong> Run <code>cargo new pcb-reviewer &amp;&amp; cd pcb-reviewer</code> and add <code>eframe = "0.33"</code> + <code>[profile.dev.package."*"] opt-level = 2</code> to <code>Cargo.toml</code>.
           </label>
         </li>
         <li>
           <input type="checkbox" id="step-2">
           <label for="step-2">
-            <strong>2. Add <code>eframe</code> &amp; dev optimization:</strong> Add <code>eframe = "0.33"</code> under <code>[dependencies]</code> and <code>[profile.dev.package."*"] opt-level = 2</code> to <code>Cargo.toml</code>.
+            <strong>2. Paste <code>src/main.rs</code> and verify the unit test:</strong> Run <code>cargo test</code> and confirm <code>test tests::default_enables_physical_layers_and_hides_ratsnest ... ok</code> passes.
           </label>
         </li>
         <li>
           <input type="checkbox" id="step-3">
           <label for="step-3">
-            <strong>3. Paste the <code>src/main.rs</code> skeleton:</strong> Replace <code>src/main.rs</code> with the listing above and run <code>cargo run</code> to open your native 1024×720 window.
+            <strong>3. Run your first mutation coverage check:</strong> Install <code>cargo install --locked cargo-mutants</code> (once), save <code>.cargo/mutants.toml</code> above, and run <code>cargo mutants</code>. Try commenting out <code>assert!(!app.show_ratsnest);</code> or changing <code>show_top_copper: false</code> to watch a mutant flip from <strong>Caught</strong> to <strong>Missed</strong>!
           </label>
         </li>
       </ul>

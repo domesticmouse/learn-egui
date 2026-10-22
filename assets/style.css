@@ -592,7 +592,7 @@ pre.mermaid {
   color: var(--err-text);
 }
 
-/* Step Checklist (for Hands-on Setup Steps) */
+/* Step Checklist (for Hands-on Setup & Cargo Verification Steps) */
 .step-checklist {
   list-style: none;
   padding-left: 0;
@@ -615,6 +615,60 @@ pre.mermaid {
   transform: scale(1.15);
   accent-color: var(--accent-pcb);
   cursor: pointer;
+}
+
+/* Cargo Verification & Mutation Coverage Scoreboard (shared across all lessons) */
+.mutation-scoreboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
+  margin: 1rem 0 1.25rem 0;
+  font-family: var(--font-sans);
+}
+
+.mutation-stat {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 0.75rem 1rem;
+}
+
+.mutation-stat .stat-label {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.mutation-stat .stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.mutation-stat.caught {
+  border-left: 3px solid var(--ok-border);
+}
+
+.mutation-stat.caught .stat-value {
+  color: var(--ok-text);
+}
+
+.mutation-stat.missed {
+  border-left: 3px solid var(--accent-copper);
+}
+
+.mutation-stat.missed .stat-value {
+  color: var(--accent-copper);
+}
+
+.mutation-stat.tier {
+  border-left: 3px solid var(--accent-silk);
+}
+
+.mutation-stat.tier .stat-value {
+  color: var(--accent-silk);
 }
 
 /* Callouts & Footer */

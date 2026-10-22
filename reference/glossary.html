@@ -14,6 +14,7 @@
       <a href="../lessons/0001-the-immediate-mode-loop.html">Lesson 0001</a>
       <a href="./glossary.html" class="active">Glossary</a>
       <a href="./immediate-mode-cheatsheet.html">Immediate-Mode Cheat Sheet</a>
+      <a href="./testing-and-mutation-cheatsheet.html">Testing &amp; Mutation Cheat Sheet</a>
     </div>
     <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
   </nav>
@@ -127,6 +128,39 @@
           <td><code>egui::Response</code></td>
           <td>Returned immediately by every widget call (e.g. <code>ui.button("Reset").clicked()</code> or <code>.hovered()</code>). Tells you how the user interacted with that widget during the current frame.</td>
           <td><a href="https://docs.rs/egui/latest/egui/struct.Response.html" target="_blank" rel="noopener"><code>egui::Response</code> docs</a></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. Verification &amp; Mutation Testing Terms</h2>
+    <table class="ref-table">
+      <thead>
+        <tr>
+          <th style="width: 24%;">Term &amp; Syntax</th>
+          <th style="width: 48%;">Definition</th>
+          <th style="width: 28%;">Primary Reference</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Test Module (<code>#[cfg(test)]</code>)</strong></td>
+          <td>A conditional compilation attribute telling <code>rustc</code> to compile the annotated <code>mod tests</code> block only when running <code>cargo test</code>, keeping test code out of production builds.</td>
+          <td><a href="https://doc.rust-lang.org/book/ch11-03-test-organization.html" target="_blank" rel="noopener">Rust Book §11.3</a></td>
+        </tr>
+        <tr>
+          <td><strong>Mutation Testing (<code>cargo-mutants</code>)</strong></td>
+          <td>A verification technique that injects small deliberate bugs (<em>mutants</em>, such as flipping <code>true</code> to <code>false</code> or replacing a function body with <code>Default::default()</code>) and checks whether <code>cargo test</code> fails.</td>
+          <td><a href="https://mutants.rs/" target="_blank" rel="noopener"><code>mutants.rs</code> guide</a></td>
+        </tr>
+        <tr>
+          <td><strong>Caught vs. Missed Mutant</strong></td>
+          <td>A <strong>Caught Mutant</strong> causes at least one test to fail (proving your assertions cover that logic). A <strong>Missed Mutant</strong> allows all tests to still pass (revealing an unasserted coverage gap).</td>
+          <td><a href="./testing-and-mutation-cheatsheet.html">Testing &amp; Mutation Cheat Sheet</a></td>
+        </tr>
+        <tr>
+          <td><strong>Headless UI Harness (<code>egui_kittest</code>)</strong></td>
+          <td>The official testing library for <code>egui</code> that drives an app or widget without opening an OS window, supporting semantic widget queries, simulated clicks/keys, and offscreen visual snapshots.</td>
+          <td><a href="https://docs.rs/egui_kittest/latest/egui_kittest/" target="_blank" rel="noopener"><code>egui_kittest</code> docs</a></td>
         </tr>
       </tbody>
     </table>

@@ -1,5 +1,7 @@
 # Six-Act Curriculum Arc (`0002`–`0025`) Including `nom` & `turso` (`libsql`)
 
+*Note: Updated by [[0003-continuous-testing-and-mutation-coverage.md]] to weave `cargo test` and `cargo-mutants` mutation testing into every lesson (`0000`–`0025`) across all six Acts.*
+
 The learner approved a 24-lesson progression (`0002`–`0025`) across six 4-lesson acts that takes the Schematic & PCB Design Review System from a single-file immediate-mode window (`0000`–`0001`) through:
 1. **Act I (`0002`–`0005`)**: 2D CAD canvas rendering, pan/zoom coordinate transforms, layer Z-ordering, and net hit-testing.
 2. **Act II (`0006`–`0009`)**: Schematic symbols/text, dual-viewport `egui::Scene` cross-probing, virtualized BOM tables, and a hotkey CAD measurement ruler.

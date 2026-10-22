@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Testing &amp; Mutation Coverage Cheat Sheet — Rust &amp; egui</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <nav class="course-nav">
+    <div>
+      <a href="../lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a>
+      <a href="../lessons/0001-the-immediate-mode-loop.html">Lesson 0001</a>
+      <a href="./glossary.html">Glossary</a>
+      <a href="./immediate-mode-cheatsheet.html">Immediate-Mode Cheat Sheet</a>
+      <a href="./testing-and-mutation-cheatsheet.html" class="active">Testing &amp; Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
+  </nav>
+
+  <article class="tufte-article">
+    <h1>Reference: Continuous Verification &amp; Mutation Testing (<code>cargo-mutants</code>)</h1>
+    <p class="subtitle">How we verify every PCB Reviewer feature with <code>cargo test</code> and measure real assertion coverage with <code>cargo mutants</code> across Acts I–VI.</p>
+
+    <h2>1. Why Mutation Testing Beats Line Coverage in <code>egui</code></h2>
+    <p>
+      Traditional line coverage only tells you whether a line of Rust code <em>executed</em> during a test—not whether your test would fail if that line were wrong. In an immediate-mode GUI, calling <code>app.update(...)</code> executes almost every line of your panel layout even if your test contains zero assertions!
+    </p>
+    <p>
+      <a href="https://mutants.rs/" target="_blank" rel="noopener"><code>cargo-mutants</code></a> tests your tests: it copies your project to a scratch directory, systematically injects small faults (<strong>mutants</strong>—such as flipping <code>true</code> to <code>false</code>, replacing <code>+</code> with <code>-</code>, or emptying a method body), and runs <code>cargo test</code> against each mutant.
+    </p>
+
+    <figure class="mermaid-figure">
+      <pre class="mermaid">
+flowchart LR
+    Source["Rust Source Code<br/>(e.g. isolate_top_copper)"] --> Mutate["cargo mutants injects fault<br/>(e.g. show_top_copper = false)"]
+    Mutate --> Run["Runs cargo test<br/>in scratch build dir"]
+    Run -->|"Test FAILS"| Caught["CAUGHT MUTANT<br/>(Your test assertion works!)"]
+    Run -->|"Test PASSES"| Missed["MISSED MUTANT<br/>(Coverage gap: add assertion!)"]
+      </pre>
+      <figcaption>How <code>cargo mutants</code> distinguishes verified logic (Caught) from unasserted code paths (Missed).</figcaption>
+    </figure>
+
+    <h2>2. Essential Commands &amp; Outcomes</h2>
+    <pre><code class="language-bash"># 1. Install cargo-mutants once (works with stable Rust, no nightly required)
+cargo install --locked cargo-mutants
+
+# 2. Run the unit &amp; integration test suite
+cargo test
+
+# 3. Run mutation testing across the current crate and list any missed mutants
+cargo mutants
+
+# 4. Mutate only a single file or function during fast iteration
+cargo mutants -f src/main.rs</code></pre>
+
+    <table class="ref-table">
+      <thead>
+        <tr>
+          <th style="width: 22%;">Outcome</th>
+          <th style="width: 48%;">Meaning</th>
+          <th style="width: 30%;">Action to Take</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Caught</strong></td>
+          <td><code>cargo test</code> failed when this mutation was injected. Your test suite actively guards this line of code.</td>
+          <td>Celebrate—this behavior is locked down.</td>
+        </tr>
+        <tr>
+          <td><strong>Missed</strong></td>
+          <td><code>cargo test</code> still passed even with the mutated code! Either no test exercises this path or an assertion is missing.</td>
+          <td>Add a unit/harness assertion that fails under the mutated value.</td>
+        </tr>
+        <tr>
+          <td><strong>Unviable</strong></td>
+          <td>The mutated code failed to type-check or compile (Rust's type system caught it before tests even ran).</td>
+          <td>Ignored automatically by <code>cargo mutants</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>Timeout</strong></td>
+          <td>The mutation caused an infinite loop in a test.</td>
+          <td>Inspect loop termination bounds.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Scoping Visual Entrypoints with <code>.cargo/mutants.toml</code></h2>
+    <p>
+      In a desktop application, <code>fn main()</code> opens a blocking OS window via <code>eframe::run_native</code>, which should not run inside headless unit tests. Create <code>.cargo/mutants.toml</code> in your crate root to explicitly track which functions are excluded from mutation until a higher-tier harness is introduced:
+    </p>
+    <pre><code class="language-toml"># .cargo/mutants.toml
+# Explicitly exclude the OS window launcher and raw panel draw loop in Act I;
+# we remove "update" from this list in Lesson 0006 when we add egui_kittest!
+exclude_re = [
+    "fn main",
+    "impl eframe::App for PcbReviewerApp::update",
+]</code></pre>
+
+    <h2>4. Progression of Testing Across the Six Acts</h2>
+    <table class="ref-table">
+      <thead>
+        <tr>
+          <th style="width: 20%;">Curriculum Stage</th>
+          <th style="width: 32%;">Testing Mechanism Introduced</th>
+          <th style="width: 48%;">What <code>cargo test</code> + <code>cargo mutants</code> Verifies</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Lessons 0000–0001 &amp; Act I (0002–0005)</strong></td>
+          <td><code>#[cfg(test)]</code>, <code>#[test]</code>, <code>assert_eq!</code>, pure domain/math methods</td>
+          <td>Default layer visibility flags, preset state transitions, <code>Rect</code> bounds, <code>TSTransform</code> pan/zoom round-trips, layer Z-ordering, and net hit-testing.</td>
+        </tr>
+        <tr>
+          <td><strong>Act II (0006–0009)</strong></td>
+          <td><code>egui_kittest::Harness</code> (headless UI queries &amp; simulated key presses)</td>
+          <td>Un-skips <code>eframe::App::update</code>! Verifies rendered schematic labels, dual-viewport cross-probing, BOM filtering, and <code>F</code> / <code>M</code> / <code>Esc</code> hotkeys.</td>
+        </tr>
+        <tr>
+          <td><strong>Act III (0010–0013)</strong></td>
+          <td>Workflow state-machine tests &amp; <code>Harness::new_ui</code> widget mounts</td>
+          <td>Review pin CRUD in <code>HashMap</code>, <code>Open</code> → <code>Resolved</code> → <code>Verified</code> triage rules, DRC clearance bounds, and custom <code>egui::Widget</code> layer swatches.</td>
+        </tr>
+        <tr>
+          <td><strong>Act IV (0014–0017)</strong></td>
+          <td>Workspace layer gates, panic-free lints &amp; <code>proptest!</code></td>
+          <td><code>#![deny(clippy::unwrap_used)]</code>, sub-second <code>cargo mutants -p pcb-doc</code>, corrupt JSON rejection, and <code>Arc::make_mut</code> undo/redo snapshot invariants.</td>
+        </tr>
+        <tr>
+          <td><strong>Act V (0018–0021)</strong></td>
+          <td><code>panic_hunt</code> command fuzzer, perf budgets &amp; <code>gpu_lock()</code> snapshots</td>
+          <td>Adversarial JSON fuzzing of every <code>CommandSpec</code>, spatial culling equivalence, background worker cancellation, and offscreen <code>wgpu</code> PNG visual parity.</td>
+        </tr>
+        <tr>
+          <td><strong>Act VI (0022–0025)</strong></td>
+          <td>Real-file KiCad corpus oracles &amp; <code>#[tokio::test]</code> SQL harnesses</td>
+          <td><code>nom</code> S-expression parser edge cases, pinned <code>.kicad_pcb</code> oracle pass/round-trip ratchets, Turso (<code>libsql</code>) transactions, and <code>docs/scorecard.md</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+  </article>
+
+  <script src="../assets/course.js"></script>
+</body>
+</html>
