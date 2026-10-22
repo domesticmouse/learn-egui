@@ -21,13 +21,131 @@ function loadScript(src) {
   });
 }
 
+function extractCopyableText(codeEl) {
+  const clone = codeEl.cloneNode(true);
+  clone.querySelectorAll("input").forEach((inp, idx) => {
+    const original = codeEl.querySelectorAll("input")[idx];
+    const currentVal = original && original.value ? original.value.trim() : "";
+    const fallback = inp.getAttribute("placeholder") || "";
+    inp.replaceWith(document.createTextNode(currentVal || fallback));
+  });
+  return clone.textContent || "";
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {
+      // Fall through to textarea fallback (e.g., on file:// protocol)
+    }
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-9999px";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch (_) {
+    ok = false;
+  }
+  document.body.removeChild(textarea);
+  return ok;
+}
+
+function getOrCreateCopyStatusAnnouncer() {
+  let announcer = document.getElementById("copy-live-announcer");
+  if (!announcer) {
+    announcer = document.createElement("div");
+    announcer.id = "copy-live-announcer";
+    announcer.className = "visually-hidden";
+    announcer.setAttribute("aria-live", "polite");
+    announcer.setAttribute("aria-atomic", "true");
+    document.body.appendChild(announcer);
+  }
+  return announcer;
+}
+
+function initCopyButtons() {
+  const announcer = getOrCreateCopyStatusAnnouncer();
+  const preBlocks = document.querySelectorAll("pre:has(> code)");
+
+  preBlocks.forEach((pre, index) => {
+    if (pre.closest(".code-block-wrapper")) return;
+
+    const codeEl = pre.querySelector("code");
+    if (!codeEl) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "code-block-wrapper";
+    if (pre.parentElement && pre.parentElement.classList.contains("sim-box")) {
+      wrapper.classList.add("is-compact");
+    }
+    if (pre.style.marginBottom) {
+      wrapper.style.marginBottom = pre.style.marginBottom;
+      pre.style.marginBottom = "0";
+    }
+
+    pre.parentNode.insertBefore(wrapper, pre);
+    wrapper.appendChild(pre);
+
+    const langMatch = (codeEl.className || "").match(/language-([a-z0-9_-]+)/i);
+    const langName = langMatch ? langMatch[1].toUpperCase() : "TEXT";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "copy-code-btn";
+    btn.setAttribute(
+      "aria-label",
+      `Copy ${langName} code block ${index + 1} to clipboard`
+    );
+
+    const renderIdleContent = () => {
+      btn.innerHTML = `<svg aria-hidden="true" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.5"></rect><path d="M10.5 5.5V3.5C10.5 2.67 9.83 2 9 2H3.5C2.67 2 2 2.67 2 3.5V9C2 9.83 2.67 10.5 3.5 10.5H5.5"></path></svg><span>Copy</span>`;
+    };
+
+    const renderCopiedContent = () => {
+      btn.innerHTML = `<svg aria-hidden="true" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3.5 8.5 6.5 11.5 12.5 4.5"></polyline></svg><span>Copied!</span>`;
+    };
+
+    renderIdleContent();
+
+    let resetTimer = null;
+    btn.addEventListener("click", async () => {
+      const text = extractCopyableText(codeEl);
+      const ok = await copyTextToClipboard(text);
+      if (!ok) return;
+
+      if (resetTimer) clearTimeout(resetTimer);
+      btn.classList.add("copied");
+      renderCopiedContent();
+      announcer.textContent = `Copied ${langName} code block ${index + 1} to clipboard.`;
+
+      resetTimer = setTimeout(() => {
+        btn.classList.remove("copied");
+        renderIdleContent();
+        resetTimer = null;
+      }, 1800);
+    });
+
+    wrapper.appendChild(btn);
+  });
+}
+
 async function initSyntaxAndDiagrams() {
-  // Ensure scrollable code blocks are keyboard reachable
+  // Ensure scrollable code blocks are keyboard reachable and have copy buttons
   document.querySelectorAll("pre:has(> code)").forEach((pre) => {
     if (!pre.hasAttribute("tabindex")) {
       pre.setAttribute("tabindex", "0");
     }
   });
+  initCopyButtons();
 
   try {
     // Load Prism.js core + languages + keep-markup (preserves <input> inside <pre><code>)

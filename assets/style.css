@@ -278,6 +278,7 @@ code {
   border-radius: 3px;
 }
 
+pre:has(> code),
 pre[class*="language-"],
 pre.code-block {
   background: var(--bg-code);
@@ -290,6 +291,81 @@ pre.code-block {
   border: 1px solid var(--border-subtle);
   border-left: 4px solid var(--accent-copper);
   tab-size: 4;
+}
+
+.code-block-wrapper {
+  position: relative;
+  margin: 1.25rem 0 1.5rem 0;
+}
+
+.code-block-wrapper.is-compact {
+  margin: 0;
+}
+
+.code-block-wrapper > pre:has(> code),
+.code-block-wrapper > pre[class*="language-"],
+.code-block-wrapper > pre.code-block {
+  margin: 0;
+  padding-right: 5.5rem;
+}
+
+.code-block-wrapper.is-compact > pre:has(> code),
+.code-block-wrapper.is-compact > pre[class*="language-"] {
+  padding-top: 2.1rem !important;
+  padding-right: 0.85rem !important;
+}
+
+.copy-code-btn {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-sans);
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-main);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 0.34rem 0.58rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.code-block-wrapper.is-compact > .copy-code-btn {
+  top: 0.38rem;
+  right: 0.38rem;
+  padding: 0.24rem 0.48rem;
+  font-size: 0.7rem;
+}
+
+.copy-code-btn:hover {
+  background: #2c3540;
+  border-color: var(--accent-silk);
+  color: #ffffff;
+}
+
+.copy-code-btn.copied {
+  background: var(--ok-bg);
+  border-color: var(--ok-border);
+  color: var(--ok-text);
+}
+
+.visually-hidden:where(:not(:focus-within, :active)) {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
 }
 
 pre code,
@@ -909,7 +985,8 @@ table.ref-table th {
   }
   .course-nav,
   .btn-primary,
-  .btn-secondary {
+  .btn-secondary,
+  .copy-code-btn {
     display: none;
   }
   .full-width-panel,
