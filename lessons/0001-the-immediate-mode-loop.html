@@ -98,10 +98,17 @@ flowchart TD
       <h2>3. Making Button Actions Testable &amp; Mutant-Proof</h2>
 
       <p>
-        What about preset buttons like <strong>"Isolate Top Copper"</strong> or <strong>"Show All Layers"</strong>? When you click a button, <code>ui.button("...").clicked()</code> returns <code>true</code> for that single frame. If you extract the state transition into a method on <code>PcbReviewerApp</code> that takes <code>&amp;mut self</code>, your <code>update()</code> loop stays clean <em>and</em> you can test and mutate every state transition with <code>cargo test</code> and <a href="https://mutants.rs/" target="_blank" rel="noopener"><code>cargo mutants</code></a> (<a href="../reference/testing-and-mutation-cheatsheet.html">Testing &amp; Mutation Cheat Sheet</a>):<span class="sidenote-number"></span><span class="sidenote">Watch what happens if a test calls <code>PcbReviewerApp::default()</code> (where <code>show_top_copper</code> is <em>already</em> <code>true</code>) and then calls <code>app.isolate_top_copper()</code>: if <code>cargo mutants</code> mutates <code>self.show_top_copper = true</code> into a no-op, the test still passes unless it first starts with <code>app.show_top_copper = false</code>!</span>
+        What about preset buttons like <strong>"Isolate Top Copper"</strong> or <strong>"Show All Layers"</strong>? When you click a button, <code>ui.button("...").clicked()</code> returns <code>true</code> for that single frame. If you extract the state transition into a method on <code>PcbReviewerApp</code> that takes <code>&amp;mut self</code>, your <code>update()</code> loop stays clean <em>and</em> you can test and mutate every state transition with <code>cargo test</code> and <a href="https://mutants.rs/" target="_blank" rel="noopener"><code>cargo mutants</code></a> (<a href="../reference/testing-and-mutation-cheatsheet.html">Testing &amp; Mutation Cheat Sheet</a>):<span class="sidenote-number"></span><span class="sidenote">Watch what happens if a test starts from a state where <code>show_top_copper</code> is <em>already</em> <code>true</code> and the other layers are already <code>false</code>, and then calls <code>app.isolate_top_copper()</code>: when <code>cargo mutants</code> replaces the body of <code>isolate_top_copper</code> with an empty no-op <code>()</code>, the test would still pass unless the starting state actually requires <code>isolate_top_copper()</code> to flip the fields!</span>
       </p>
 
       <pre><code class="language-rust">impl PcbReviewerApp {
+    pub fn reset_layers(&amp;mut self) {
+        self.show_top_copper = true;
+        self.show_bottom_copper = true;
+        self.show_silkscreen = true;
+        self.show_ratsnest = false;
+    }
+
     pub fn isolate_top_copper(&amp;mut self) {
         self.show_top_copper = true;
         self.show_bottom_copper = false;
@@ -114,6 +121,42 @@ flowchart TD
         self.show_bottom_copper = true;
         self.show_silkscreen = true;
         self.show_ratsnest = true;
+    }
+}
+
+impl eframe::App for PcbReviewerApp {
+    fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame) {
+        egui::SidePanel::left("layer_panel").show(ctx, |ui| {
+            ui.heading("PCB Layers");
+            ui.checkbox(&amp;mut self.show_top_copper, "Top Copper (F.Cu)");
+            ui.checkbox(&amp;mut self.show_bottom_copper, "Bottom Copper (B.Cu)");
+            ui.checkbox(&amp;mut self.show_silkscreen, "Silkscreen (F.SilkS)");
+            ui.checkbox(&amp;mut self.show_ratsnest, "Ratsnest (Unrouted)");
+
+            ui.separator();
+            if ui.button("Isolate Top Copper").clicked() {
+                self.isolate_top_copper();
+            }
+            if ui.button("Show All Layers").clicked() {
+                self.show_all_layers();
+            }
+        });
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("PCB Viewport Ready");
+            if self.show_top_copper {
+                ui.label("Rendering Top Copper (F.Cu)...");
+            }
+            if self.show_bottom_copper {
+                ui.label("Rendering Bottom Copper (B.Cu)...");
+            }
+            if self.show_silkscreen {
+                ui.label("Rendering Silkscreen (F.SilkS)...");
+            }
+            if self.show_ratsnest {
+                ui.label("Rendering Ratsnest (Unrouted)...");
+            }
+        });
     }
 }</code></pre>
     </div>
@@ -155,7 +198,7 @@ flowchart TD
               <input type="checkbox" data-layer="rats">
               <span style="color: #7fe5f0;">---</span> Ratsnest
             </label>
-            <button type="button" class="egui-btn" data-action="copper-only">Copper Only</button>
+            <button type="button" class="egui-btn" data-action="copper-only">Isolate Top Copper</button>
             <button type="button" class="egui-btn" data-action="all-on">Show All Layers</button>
           </div>
 
@@ -264,7 +307,7 @@ flowchart TD
         <span class="panel-badge">cargo test + cargo mutants</span>
       </div>
       <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-        Add the unit test below to your <code>#[cfg(test)] mod tests</code> block in <code>src/main.rs</code>. Notice why we set <code>app.show_top_copper = false</code> and <code>app.show_ratsnest = true</code> <em>before</em> calling <code>app.isolate_top_copper()</code>—so <code>cargo mutants</code> catches a mutation on every single assignment line!
+        Add the two unit tests below to your <code>#[cfg(test)] mod tests</code> block in <code>src/main.rs</code>. Notice why we start with <code>show_top_copper: false</code> and the other layers <code>true</code> <em>before</em> calling <code>app.isolate_top_copper()</code>—so when <code>cargo mutants</code> replaces <code>isolate_top_copper</code> or <code>show_all_layers</code> with a no-op <code>()</code>, the test assertions immediately catch the mutant!
       </p>
 
       <pre><code class="language-rust">#[test]
@@ -326,7 +369,7 @@ fn show_all_layers_enables_every_layer() {
         <li>
           <input type="checkbox" id="verify-2">
           <label for="verify-2">
-            <strong>2. Run <code>cargo mutants</code>:</strong> Verify that <code>cargo mutants</code> reports <strong>0 missed mutants</strong> across <code>Default::default</code>, <code>isolate_top_copper</code>, and <code>show_all_layers</code>.
+            <strong>2. Run <code>cargo mutants</code>:</strong> (If you haven't installed it yet, run <code>cargo install --locked cargo-mutants</code> once.) Verify that <code>cargo mutants</code> reports <code>3 mutants tested: 3 caught</code> (<strong>0 missed mutants</strong>) across <code>reset_layers</code>, <code>isolate_top_copper</code>, and <code>show_all_layers</code>.
           </label>
         </li>
       </ul>

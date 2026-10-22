@@ -1,12 +1,13 @@
 ---
 name: egui-testing-infrastructure
 description: >-
-  Use this skill when running, writing, debugging, or auditing tests, benchmarks,
-  corpora, fuzzers, or CI gates in an engine-first Rust and egui application:
-  fast nextest loops, GPU test serialization (gpu_lock), real-file corpus oracles
-  and floor ratchets, panic_hunt adversarial command fuzzing, offscreen UI
-  snapshots (egui_kittest), MCP acceptance tests, performance budgets (xtask perf),
-  and scorecard generation (xtask scorecard).
+  Use this skill when running, writing, debugging, or auditing tests, mutation
+  coverage (cargo-mutants), benchmarks, corpora, fuzzers, or CI gates in an
+  engine-first Rust and egui application: fast nextest loops, cargo-mutants
+  configuration (.cargo/mutants.toml), GPU test serialization (gpu_lock),
+  real-file corpus oracles and floor ratchets, panic_hunt adversarial command
+  fuzzing, offscreen UI snapshots (egui_kittest), MCP acceptance tests,
+  performance budgets (xtask perf), and scorecard generation (xtask scorecard).
 ---
 
 # Testing, Corpus, Performance & Scorecard Infrastructure (`egui` & Rust)
@@ -26,7 +27,7 @@ Related skills:
 | Tier | Scope & Mechanism | Primary Files & Commands |
 |---|---|---|
 | **1. Compile-Time & Static Gates** | `L0`–`L7` acyclic layering (`cargo xtask layers`), `wasm32` check (`cargo xtask wasm`), `unsafe_code = "forbid"`, `#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, ...)]` across all workspace crates (relaxed in tests via `clippy.toml`), and exhaustive struct destructuring in `crates/format/src/convert.rs`. | `xtask/src/layers.rs`, `clippy.toml`, `crates/format/src/convert.rs` |
-| **2. Unit, Property & Format Fuzz Tests** | Domain unit tests across supported data representations, `proptest!` suites (COW chunks/tiles, spatial regions, codecs, file formats), deterministic synthetic document generators (`testgen`), truncation/corruption sweeps, and `cargo-fuzz` targets (`crates/*/fuzz/`). | `crates/*/src/`, `crates/*/fuzz/` |
+| **2. Unit, Property, Mutation & Format Fuzz Tests** | Domain unit tests across supported data representations, `cargo-mutants` mutation coverage (`0 missed mutants`), `proptest!` suites (COW chunks/tiles, spatial regions, codecs, file formats), deterministic synthetic document generators (`testgen`), truncation/corruption sweeps, and `cargo-fuzz` targets (`crates/*/fuzz/`). | `crates/*/src/`, `.cargo/mutants.toml`, `crates/*/fuzz/` |
 | **3. CPU vs. GPU Rendering Parity** | CPU reference renderer vs. `wgpu` WGSL shader output parity within a bounded tolerance. Every test using a `wgpu` device or `egui_kittest` GPU harness **must** hold `let _gpu = testkit::gpu_lock();` on its first line. | `crates/testkit/src/gpu.rs`, `.config/nextest.toml` |
 | **4. Pinned Real-File Oracles (`corpus`)** | Gitignored real-world files in `corpus/` fetched at pinned commits and verified against `xtask/*.sha256` manifests. Asserts monotonically increasing oracle pass and export round-trip floors, strict structural validation, and mutation safety. | `xtask/src/corpus_pins.rs`, `crates/io/tests/corpus.rs` |
 | **5. Command Registry & `panic_hunt`** | `crates/engine/tests/panic_hunt.rs` fuzzes every registered `CommandSpec` against adversarial JSON params on its own thread with a per-command deadline (e.g., 4 s) and a custom `std::panic::set_hook` counter that catches even panics swallowed by `Session::execute`'s `catch_unwind`. | `crates/engine/tests/panic_hunt.rs` |
@@ -102,6 +103,14 @@ cargo xtask scorecard --check
    Never commit large external corpus files into the repository. Reproduce any corpus or fuzz crash with a small, deterministic synthetic test in the crate (e.g., `crates/io/tests/corpus_regressions.rs`) that failed or panicked before the fix.
 5. **Ratchets Only Move Up:**
    Never lower `parity::FLOOR` in `crates/ui-egui/src/parity.rs` or any `pass_floor` / `roundtrip_floor` in `crates/io/tests/corpus.rs`. When your change improves pass counts, raise the floor and regenerate `docs/scorecard.md` via `cargo xtask scorecard`.
+6. **Mutation Testing (`cargo-mutants`) Configuration & Idioms:**
+   - **Prerequisite Installation:** Ensure `cargo-mutants` is installed (`cargo install --locked cargo-mutants`) and documented whenever onboarding or writing verification instructions.
+   - **Configure `.cargo/mutants.toml` with Exact `--list` Mutant Names:** `exclude_re` matches the generated mutant description from `cargo mutants --list`, *not* raw Rust syntax:
+     - To exclude `fn main()`, match `"replace main"` (not `"fn main"`).
+     - To exclude a trait method like `eframe::App::update`, match `"<impl eframe::App for MyApp>::update"` (not `"impl eframe::App for MyApp::update"`).
+     - Set `copy_target = true` in `.cargo/mutants.toml` and gitignore `mutants.out/` and `mutants.out.old/`.
+   - **Avoid `..Default::default()` Inside Untested Entrypoints (`fn main`):** `cargo-mutants` (v27.1+) generates `StructField` (`delete field <field> from struct <Struct> expression`) mutants on struct literals using `..Default::default()`, and `StructField` mutants bypass `exclude_re` filtering. In `fn main()`, initialize `eframe::NativeOptions` via `let mut options = eframe::NativeOptions::default(); options.viewport = ...;` rather than struct update syntax so `main()` does not produce an un-excludable missed mutant.
+   - **Delegate `impl Default` / `fn new` Logic to Named Methods:** `cargo-mutants` skips `impl Default` (`fn default`) and `fn new` completely to avoid infinite recursion with `Default::default()`. Put non-trivial initialization or state-reset logic in a named method (e.g., `pub fn reset_layers(&mut self)`) called by `Default::default()` so `cargo-mutants` can mutate and verify it.
 
 ---
 

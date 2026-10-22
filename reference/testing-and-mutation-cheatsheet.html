@@ -92,11 +92,14 @@ cargo mutants -f src/main.rs</code></pre>
       In a desktop application, <code>fn main()</code> opens a blocking OS window via <code>eframe::run_native</code>, which should not run inside headless unit tests. Create <code>.cargo/mutants.toml</code> in your crate root to explicitly track which functions are excluded from mutation until a higher-tier harness is introduced:
     </p>
     <pre><code class="language-toml"># .cargo/mutants.toml
+# Reuse the target directory across scratch builds so mutation runs finish quickly.
+copy_target = true
+
 # Explicitly exclude the OS window launcher and raw panel draw loop in Act I;
 # we remove "update" from this list in Lesson 0006 when we add egui_kittest!
 exclude_re = [
-    "fn main",
-    "impl eframe::App for PcbReviewerApp::update",
+    "replace main",
+    "&lt;impl eframe::App for PcbReviewerApp&gt;::update",
 ]</code></pre>
 
     <h2>4. Progression of Testing Across the Six Acts</h2>

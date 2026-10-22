@@ -16,6 +16,7 @@ Treat the current directory as a teaching workspace. Workspace paths (`./lessons
 - `RESOURCES.md`: A list of resources which can be explored to ground your teaching in contextual knowledge, or to acquire knowledge and wisdom. Use the format in [RESOURCES-FORMAT.md](./RESOURCES-FORMAT.md).
 - `./learning-records/*.md`: A directory of learning records, which capture what the user has learned. These are loosely equivalent to architectural decision records in software development - they capture non-obvious lessons and key insights that may need to be revised later, or drive future sessions. These should be used to calculate the zone of proximal development. They are titled `0001-<dash-case-name>.md`, where the number increments each time. Use the format in [LEARNING-RECORD-FORMAT.md](./LEARNING-RECORD-FORMAT.md).
 - `./lessons/*.html`: A directory of lessons. A **lesson** is a single, self-contained HTML output that teaches one tightly-scoped thing tied to the mission. This is the primary unit of teaching in this workspace.
+- `./apps/<NNNN-lesson-slug>/`: For software/coding courses, a series of runnable application directories where each directory represents the exact state of the project after completing the corresponding lesson (`./lessons/<NNNN-lesson-slug>.html`).
 - `./assets/*`: Reusable **components** shared across lessons. See [Assets](#assets).
 - `NOTES.md`: A scratchpad for you to jot down user preferences, or working notes.
 
@@ -49,6 +50,14 @@ Fluency can give the user an illusory sense of mastery, but storage strength is 
 A lesson is the main thing you produce: the unit in which knowledge and skills reach the user. Each lesson is one self-contained HTML file, saved to `./lessons/` and titled `0001-<dash-case-name>.html` where the number increments each time.
 
 When teaching a programming language, framework, or tool where the code in `0001` needs a real project, manifest, and entry-point file to inhabit (especially when the learner is new to the ecosystem), start with a `0000-<dash-case-name>.html` bootstrap lesson covering initial project setup and scaffolding so Lesson `0001`'s code has a concrete, runnable home.
+
+### Runnable Per-Lesson App Directories (`./apps/<NNNN-lesson-slug>/`)
+
+For coding courses, back every lesson with a real, runnable application directory under `./apps/<NNNN-lesson-slug>/` (matching the lesson filename stem):
+
+1. **Start at Lesson `0000`:** Follow the exact instructions in `./lessons/0000-<slug>.html` to create `./apps/0000-<slug>/`.
+2. **Copy-Then-Apply Progression:** For each subsequent lesson $N$, copy the previous lesson's app directory (`./apps/<N-1>/` $\rightarrow$ `./apps/<N>/`, e.g., using `cp -Rc` on macOS APFS and cleaning temporary artifacts such as `mutants.out*`), then apply only the code and test changes taught in Lesson $N$.
+3. **Execute & Reconcile Lessons with Reality:** Run the exact verification commands taught in the lesson (`cargo test`, `cargo mutants`, etc.) against `./apps/<NNNN-slug>/`. If anything does not line up—such as missing prerequisite tool installation instructions (e.g., `cargo install --locked cargo-mutants`), config filter syntax mismatches, omitted glue code, or differences between interactive simulators (`./assets/course.js`) and code listings—fix the lesson HTML, reference sheets (`./reference/*.html`), and shared assets immediately so the lesson and runnable app are 100% in sync.
 
 A lesson should be **beautiful**, with clean, readable typography and layout, since the user will return to these later to review. Think Tufte:
 

@@ -180,11 +180,11 @@ function initPcbLayerSimulator(containerId) {
   if (copperOnlyBtn) {
     copperOnlyBtn.addEventListener("click", () => {
       state.showTopCopper = true;
-      state.showBottomCopper = true;
+      state.showBottomCopper = false;
       state.showSilkscreen = false;
       state.showRatsnest = false;
       state.frameCount += 1;
-      state.lastEvent = `ui.button("Copper Only").clicked() == true -> hid Silk & Ratsnest`;
+      state.lastEvent = `ui.button("Isolate Top Copper").clicked() == true -> self.isolate_top_copper()`;
       render();
     });
   }

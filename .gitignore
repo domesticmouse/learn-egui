@@ -1,0 +1,3 @@
+apps/*/target/
+apps/*/mutants.out/
+apps/*/mutants.out.old/

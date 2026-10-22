@@ -25,14 +25,14 @@
 ## Curriculum Arc (`0000`–`0025`) with Continuous Verification & Mutation Testing
 
 ### Completed Lessons (`0000`–`0001`)
-- `0000-project-setup-and-eframe-boot.html`
+- `0000-project-setup-and-eframe-boot.html` (App: `apps/0000-project-setup-and-eframe-boot`)
   - **`egui` Skill & PCB Feature**: Creating the Cargo crate (`Cargo.toml`, `eframe = "0.33"`, dev-profile optimization) and booting the native window with `eframe::run_native`.
-  - **Just-in-Time Rust**: `impl Default`, struct update syntax (`..Default::default()`), `Box::new`, and `#[cfg(test)]` / `#[test]` / `assert!` / `assert_eq!`.
-  - **Cargo Verification & Mutation Coverage**: First `#[test]` verifying `PcbReviewerApp::default()` initial layer flags (`show_top_copper == true`, `show_ratsnest == false`); installing `cargo-mutants`, configuring `.cargo/mutants.toml` to skip only the OS entrypoint `main`, and catching all 4 boolean-field mutants in `Default::default()`.
-- `0001-the-immediate-mode-loop.html`
+  - **Just-in-Time Rust**: `impl Default` delegating to `reset_layers(&mut self)`, `ViewportBuilder` method chaining, `Box::new`, and `#[cfg(test)]` / `#[test]` / `assert!`.
+  - **Cargo Verification & Mutation Coverage**: First `#[test]` verifying `PcbReviewerApp::default()` initial layer flags (`show_top_copper == true`, `show_ratsnest == false`); installing `cargo-mutants`, configuring `.cargo/mutants.toml` (`exclude_re = ["replace main", "<impl eframe::App for PcbReviewerApp>::update"]`), and catching the `PcbReviewerApp::reset_layers` mutant (`1 / 1 caught, 0 missed`).
+- `0001-the-immediate-mode-loop.html` (App: `apps/0001-the-immediate-mode-loop`)
   - **`egui` Skill & PCB Feature**: `eframe::App::update`, `&mut self` state, `SidePanel` + `CentralPanel`, `ui.checkbox`, `ui.button().clicked()` for PCB layer toggles.
   - **Just-in-Time Rust**: Mutable borrows (`&mut`), closures (`|ui|`), and extracting pure `&mut self` state-transition methods (`isolate_top_copper`, `show_all_layers`).
-  - **Cargo Verification & Mutation Coverage**: Unit-testing `isolate_top_copper()` and `show_all_layers()` with `cargo test`, then running `cargo mutants` to see how a weak test leaves a **Missed Mutant** when `show_top_copper = true` is mutated, and tightening assertions to reach `0 missed mutants`.
+  - **Cargo Verification & Mutation Coverage**: Unit-testing `isolate_top_copper()` and `show_all_layers()` with `cargo test`, then running `cargo mutants` across all 3 state methods (`reset_layers`, `isolate_top_copper`, `show_all_layers`) to verify `3 / 3 caught, 0 missed`.
 
 ### Act I: The 2D CAD Canvas & Viewport (`0002`–`0005`)
 *Goal: Turn the empty `CentralPanel` into an interactive, multi-layer 2D board viewer while establishing pure geometry & domain unit tests verified by `cargo mutants`.*

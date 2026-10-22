@@ -41,7 +41,10 @@ flowchart TD
     <pre><code class="language-rust">use eframe::egui;
 
 fn main() -&gt; eframe::Result {
-    let options = eframe::NativeOptions::default();
+    let mut options = eframe::NativeOptions::default();
+    options.viewport = egui::ViewportBuilder::default()
+        .with_inner_size([1024.0, 720.0]);
+
     eframe::run_native(
         "Schematic &amp; PCB Design Reviewer",
         options,
@@ -54,15 +57,42 @@ pub struct PcbReviewerApp {
     pub show_top_copper: bool,
     pub show_bottom_copper: bool,
     pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
 }
 
 impl Default for PcbReviewerApp {
     fn default() -&gt; Self {
-        Self {
-            show_top_copper: true,
-            show_bottom_copper: true,
-            show_silkscreen: true,
-        }
+        let mut app = Self {
+            show_top_copper: false,
+            show_bottom_copper: false,
+            show_silkscreen: false,
+            show_ratsnest: false,
+        };
+        app.reset_layers();
+        app
+    }
+}
+
+impl PcbReviewerApp {
+    pub fn reset_layers(&amp;mut self) {
+        self.show_top_copper = true;
+        self.show_bottom_copper = true;
+        self.show_silkscreen = true;
+        self.show_ratsnest = false;
+    }
+
+    pub fn isolate_top_copper(&amp;mut self) {
+        self.show_top_copper = true;
+        self.show_bottom_copper = false;
+        self.show_silkscreen = false;
+        self.show_ratsnest = false;
+    }
+
+    pub fn show_all_layers(&amp;mut self) {
+        self.show_top_copper = true;
+        self.show_bottom_copper = true;
+        self.show_silkscreen = true;
+        self.show_ratsnest = true;
     }
 }
 
@@ -70,21 +100,24 @@ impl Default for PcbReviewerApp {
 impl eframe::App for PcbReviewerApp {
     fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame) {
         // Always declare SidePanels / TopBottomPanels BEFORE CentralPanel!
-        egui::SidePanel::left("layer_inspector").show(ctx, |ui| {
+        egui::SidePanel::left("layer_panel").show(ctx, |ui| {
             ui.heading("PCB Layers");
             ui.checkbox(&amp;mut self.show_top_copper, "Top Copper (F.Cu)");
             ui.checkbox(&amp;mut self.show_bottom_copper, "Bottom Copper (B.Cu)");
-            ui.checkbox(&amp;mut self.show_silkscreen, "Top Silkscreen (F.SilkS)");
+            ui.checkbox(&amp;mut self.show_silkscreen, "Silkscreen (F.SilkS)");
+            ui.checkbox(&amp;mut self.show_ratsnest, "Ratsnest (Unrouted)");
 
-            if ui.button("Copper Only").clicked() {
-                self.show_top_copper = true;
-                self.show_bottom_copper = true;
-                self.show_silkscreen = false;
+            ui.separator();
+            if ui.button("Isolate Top Copper").clicked() {
+                self.isolate_top_copper();
+            }
+            if ui.button("Show All Layers").clicked() {
+                self.show_all_layers();
             }
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label("2D PCB Canvas Viewport");
+            ui.heading("PCB Viewport Ready");
         });
     }
 }</code></pre>
