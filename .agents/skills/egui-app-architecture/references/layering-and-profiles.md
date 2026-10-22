@@ -14,7 +14,7 @@ unsafe_code = "forbid"
 dbg_macro = "warn"
 todo = "warn"
 
-# Optimize dependencies in dev builds so pixel/signal processing is usable interactively.
+# Optimize dependencies in dev builds so egui rendering and data processing stay responsive.
 [profile.dev.package."*"]
 opt-level = 2
 
@@ -23,14 +23,14 @@ opt-level = 1
 debug = "line-tables-only"
 
 # Keep the large UI crate unoptimized in test builds to cut compile time.
-[profile.test.package.photocraft-ui-egui]
+[profile.test.package.app-ui-egui]
 opt-level = 0
 
 [profile.release]
 lto = "thin"
 codegen-units = 1
 
-# Browser build: stay under CDN per-file size caps (e.g. 24 MiB) while keeping hot loops fast.
+# Browser build: minimize Wasm binary size while keeping hot compute loops fast.
 [profile.wasm-release]
 inherits = "release"
 opt-level = "z"
@@ -41,39 +41,17 @@ strip = "debuginfo"
 [profile.wasm-release.package."*"]
 opt-level = "s"
 
-# Decoding and vector rasterization keep their speed at "s":
-[profile.wasm-release.package.photocraft-codecs]
-opt-level = "s"
-[profile.wasm-release.package.photocraft-raw]
-opt-level = "s"
-[profile.wasm-release.package.photocraft-heif]
-opt-level = "s"
-[profile.wasm-release.package.photocraft-vector]
-opt-level = "s"
-
-# Large crates off the per-frame path (doc model, format parsers, UI toolkit, shader/SVG parsers)
-# use "z" to stay under the 24 MiB WebAssembly upload budget:
-[profile.wasm-release.package.photocraft-doc]
+# Large crates off the per-frame hot path (domain model, format parsers, UI toolkit)
+# use "z" to reduce WebAssembly bundle size:
+[profile.wasm-release.package.app-doc]
 opt-level = "z"
-[profile.wasm-release.package.photocraft-psd]
+[profile.wasm-release.package.app-format]
 opt-level = "z"
-[profile.wasm-release.package.photocraft-format]
-opt-level = "z"
-[profile.wasm-release.package.photocraft-affinity]
-opt-level = "z"
-[profile.wasm-release.package.photocraft-cms]
-opt-level = "z"
-[profile.wasm-release.package.photocraft-compose]
-opt-level = "z"
-[profile.wasm-release.package.photocraft-algo]
+[profile.wasm-release.package.app-ui-egui]
 opt-level = "z"
 
-# Hot pixel-processing and brush crates stay at opt-level 3 even in wasm-release:
-[profile.wasm-release.package.photocraft-raster]
-opt-level = 3
-[profile.wasm-release.package.photocraft-color]
-opt-level = 3
-[profile.wasm-release.package.photocraft-paint]
+# Hot compute crates can stay at opt-level 3 even in wasm-release:
+[profile.wasm-release.package.app-core]
 opt-level = 3
 ```
 
@@ -104,7 +82,7 @@ allow-indexing-slicing-in-tests = true
 
 ## 3. Layering Rules Model (`xtask/src/layers.rs`)
 
-See `xtask/src/layers.rs` for the complete implementation. Its core model classifies every crate into:
+An `xtask` layer checker can classify every workspace crate into:
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,6 +101,6 @@ pub enum Class {
 Key checks performed by `check(crates: &[Crate]) -> Vec<Violation>`:
 - **`Violation::Unregistered`**: Every workspace member must appear in `TABLE`.
 - **`Violation::Upward`**: `to >= from` unless `to == from && intra_layer_allowed(from, to)`.
-- **`Violation::StandaloneHasWorkspaceDep`**: A `Class::Standalone` crate cannot depend on any workspace crate unless listed in `STANDALONE_EXCEPTIONS` (`&[("codecs", "heif")]`).
+- **`Violation::StandaloneHasWorkspaceDep`**: A `Class::Standalone` crate cannot depend on any workspace crate unless listed in `STANDALONE_EXCEPTIONS`.
 - **`Violation::TestkitAsNormalDep`**: `testkit` is only allowed when `DepKind::Dev`.
-- **`Violation::UiBelowL6`**: Any crate with `layer < 6` depending on `["egui", "eframe", "winit", "egui_kittest", "craft-ui", "rfd", "bevy*"]` is rejected.
+- **`Violation::UiBelowL6`**: Any crate with `layer < 6` depending on `["egui", "eframe", "winit", "egui_kittest", "rfd"]` is rejected so the core engine remains UI-agnostic.
