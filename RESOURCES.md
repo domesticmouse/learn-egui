@@ -12,6 +12,12 @@
   Live WebAssembly build of `egui_demo_lib` with direct links to the exact Rust source line for every widget and canvas demo (including the `Painting` and `Scene` demos). Use for: inspecting how `egui` behaviors feel before coding them.
 - [Book: _The Rust Programming Language_ ("The Book")](https://doc.rust-lang.org/book/)
   The official foundational text on Rust ownership, borrowing (`&` and `&mut`), structs, enums, and closures (`|ui|`). Use for: grounding the Rust mechanics that make `egui`'s API ergonomic.
+- [Official API Docs: `nom` on docs.rs](https://docs.rs/nom/latest/nom/)
+  Byte- and slice-oriented, zero-copy parser combinator library in Rust. Use for: building a standalone `L0` S-expression parser for KiCad `.kicad_pcb` and `.kicad_sch` files in Act VI.
+- [KiCad Developer Documentation: S-Expression File Formats](https://dev-docs.kicad.org/en/file-formats/)
+  Official specification for KiCad's symbolic-expression (`.kicad_pcb`, `.kicad_sch`, `.kicad_sym`, `.kicad_mod`) grammar, coordinate systems, layers, pads, segments, and nets. Use for: mapping parsed S-expressions into typed Rust domain structs.
+- [Official API Docs: `libsql` / Turso Rust SDK on docs.rs](https://docs.rs/libsql/latest/libsql/) and [Turso Rust Reference](https://docs.turso.tech/sdk/rust/reference)
+  Official Rust SDK for Turso's embedded SQLite-compatible database engine (`libsql` / `turso`) supporting local database files, parameterized SQL queries, and embedded cloud-synced replicas. Use for: storing review pins, comment threads, and DRC sign-off audit trails in Act VI.
 - [Local Skill: `egui-app-architecture`](file:///Users/brett/tmp/learn-egui/.agents/skills/egui-app-architecture/SKILL.md)
   Workspace guide on structuring larger engine-first `egui` applications with strict `L0`–`L7` crate layering. Use for: scaling the prototype into a production multi-crate CAD/review system once core `egui` skills are solid.
 

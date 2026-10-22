@@ -5,12 +5,17 @@
   - Always use **Prism.js** (`<pre><code class="language-rust">`, `language-toml`, `language-bash`, etc.) for syntax highlighting across all lessons and reference documents.
   - Always use **Mermaid.js** (`<pre class="mermaid">`) for architecture, lifecycle, and flow diagrams (avoid ASCII art diagrams).
 - **Target Application**: Schematic and PCB design review system in Rust + `egui`.
+- **Key Ecosystem Crates Planned**:
+  - `eframe` / `egui` (Immediate-mode GUI and 2D CAD canvas)
+  - `serde` / `serde_json` (Structured serialization)
+  - `nom` (Parser combinators for KiCad `.kicad_pcb` and `.kicad_sch` S-expression files)
+  - `turso` / `libsql` (Embedded SQL database & local-first sync for engineering review threads and DRC audit logs)
 - **Rust Background**: Learning Rust alongside `egui` — introduce one Rust concept just-in-time alongside one `egui` skill in every lesson.
 - **Installed Toolchain**: `cargo 1.97.1` / `rustc 1.97.1` on macOS.
 
 ---
 
-## Curriculum Arc (`0000`–`0021`)
+## Curriculum Arc (`0000`–`0025`)
 
 ### Completed Lessons
 - `0000-project-setup-and-eframe-boot.html`: Creating the Cargo crate (`Cargo.toml`, `eframe = "0.33"`, dev-profile optimization), `#[derive(Default)]`, and booting the native window with `eframe::run_native`.
@@ -90,3 +95,18 @@
 - `0021-headless-snapshot-testing-and-wasm-build.html`
   - **`egui` Skill & PCB Feature**: Render the PCB review UI offscreen in `cargo test` to verify visual regressions and compile the reviewer to run in the browser via WebAssembly.
   - **Just-in-Time Rust**: Integration tests (`#[test]`), conditional compilation (`#[cfg(target_arch = "wasm32")]`), and feature flags.
+
+### Act VI: Real-World KiCad Parsing (`nom`) & Embedded SQL (`turso` / `libsql`) (`0022`–`0025`)
+*Goal: Parse real-world KiCad `.kicad_pcb` and `.kicad_sch` files with `nom` in an `L0` standalone parser crate, and persist/sync multi-engineer review threads in an embedded Turso (`libsql`) SQL database.*
+- `0022-sexpr-tokenizer-and-ast-with-nom.html`
+  - **`egui` Skill & PCB Feature**: Build an interactive S-expression AST inspector panel (`CollapsingHeader` tree view) visualizing raw KiCad `(kicad_pcb ...)` nodes parsed by a standalone `L0` `kicad-sexpr` crate.
+  - **Just-in-Time Rust**: Parser combinators (`nom::IResult`, `delimited`, `multispace0`, `alt`, `many0`), zero-copy string slices (`&'a str`), and recursive enums (`Box<Sexpr<'a>>`).
+- `0023-parsing-kicad-pcb-and-sch-into-domain-model.html`
+  - **`egui` Skill & PCB Feature**: Lower KiCad S-expression trees into typed `Footprint`, `Pad`, `Segment`, and schematic `Symbol`/`Wire` structs (`L4` `io` crate) to render real open-source KiCad boards on the 2D canvas.
+  - **Just-in-Time Rust**: `TryFrom` / `FromStr` conversions, typed parse diagnostics with source spans, and fallible allocation (`Vec::try_reserve`).
+- `0024-embedded-sql-review-store-with-turso.html`
+  - **`egui` Skill & PCB Feature**: Persist engineering review sessions, anchored comment threads, and DRC sign-off statuses in a local embedded Turso (`libsql`) SQL database with schema migrations and instant SQL search/filtering in the `egui` inspector.
+  - **Just-in-Time Rust**: Async Rust fundamentals (`async`/`await`, `tokio` runtime bridge for `egui`), parameterized SQL queries (`params!`), and row mapping.
+- `0025-local-first-review-sync-and-audit-trail.html`
+  - **`egui` Skill & PCB Feature**: Add a live database sync indicator, offline-first review merge view, and an interactive SQL audit-log timeline comparing engineering sign-offs across board revisions.
+  - **Just-in-Time Rust**: Turso embedded replica sync (`Database::sync`), SQL transactions (`Transaction`), and thread-safe async state channels.
