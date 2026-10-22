@@ -10,11 +10,15 @@
 <body>
   <nav class="course-nav">
     <div>
-      <a href="../lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a>
-      <a href="../lessons/0001-the-immediate-mode-loop.html">Lesson 0001</a>
+      <a href="../lessons/0000-project-setup-and-eframe-boot.html">0000</a>
+      <a href="../lessons/0001-the-immediate-mode-loop.html">0001</a>
+      <a href="../lessons/0002-custom-2d-canvas-and-painter.html">0002</a>
+      <a href="../lessons/0003-world-to-screen-transforms-pan-and-zoom.html">0003</a>
+      <a href="../lessons/0004-modeling-layers-traces-and-footprints.html">0004</a>
+      <a href="../lessons/0005-hit-testing-and-net-cross-probing.html">0005</a>
       <a href="./glossary.html" class="active">Glossary</a>
-      <a href="./immediate-mode-cheatsheet.html">Immediate-Mode Cheat Sheet</a>
-      <a href="./testing-and-mutation-cheatsheet.html">Testing &amp; Mutation Cheat Sheet</a>
+      <a href="./immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="./testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
     </div>
     <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
   </nav>
@@ -91,6 +95,21 @@
           <td>An anonymous inline function that can capture variables (like <code>self</code>) from its surrounding scope. Arguments appear between vertical pipes <code>|...|</code> (<a href="https://doc.rust-lang.org/book/ch13-01-closures.html" target="_blank" rel="noopener">Rust Book §13.1</a>).</td>
           <td><code>egui::SidePanel::left("layers").show(ctx, |ui| { ... })</code> scopes which widgets belong inside that panel.</td>
         </tr>
+        <tr>
+          <td><strong>Copy Semantics (<code>Copy</code>)</strong></td>
+          <td>A marker trait for small stack-only values that can be duplicated simply by copying bits when passed to functions or assigned, without moving ownership (<a href="https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy" target="_blank" rel="noopener">Rust Book §4.1</a>).</td>
+          <td><code>Pos2</code>, <code>Vec2</code>, <code>Rect</code>, <code>Color32</code>, <code>Stroke</code>, and <code>PcbLayer</code> all implement <code>Copy</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>Enum &amp; Exhaustive <code>match</code></strong></td>
+          <td>An algebraic data type enumerating a closed set of variants; <code>match</code> forces every variant to be handled at compile time (<a href="https://doc.rust-lang.org/book/ch06-00-enums.html" target="_blank" rel="noopener">Rust Book §6</a>).</td>
+          <td><code>enum PcbLayer { BottomCopper, TopCopper, Silkscreen, Ratsnest }</code> and <code>Option&lt;NetId&gt;</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>Optional Value (<code>Option&lt;T&gt;</code>)</strong></td>
+          <td>Rust's null-free representation of a value that may be present (<code>Some(T)</code>) or absent (<code>None</code>).</td>
+          <td><code>hovered_net: Option&lt;NetId&gt;</code> and <code>selected_net.or(hovered_net)</code> in Lesson 0005.</td>
+        </tr>
       </tbody>
     </table>
 
@@ -128,6 +147,16 @@
           <td><code>egui::Response</code></td>
           <td>Returned immediately by every widget call (e.g. <code>ui.button("Reset").clicked()</code> or <code>.hovered()</code>). Tells you how the user interacted with that widget during the current frame.</td>
           <td><a href="https://docs.rs/egui/latest/egui/struct.Response.html" target="_blank" rel="noopener"><code>egui::Response</code> docs</a></td>
+        </tr>
+        <tr>
+          <td><code>egui::Painter</code></td>
+          <td>The 2D vector drawing API returned by <code>ui.allocate_painter(size, sense)</code>. Emits clipped shapes (<code>rect</code>, <code>rect_filled</code>, <code>line_segment</code>, <code>circle</code>) in back-to-front order.</td>
+          <td><a href="https://docs.rs/egui/latest/egui/struct.Painter.html" target="_blank" rel="noopener"><code>egui::Painter</code> docs</a></td>
+        </tr>
+        <tr>
+          <td><code>egui::emath::TSTransform</code></td>
+          <td>A 2D translation + uniform scaling transform (<code>scaling * pt + translation</code>) with <code>.inverse()</code> for mapping between physical board millimeters (world space) and window points (screen space).</td>
+          <td><a href="https://docs.rs/emath/latest/emath/struct.TSTransform.html" target="_blank" rel="noopener"><code>TSTransform</code> docs</a></td>
         </tr>
       </tbody>
     </table>

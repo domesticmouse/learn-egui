@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Lesson 0003: World-to-Screen Transforms, Pan &amp; Zoom — Learn egui</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <nav class="course-nav">
+    <div>
+      <a href="./0000-project-setup-and-eframe-boot.html">0000</a>
+      <a href="./0001-the-immediate-mode-loop.html">0001</a>
+      <a href="./0002-custom-2d-canvas-and-painter.html">0002</a>
+      <a href="./0003-world-to-screen-transforms-pan-and-zoom.html" class="active">0003</a>
+      <a href="./0004-modeling-layers-traces-and-footprints.html">0004</a>
+      <a href="./0005-hit-testing-and-net-cross-probing.html">0005</a>
+      <a href="../reference/glossary.html">Glossary</a>
+      <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Act I: The 2D CAD Canvas &amp; Viewport</span>
+  </nav>
+
+  <article class="tufte-article">
+    <div class="prose-col">
+      <h1>Lesson 0003: World-to-Screen Transforms, Pan &amp; Cursor Zoom</h1>
+      <p class="subtitle">Mapping physical PCB millimeters (<code>mm</code>) to screen pixels with <code>TSTransform</code>, <code>Sense::drag()</code>, and <code>ui.input</code></p>
+
+      <p>
+        In <a href="./0002-custom-2d-canvas-and-painter.html">Lesson 0002</a>, our PCB pads and traces were drawn at fixed pixel offsets from the top-left corner of the window. Real KiCad boards are authored in <strong>physical millimeters (<code>mm</code>)</strong>—a <code>100 mm × 70 mm</code> board with a <code>0.8 mm</code> power trace and a <code>4.0 mm × 2.2 mm</code> SMD pad—and engineers need to pan across the board and zoom smoothly into dense pin pitches around their mouse cursor.
+      </p>
+
+      <h2>1. Two Coordinate Spaces: World (<code>mm</code>) vs. Screen (<code>px</code>)</h2>
+
+      <p>
+        Every 2D CAD viewport maintains a mathematical camera that converts between two coordinate systems:<span class="sidenote-number"></span><span class="sidenote"><code>egui</code>'s math crate (<code>emath</code>) provides <a href="https://docs.rs/emath/latest/emath/struct.TSTransform.html" target="_blank" rel="noopener"><code>egui::emath::TSTransform</code></a> ("Translation + Scaling Transform") out of the box, complete with operator overloading (<code>transform * pos</code>) and <code>.inverse()</code>!</span>
+      </p>
+
+      <ul>
+        <li>
+          <strong>World Space (<code>world_mm: Pos2</code>):</strong> Physical board coordinates in millimeters. A pad at <code>pos2(20.0, 22.0)</code> stays at <code>(20.0 mm, 22.0 mm)</code> forever, regardless of window size or zoom level.
+        </li>
+        <li>
+          <strong>Screen Space (<code>screen_pt: Pos2</code>):</strong> Logical window points passed to <code>egui::Painter</code>.
+        </li>
+      </ul>
+
+      <p>
+        The forward mapping (<strong>World → Screen</strong>) scales the millimeter coordinate by <code>scaling</code> (pixels per millimeter) and adds the camera offset <code>translation</code>:
+      </p>
+      <p>
+        \[\text{screen\_pt} = \text{scaling} \cdot \text{world\_mm} + \text{translation}\]
+      </p>
+      <p>
+        And the inverse mapping (<strong>Screen → World</strong>, implemented by <code>self.transform.inverse() * screen_pt</code>) subtracts <code>translation</code> and divides by <code>scaling</code>:
+      </p>
+      <p>
+        \[\text{world\_mm} = \frac{\text{screen\_pt} - \text{translation}}{\text{scaling}}\]
+      </p>
+
+      <figure class="mermaid-figure">
+        <pre class="mermaid">
+flowchart LR
+    World["World Space (mm)<br/>pos2(20.0, 22.0)"] -->|"world_to_screen()<br/>self.transform * world_mm"| Screen["Screen Space (px)<br/>pos2(200.0, 192.0)"]
+    Screen -->|"screen_to_world()<br/>self.transform.inverse() * screen_pt"| World
+    Drag["Pointer Drag<br/>response.drag_delta()"] -->|"pan_by(delta)"| Trans["translation += delta"]
+    Wheel["Scroll Wheel at Cursor<br/>ui.input(|i| i.smooth_scroll_delta.y)"] -->|"zoom_around(cursor, factor)"| Trans
+        </pre>
+        <figcaption>Figure 3.1: <code>BoardViewport</code> wraps <code>TSTransform</code> to convert bi-directionally between physical millimeters and screen pixels.</figcaption>
+      </figure>
+
+      <h2>2. Encapsulating the Camera in <code>struct BoardViewport</code></h2>
+
+      <p>
+        Let's wrap <code>TSTransform</code> inside a dedicated <code>BoardViewport</code> struct with four testable methods:<span class="sidenote-number"></span><span class="sidenote">Look closely at <code>zoom_around</code>: if you simply multiplied <code>self.transform.scaling *= zoom_factor</code> without adjusting <code>translation</code>, the board would zoom toward <code>(0, 0)</code> in the top-left corner and fly away from your mouse cursor! Recording <code>world_anchor = self.screen_to_world(screen_anchor)</code> before scaling and solving \(\text{translation} = \text{screen\_anchor} - \text{world\_anchor} \cdot \text{new\_scale}\) keeps the exact PCB pad under your cursor pinned in place.</span>
+      </p>
+
+      <pre><code class="language-rust">pub const MIN_ZOOM: f32 = 1.5;
+pub const MAX_ZOOM: f32 = 60.0;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BoardViewport {
+    pub transform: TSTransform,
+}
+
+impl Default for BoardViewport {
+    fn default() -&gt; Self {
+        Self {
+            transform: TSTransform::new(vec2(80.0, 60.0), 6.0),
+        }
+    }
+}
+
+impl BoardViewport {
+    pub fn world_to_screen(&amp;self, world_mm: Pos2) -&gt; Pos2 {
+        self.transform * world_mm
+    }
+
+    pub fn screen_to_world(&amp;self, screen_pt: Pos2) -&gt; Pos2 {
+        self.transform.inverse() * screen_pt
+    }
+
+    pub fn pan_by(&amp;mut self, screen_delta: Vec2) {
+        self.transform.translation += screen_delta;
+    }
+
+    pub fn zoom_around(&amp;mut self, screen_anchor: Pos2, zoom_factor: f32) {
+        let world_anchor = self.screen_to_world(screen_anchor);
+        let new_scale = (self.transform.scaling * zoom_factor).clamp(MIN_ZOOM, MAX_ZOOM);
+        self.transform.scaling = new_scale;
+        self.transform.translation =
+            screen_anchor.to_vec2() - world_anchor.to_vec2() * new_scale;
+    }
+}</code></pre>
+
+      <h2>3. Wiring Drag-to-Pan &amp; Scroll-to-Zoom in <code>CentralPanel</code></h2>
+
+      <p>
+        In <code>PcbReviewerApp::update</code>, we upgrade our canvas allocation from <code>Sense::hover()</code> to <a href="https://docs.rs/egui/latest/egui/struct.Sense.html#method.drag" target="_blank" rel="noopener"><code>Sense::drag()</code></a> and inspect both <code>response.dragged()</code> and <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.input" target="_blank" rel="noopener"><code>ui.input(|i| i.smooth_scroll_delta.y)</code></a>:
+      </p>
+
+      <pre><code class="language-rust">let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::drag());
+
+if response.dragged() {
+    self.viewport.pan_by(response.drag_delta());
+}
+
+if let Some(hover_pos) = response.hover_pos() {
+    let scroll_y = ui.input(|i| i.smooth_scroll_delta.y);
+    if scroll_y != 0.0 {
+        let zoom_factor = (scroll_y * 0.005).exp();
+        self.viewport.zoom_around(hover_pos, zoom_factor);
+    }
+}</code></pre>
+    </div>
+
+    <!-- Interactive Skill 1: Viewport Transform Simulator -->
+    <section class="full-width-panel" id="viewport-transform-sim">
+      <div class="panel-header">
+        <span class="panel-title">Interactive Lab 1: Pan &amp; Cursor-Anchored Zoom Simulator</span>
+        <span class="panel-badge" data-role="zoom-badge">Zoom: 3.00 px/mm</span>
+      </div>
+      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+        <strong>Click and drag</strong> inside the PCB canvas below to pan (<code>pan_by</code>), move your cursor over a pad, and click <strong>Zoom In / Out at Cursor</strong> (<code>zoom_around</code>). Watch how <code>screen_to_world</code> under the crosshair stays stationary when zooming!
+      </p>
+
+      <div class="sim-grid">
+        <div class="sim-box">
+          <h4>1. Camera State (<code>self.viewport</code>)</h4>
+          <pre class="language-rust" style="margin:0 0 0.75rem 0; font-size:0.76rem; padding:0.75rem;"><code class="language-rust" data-role="transform-state"></code></pre>
+          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+            <button type="button" class="egui-btn" data-action="zoom-in">+ Zoom In at Cursor</button>
+            <button type="button" class="egui-btn" data-action="zoom-out">- Zoom Out at Cursor</button>
+            <button type="button" class="egui-btn" data-action="zoom-reset">Reset Camera</button>
+          </div>
+        </div>
+
+        <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:230px; cursor:grab;">
+          <svg data-role="viewport-svg" viewBox="0 0 320 210" width="100%" height="210" aria-label="Interactive Pan and Zoom PCB Canvas">
+            <g data-svg="world-group" transform="translate(24, 20) scale(3)">
+              <rect x="0" y="0" width="88" height="56" rx="2" fill="#10281e" stroke="#2f6f52" stroke-width="0.8"/>
+              <path d="M 20 42 L 52 42 L 64 30" fill="none" stroke="#3b8eea" stroke-width="1.6" stroke-linecap="round"/>
+              <path d="M 20 22 L 48 22 L 64 30" fill="none" stroke="#e05243" stroke-width="1.6" stroke-linecap="round"/>
+              <rect x="17" y="20" width="6" height="4" rx="0.6" fill="#e05243"/>
+              <rect x="17" y="40" width="6" height="4" rx="0.6" fill="#3b8eea"/>
+              <circle cx="64" cy="30" r="2.2" fill="#10281e" stroke="#e6c15a" stroke-width="1.1"/>
+              <rect x="13" y="15" width="14" height="33" fill="none" stroke="#f0e68c" stroke-width="0.5" stroke-dasharray="1.5 1"/>
+            </g>
+            <g data-svg="cursor-crosshair" transform="translate(160, 105)" style="pointer-events:none;">
+              <circle cx="0" cy="0" r="5" fill="none" stroke="#3dd68c" stroke-width="1.2"/>
+              <line x1="-9" y1="0" x2="9" y2="0" stroke="#3dd68c" stroke-width="1"/>
+              <line x1="0" y1="-9" x2="0" y2="9" stroke="#3dd68c" stroke-width="1"/>
+            </g>
+          </svg>
+        </div>
+
+        <div class="sim-box">
+          <h4>2. Live Coordinate Math</h4>
+          <div data-role="transform-math"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Interactive Skill 2: Code Completion Lab -->
+    <section class="full-width-panel">
+      <div class="panel-header">
+        <span class="panel-title">Interactive Lab 2: Implement <code>BoardViewport</code> Transform Methods</span>
+        <span class="panel-badge">Skill Practice • Tight Feedback Loop</span>
+      </div>
+      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+        Complete the three blanks below so that (1) <code>screen_to_world</code> uses the inverse of <code>self.transform</code>, (2) <code>zoom_around</code> clamps the new scale between <code>MIN_ZOOM</code> and <code>MAX_ZOOM</code>, and (3) dragging the canvas pans by <code>response.drag_delta()</code>:
+      </p>
+
+      <pre class="keep-markup"><code class="language-rust">impl BoardViewport {
+    pub fn screen_to_world(&amp;self, screen_pt: Pos2) -&gt; Pos2 {
+        self.transform.<input id="vp-blank-1" class="code-challenge-input" style="width:120px;" placeholder="/* 1: invert */" autocomplete="off"> * screen_pt
+    }
+
+    pub fn zoom_around(&amp;mut self, screen_anchor: Pos2, zoom_factor: f32) {
+        let world_anchor = self.screen_to_world(screen_anchor);
+        let new_scale = (self.transform.scaling * zoom_factor).<input id="vp-blank-2" class="code-challenge-input" style="width:195px;" placeholder="/* 2: clamp min..max */" autocomplete="off">;
+        self.transform.scaling = new_scale;
+        self.transform.translation =
+            screen_anchor.to_vec2() - world_anchor.to_vec2() * new_scale;
+    }
+}
+
+// Inside PcbReviewerApp::update:
+if response.dragged() {
+    self.viewport.pan_by(response.<input id="vp-blank-3" class="code-challenge-input" style="width:140px;" placeholder="/* 3: delta fn */" autocomplete="off">);
+}</code></pre>
+
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <button type="button" class="btn-primary" id="btn-check-vp">Check Rust Code</button>
+        <button type="button" class="btn-secondary" id="btn-hint-vp">Show Hint</button>
+      </div>
+      <div id="vp-feedback" class="feedback-box"></div>
+    </section>
+
+    <!-- Interactive Skill 3: Cargo Verification & Mutation Coverage Gate -->
+    <section class="full-width-panel">
+      <div class="panel-header">
+        <span class="panel-title">Interactive Lab 3: Round-Trip &amp; Cursor-Anchor Invariant Tests</span>
+        <span class="panel-badge">cargo test + cargo mutants</span>
+      </div>
+      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+        In <code>apps/0003-world-to-screen-transforms-pan-and-zoom</code>, we test three geometric invariants: (1) <code>world_to_screen</code> and <code>screen_to_world</code> are exact inverses, (2) <code>pan_by</code> shifts screen coordinates by the exact drag vector, and (3) <code>zoom_around(cursor_screen, 2.0)</code> leaves <code>vp.screen_to_world(cursor_screen)</code> unchanged while clamping at <code>MIN_ZOOM</code> and <code>MAX_ZOOM</code>.
+      </p>
+
+      <pre><code class="language-rust">#[test]
+fn zoom_around_keeps_cursor_world_point_stationary_and_clamps_scale() {
+    let mut vp = BoardViewport::default();
+    let cursor_screen = pos2(200.0, 180.0);
+    let world_under_cursor_before = vp.screen_to_world(cursor_screen);
+
+    vp.zoom_around(cursor_screen, 2.0);
+    assert_eq!(vp.transform.scaling, 12.0);
+
+    let world_under_cursor_after = vp.screen_to_world(cursor_screen);
+    assert!((world_under_cursor_after.x - world_under_cursor_before.x).abs() &lt; 1e-4);
+    assert!((world_under_cursor_after.y - world_under_cursor_before.y).abs() &lt; 1e-4);
+
+    vp.zoom_around(cursor_screen, 100.0);
+    assert_eq!(vp.transform.scaling, MAX_ZOOM);
+
+    vp.zoom_around(cursor_screen, 0.001);
+    assert_eq!(vp.transform.scaling, MIN_ZOOM);
+}</code></pre>
+
+      <div class="mutation-scoreboard">
+        <div class="mutation-stat tier">
+          <div class="stat-label">Verification Tier</div>
+          <div class="stat-value">Tier 2: Transform Invariants</div>
+        </div>
+        <div class="mutation-stat caught">
+          <div class="stat-label">Target Caught Mutants</div>
+          <div class="stat-value">14 Caught (6 Unviable)</div>
+        </div>
+        <div class="mutation-stat missed">
+          <div class="stat-label">Target Missed Mutants</div>
+          <div class="stat-value">0 Missed</div>
+        </div>
+      </div>
+
+      <ul class="step-checklist">
+        <li>
+          <input type="checkbox" id="verify-0003-1">
+          <label for="verify-0003-1">
+            <strong>1. Run <code>cargo test</code> in <code>apps/0003-world-to-screen-transforms-pan-and-zoom</code>:</strong> Confirm all 6 unit tests pass.
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0003-2">
+          <label for="verify-0003-2">
+            <strong>2. Run <code>cargo mutants --in-place</code>:</strong> Verify that all 14 viable mutants across <code>BoardViewport</code> and <code>PcbReviewerApp</code> are <strong>Caught</strong> (with 6 <strong>Unviable</strong> and <strong>0 Missed</strong>).
+          </label>
+        </li>
+      </ul>
+    </section>
+
+    <!-- Interactive Skill 4: Retrieval Practice Quiz -->
+    <section class="full-width-panel">
+      <div class="panel-header">
+        <span class="panel-title">Retrieval Practice: Coordinate Transforms &amp; Viewport Input</span>
+        <span class="panel-badge">3 Questions • Equal-Length Options</span>
+      </div>
+      <div id="quiz-0003"></div>
+    </section>
+
+    <div class="prose-col">
+      <h2>Recommended Primary Source</h2>
+      <div class="callout">
+        <strong>Read (5 mins):</strong> <a href="https://docs.rs/emath/latest/emath/struct.TSTransform.html" target="_blank" rel="noopener"><code>egui::emath::TSTransform</code> API Documentation</a>.<br>
+        Inspect how <code>TSTransform::inverse()</code> and <code>Mul&lt;Pos2&gt;</code> are implemented in <code>emath</code>.
+      </div>
+
+      <div class="teacher-prompt-box">
+        <strong>Next Step:</strong> Ready to replace our individual hardcoded trace calls with a structured <code>Vec&lt;TraceSegment&gt;</code> and <code>enum PcbLayer</code> sorted in deterministic back-to-front Z-order in <a href="./0004-modeling-layers-traces-and-footprints.html"><strong>Lesson 0004: Modeling Layers, Traces, and Z-Order Rendering</strong></a>?
+      </div>
+    </div>
+  </article>
+
+  <script src="../assets/course.js"></script>
+  <script>
+    initViewportTransformSimulator("viewport-transform-sim");
+
+    initCodeExercise({
+      checkBtnId: "btn-check-vp",
+      hintBtnId: "btn-hint-vp",
+      feedbackId: "vp-feedback",
+      blanks: [
+        {
+          inputId: "vp-blank-1",
+          accepted: ["inverse()"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. Call the method on <code>TSTransform</code> that returns the inverted screen-to-world transform.`,
+        },
+        {
+          inputId: "vp-blank-2",
+          accepted: ["clamp(MIN_ZOOM, MAX_ZOOM)"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. Use <code>f32::clamp(MIN_ZOOM, MAX_ZOOM)</code> to bound the zoom scale.`,
+        },
+        {
+          inputId: "vp-blank-3",
+          accepted: ["drag_delta()"],
+          getErrorHint: (val) =>
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. Call the method on <code>Response</code> that returns the pointer movement vector since the previous frame.`,
+        },
+      ],
+      hintMessage:
+        "<strong>Hints:</strong> (1) <code>inverse()</code>. (2) <code>clamp(MIN_ZOOM, MAX_ZOOM)</code>. (3) <code>drag_delta()</code>.",
+      successMessage:
+        "<strong>Spot on!</strong> <code>self.transform.inverse()</code> maps screen points back to physical millimeters, <code>.clamp(MIN_ZOOM, MAX_ZOOM)</code> prevents zoom underflow/overflow, and <code>response.drag_delta()</code> drives panning.",
+    });
+
+    // Strict equal word-count AND equal character-count options per question (indices: 2 -> 0 -> 3)
+    initQuiz("quiz-0003", [
+      {
+        question:
+          "How does `TSTransform` map a physical board coordinate `world_mm` into screen space (`self.transform * world_mm`)?",
+        options: [
+          "It divides world points by four translations", // 7 words, 44 chars
+          "It rotates world points around window center", // 7 words, 44 chars
+          "It scales world points then adds translation", // 7 words, 44 chars (Correct: C)
+          "It clamps world points inside screen margins", // 7 words, 44 chars
+        ],
+        correctIndex: 2,
+        explanation:
+          "`TSTransform` multiplies the input point by `scaling` (pixels per millimeter) and adds the 2D `translation` offset vector.",
+        wrongHint:
+          "Recall what the 'T' and 'S' in `TSTransform` stand for: Translation and Scaling.",
+      },
+      {
+        question:
+          "Why does `zoom_around(screen_anchor, factor)` compute `world_anchor = self.screen_to_world(screen_anchor)` before updating `scaling`?",
+        options: [
+          "World coords under your cursor remain pinned", // 7 words, 44 chars (Correct: A)
+          "Scroll deltas must reset before canvas draws", // 7 words, 44 chars
+          "Vertex buffers need world bounds before draw", // 7 words, 44 chars
+          "Window resize events block direct scale math", // 7 words, 44 chars
+        ],
+        correctIndex: 0,
+        explanation:
+          "Capturing the physical board coordinate under the cursor before scaling allows us to recompute `translation` so that exact world point projects back to `screen_anchor` after scaling.",
+        wrongHint:
+          "Think about what happens visually when you zoom with your cursor hovering over pin 1 of `U1`.",
+      },
+      {
+        question:
+          "Why did we pass `Sense::drag()` instead of `Sense::hover()` to `ui.allocate_painter` in Lesson 0003?",
+        options: [
+          "Hover mode blocks smooth scroll wheel input", // 7 words, 43 chars
+          "Hover mode disables clip rectangles on draw", // 7 words, 43 chars
+          "Hover mode clears keyboard focus each frame", // 7 words, 43 chars
+          "Drag sensing tracks pointer delta on motion", // 7 words, 43 chars (Correct: D)
+        ],
+        correctIndex: 3,
+        explanation:
+          "`Sense::drag()` tells `egui` to track mouse-down drag gestures on the canvas rect so `response.dragged()` and `response.drag_delta()` report live pan movements.",
+        wrongHint:
+          "Which `Response` methods do we call right after `ui.allocate_painter` to pan the camera?",
+      },
+    ]);
+  </script>
+</body>
+</html>

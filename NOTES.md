@@ -24,7 +24,7 @@
 
 ## Curriculum Arc (`0000`–`0025`) with Continuous Verification & Mutation Testing
 
-### Completed Lessons (`0000`–`0001`)
+### Completed Lessons (`0000`–`0005`: Foundation + Act I)
 - `0000-project-setup-and-eframe-boot.html` (App: `apps/0000-project-setup-and-eframe-boot`)
   - **`egui` Skill & PCB Feature**: Creating the Cargo crate (`Cargo.toml`, `eframe = "0.33"`, dev-profile optimization) and booting the native window with `eframe::run_native`.
   - **Just-in-Time Rust**: `impl Default` delegating to `reset_layers(&mut self)`, `ViewportBuilder` method chaining, `Box::new`, and `#[cfg(test)]` / `#[test]` / `assert!`.
@@ -34,24 +34,24 @@
   - **Just-in-Time Rust**: Mutable borrows (`&mut`), closures (`|ui|`), and extracting pure `&mut self` state-transition methods (`isolate_top_copper`, `show_all_layers`).
   - **Cargo Verification & Mutation Coverage**: Unit-testing `isolate_top_copper()` and `show_all_layers()` with `cargo test`, then running `cargo mutants` across all 3 state methods (`reset_layers`, `isolate_top_copper`, `show_all_layers`) to verify `3 / 3 caught, 0 missed`.
 
-### Act I: The 2D CAD Canvas & Viewport (`0002`–`0005`)
+### Act I: The 2D CAD Canvas & Viewport (`0002`–`0005`) — *Completed*
 *Goal: Turn the empty `CentralPanel` into an interactive, multi-layer 2D board viewer while establishing pure geometry & domain unit tests verified by `cargo mutants`.*
-- `0002-custom-2d-canvas-and-painter.html`
+- `0002-custom-2d-canvas-and-painter.html` (App: `apps/0002-custom-2d-canvas-and-painter`)
   - **`egui` Skill & PCB Feature**: Reserve canvas space with `ui.allocate_painter`, draw PCB pads, traces, and vias using `Pos2`, `Vec2`, `Rect`, `Color32`, and `Stroke`.
   - **Just-in-Time Rust**: Tuple structs, value semantics (`Copy` vs. move), and method chaining.
-  - **Cargo Verification & Mutation Coverage**: Test pad/board `Rect` geometry helpers (center-to-bounds calculation and aspect containment) with `cargo test`; run `cargo mutants` to catch arithmetic `+`/`-` and `*`/`/` sign/factor mutations.
-- `0003-world-to-screen-transforms-pan-and-zoom.html`
+  - **Cargo Verification & Mutation Coverage**: 5 unit tests (`centered_board_rect` and `smd_pad_rect`); `cargo mutants --in-place` catches `23 / 23 viable mutants (2 unviable, 0 missed)`.
+- `0003-world-to-screen-transforms-pan-and-zoom.html` (App: `apps/0003-world-to-screen-transforms-pan-and-zoom`)
   - **`egui` Skill & PCB Feature**: Map physical board coordinates (mm) to screen points (`egui::emath::TSTransform`), drag to pan (`Sense::drag`), and zoom toward the cursor (`ui.input`).
-  - **Just-in-Time Rust**: Pure functions, `impl` methods on a custom `Viewport` struct, and closures (`|i|`).
-  - **Cargo Verification & Mutation Coverage**: Write round-trip coordinate tests (`world_to_screen` ↔ `screen_to_world`) and cursor-anchored zoom invariant tests; use `cargo mutants` to verify zoom-clamping boundary conditions (`<` vs. `<=`).
-- `0004-modeling-layers-traces-and-footprints.html`
-  - **`egui` Skill & PCB Feature**: Render a structured board model (Top/Bottom Copper, Silkscreen, Solder Mask) in deterministic Z-order based on layer visibility toggles.
+  - **Just-in-Time Rust**: Pure functions, `impl` methods on a custom `BoardViewport` struct, and closures (`|i|`).
+  - **Cargo Verification & Mutation Coverage**: 6 unit tests verifying `world_to_screen` ↔ `screen_to_world` round-trips, `pan_by`, and cursor-anchored `zoom_around` + clamping; `cargo mutants --in-place` catches `14 / 14 viable mutants (6 unviable, 0 missed)`.
+- `0004-modeling-layers-traces-and-footprints.html` (App: `apps/0004-modeling-layers-traces-and-footprints`)
+  - **`egui` Skill & PCB Feature**: Render a structured board model (`BottomCopper`, `TopCopper`, `Silkscreen`, `Ratsnest`) in deterministic Z-order based on layer visibility toggles.
   - **Just-in-Time Rust**: `Vec<T>`, `enum PcbLayer`, `match` exhaustiveness, and `for` loop borrowing (`&self.traces`).
-  - **Cargo Verification & Mutation Coverage**: Test `PcbLayer` Z-order sorting and visibility filtering; run `cargo mutants` to ensure every `match` arm on `PcbLayer` is asserted by a test (zero surviving match-arm deletions).
-- `0005-hit-testing-and-net-cross-probing.html`
-  - **`egui` Skill & PCB Feature**: Hover and click traces/pads on the canvas, highlight the entire connected net, and inspect its properties in the `SidePanel`.
-  - **Just-in-Time Rust**: `Option<NetId>`, `if let Some(id) = ...`, and iterator filtering (`.iter().find(...)`).
-  - **Cargo Verification & Mutation Coverage**: Test point-to-pad and point-to-segment distance hit-testing (`Some(NetId)` vs. `None` at exact clearance thresholds); verify with `cargo mutants` that boundary-distance mutants are caught.
+  - **Cargo Verification & Mutation Coverage**: 9 unit tests verifying `PcbLayer::z_rank()`, `color()`, `is_layer_visible()`, and `visible_traces_in_z_order()`; `cargo mutants --in-place` catches `20 / 20 viable mutants (7 unviable, 0 missed)`.
+- `0005-hit-testing-and-net-cross-probing.html` (App: `apps/0005-hit-testing-and-net-cross-probing`)
+  - **`egui` Skill & PCB Feature**: Hover and click pads on the canvas (`Sense::click_and_drag()`), highlight the connected net across layers, and inspect its properties in the `SidePanel` Net Inspector.
+  - **Just-in-Time Rust**: `Option<NetId>`, `if let Some(id) = ...`, `.or(...)`, and iterator filtering.
+  - **Cargo Verification & Mutation Coverage**: 11 unit tests verifying `hit_test_net_at_mm` (hit, miss in empty space, hidden-layer rejection, and overlapping Z-order priority) and `active_net`; `cargo mutants --in-place` catches `25 / 25 viable mutants (10 unviable, 0 missed)`.
 
 ### Act II: Schematic Views, Layout & Inspection (`0006`–`0009`)
 *Goal: Add schematic symbols, dual-pane cross-probing, and searchable BOM tables while introducing headless UI widget & interaction testing with `egui_kittest`.*
