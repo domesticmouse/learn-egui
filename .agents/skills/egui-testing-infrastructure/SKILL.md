@@ -105,12 +105,22 @@ cargo xtask scorecard --check
    Never lower `parity::FLOOR` in `crates/ui-egui/src/parity.rs` or any `pass_floor` / `roundtrip_floor` in `crates/io/tests/corpus.rs`. When your change improves pass counts, raise the floor and regenerate `docs/scorecard.md` via `cargo xtask scorecard`.
 6. **Mutation Testing (`cargo-mutants`) Configuration & Idioms:**
    - **Prerequisite Installation:** Ensure `cargo-mutants` is installed (`cargo install --locked cargo-mutants`) and documented whenever onboarding or writing verification instructions.
+   - **Fast Sandboxed & Offline Execution (`--in-place`):** By default, `cargo mutants` copies the crate (and `target/` when `copy_target = true`) into OS temporary directories (`/var/folders/...`), which is slow for `eframe`/`wgpu` builds and may block in restricted sandboxes. Run in-place with an explicit `/tmp` output directory and offline flag:
+     ```sh
+     cargo mutants --in-place -d <crate_dir> -o /tmp/mutants-<name> -C --offline
+     ```
+   - **APFS Copy-on-Write (`cp -cR`) Target Seeding Across Sequential App Crates:** When creating a new standalone lesson/app directory from a previous one, copy `Cargo.lock` and clone `target/` with `cp -cR <prev>/target <next>/target`, then **always run `touch <next>/src/main.rs`** before `cargo test` so Cargo's mtime check recompiles the new crate's test binary instead of running the previous crate's cached test executable.
    - **Configure `.cargo/mutants.toml` with Exact `--list` Mutant Names:** `exclude_re` matches the generated mutant description from `cargo mutants --list`, *not* raw Rust syntax:
      - To exclude `fn main()`, match `"replace main"` (not `"fn main"`).
      - To exclude a trait method like `eframe::App::update`, match `"<impl eframe::App for MyApp>::update"` (not `"impl eframe::App for MyApp::update"`).
      - Set `copy_target = true` in `.cargo/mutants.toml` and gitignore `mutants.out/` and `mutants.out.old/`.
    - **Avoid `..Default::default()` Inside Untested Entrypoints (`fn main`):** `cargo-mutants` (v27.1+) generates `StructField` (`delete field <field> from struct <Struct> expression`) mutants on struct literals using `..Default::default()`, and `StructField` mutants bypass `exclude_re` filtering. In `fn main()`, initialize `eframe::NativeOptions` via `let mut options = eframe::NativeOptions::default(); options.viewport = ...;` rather than struct update syntax so `main()` does not produce an un-excludable missed mutant.
    - **Delegate `impl Default` / `fn new` Logic to Named Methods:** `cargo-mutants` skips `impl Default` (`fn default`) and `fn new` completely to avoid infinite recursion with `Default::default()`. Put non-trivial initialization or state-reset logic in a named method (e.g., `pub fn reset_layers(&mut self)`) called by `Default::default()` so `cargo-mutants` can mutate and verify it.
+   - **Designing Arithmetic, Boolean & Match-Arm Tests for Zero Missed Mutants:**
+     - *Arithmetic (`Pos2`, `Vec2`, `Rect`, `TSTransform`):* Never test at `0.0` or `1.0` coordinates/factors (where `0.0 - x == 0.0 / x` or `x * 1.0 == x / 1.0`). Use non-zero, asymmetric values (e.g., `pos2(100.0, 60.0)`, `vec2(16.0, 10.0)`, `zoom_factor = 2.0`) so every `+`/`-`/`*`/`/`/`%` mutant produces a distinct float caught by `assert_eq!`.
+     - *Compound Booleans (`&&` vs. `||`):* For predicates like `self.is_layer_visible(p.layer) && p.contains_world_point(world_mm)`, include negative tests for both `(true, false)` (visible layer, point outside pad) and `(false, true)` (hidden layer, point inside pad) so flipping `&&` to `||` is always caught.
+     - *Exhaustive `match` Arms:* Assert each enum variant's behavior in isolation so no `match` branch in `z_rank()`, `color()`, or `is_layer_visible()` can be deleted or collapsed.
+   - **Rust 1.97+ `float_literal_f32_fallback` Warning with `egui::Stroke::new`:** Because `Stroke::new` takes generic `impl Into<f32>`, untyped float literals like `Stroke::new(2.0, color)` trigger `#[warn(float_literal_f32_fallback)]` on `rustc 1.97+`. Use explicit `_f32` suffixes (`Stroke::new(2.0_f32, color)`) or typed `f32` variables.
 
 ---
 
