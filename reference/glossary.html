@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Glossary — Rust &amp; egui for Schematic/PCB Review</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <nav class="course-nav">
+    <div>
+      <a href="../lessons/0001-the-immediate-mode-loop.html">Lesson 0001</a>
+      <a href="./glossary.html" class="active">Glossary</a>
+      <a href="./immediate-mode-cheatsheet.html">Immediate-Mode Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
+  </nav>
+
+  <article class="tufte-article">
+    <h1>Glossary of Rust &amp; <code>egui</code> Terms</h1>
+    <p class="subtitle">Canonical definitions used across all lessons and reference sheets. Designed for quick screen lookup and clean printing.</p>
+
+    <h2>1. Core GUI Paradigms</h2>
+    <table class="ref-table">
+      <thead>
+        <tr>
+          <th style="width: 24%;">Term</th>
+          <th style="width: 48%;">Definition</th>
+          <th style="width: 28%;">PCB / Schematic Analogy</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Immediate-Mode GUI (IMGUI)</strong></td>
+          <td>A UI paradigm where widgets are not persistent objects in memory. Instead, your application state lives in a plain Rust <code>struct</code>, and every frame you call functions like <code>ui.checkbox(...)</code> or <code>ui.button(...)</code> that simultaneously query input and emit draw commands (<a href="https://docs.rs/egui/latest/egui/#understanding-immediate-mode" target="_blank" rel="noopener">docs.rs/egui</a>).</td>
+          <td>Redrawing the active copper and silkscreen layers directly from the board data model on every display refresh.</td>
+        </tr>
+        <tr>
+          <td><strong>Retained-Mode GUI</strong></td>
+          <td>A traditional UI paradigm (DOM, Qt, Flutter widget trees) where the framework stores a persistent graph of widget objects with their own internal state that must be synchronized via callbacks or listeners.</td>
+          <td>Maintaining a separate physical copy of every switch and indicator LED and wiring event listeners between them.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>2. Essential Rust Mechanics Used by <code>egui</code></h2>
+    <table class="ref-table">
+      <thead>
+        <tr>
+          <th style="width: 24%;">Term &amp; Syntax</th>
+          <th style="width: 48%;">Definition</th>
+          <th style="width: 28%;">Where You See It in <code>egui</code></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Struct (<code>struct</code>)</strong></td>
+          <td>A composite data type that groups named fields together into a single unit of ownership (<a href="https://doc.rust-lang.org/book/ch05-01-defining-structs.html" target="_blank" rel="noopener">Rust Book §5.1</a>).</td>
+          <td><code>struct PcbReviewerApp</code> holds your persistent layer toggles, zoom level, and netlist state across frames.</td>
+        </tr>
+        <tr>
+          <td><strong>Shared Borrow (<code>&amp;T</code>)</strong></td>
+          <td>An immutable, read-only reference to a value of type <code>T</code>. Multiple <code>&amp;T</code> references can coexist simultaneously, but the target cannot be mutated while borrowed (<a href="https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html" target="_blank" rel="noopener">Rust Book §4.2</a>).</td>
+          <td><code>&amp;egui::Context</code> passed into <code>update</code>, or iterating over <code>&amp;self.traces</code> to paint them on the canvas.</td>
+        </tr>
+        <tr>
+          <td><strong>Mutable Borrow (<code>&amp;mut T</code>)</strong></td>
+          <td>An exclusive, read-write reference to a value of type <code>T</code>. Allows a called function to both read the current value and modify it in place without taking ownership (<a href="https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html" target="_blank" rel="noopener">Rust Book §4.2</a>).</td>
+          <td><code>&amp;mut self</code> in <code>update()</code>, and <code>ui.checkbox(&amp;mut self.show_top_copper, "Top Cu")</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>Closure (<code>|ui| { ... }</code>)</strong></td>
+          <td>An anonymous inline function that can capture variables (like <code>self</code>) from its surrounding scope. Arguments appear between vertical pipes <code>|...|</code> (<a href="https://doc.rust-lang.org/book/ch13-01-closures.html" target="_blank" rel="noopener">Rust Book §13.1</a>).</td>
+          <td><code>egui::SidePanel::left("layers").show(ctx, |ui| { ... })</code> scopes which widgets belong inside that panel.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Key <code>eframe</code> &amp; <code>egui</code> Types</h2>
+    <table class="ref-table">
+      <thead>
+        <tr>
+          <th style="width: 24%;">Type / Method</th>
+          <th style="width: 48%;">Role in the Frame Loop</th>
+          <th style="width: 28%;">Primary Reference</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>eframe::App</code></td>
+          <td>The trait your root application struct implements. Its core method, <code>fn update(&amp;mut self, ctx: &amp;egui::Context, frame: &amp;mut eframe::Frame)</code>, is invoked on every repaint.</td>
+          <td><a href="https://docs.rs/eframe/latest/eframe/trait.App.html" target="_blank" rel="noopener"><code>eframe::App</code> docs</a></td>
+        </tr>
+        <tr>
+          <td><code>egui::Context</code> (<code>ctx</code>)</td>
+          <td>The top-level handle to <code>egui</code> for the entire window: manages input state (mouse/keyboard), fonts, style, memory of widget IDs, and top-level panels (<code>SidePanel</code>, <code>TopBottomPanel</code>, <code>CentralPanel</code>).</td>
+          <td><a href="https://docs.rs/egui/latest/egui/struct.Context.html" target="_blank" rel="noopener"><code>egui::Context</code> docs</a></td>
+        </tr>
+        <tr>
+          <td><code>egui::Ui</code> (<code>ui</code>)</td>
+          <td>Represents a bounded rectangular region inside a panel or container with a layout cursor. You call widget methods (<code>ui.heading</code>, <code>ui.checkbox</code>, <code>ui.button</code>, <code>ui.allocate_painter</code>) on <code>ui</code>.</td>
+          <td><a href="https://docs.rs/egui/latest/egui/struct.Ui.html" target="_blank" rel="noopener"><code>egui::Ui</code> docs</a></td>
+        </tr>
+        <tr>
+          <td><code>egui::Response</code></td>
+          <td>Returned immediately by every widget call (e.g. <code>ui.button("Reset").clicked()</code> or <code>.hovered()</code>). Tells you how the user interacted with that widget during the current frame.</td>
+          <td><a href="https://docs.rs/egui/latest/egui/struct.Response.html" target="_blank" rel="noopener"><code>egui::Response</code> docs</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </article>
+</body>
+</html>

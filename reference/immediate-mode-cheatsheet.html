@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Immediate-Mode Cheat Sheet — Rust &amp; egui</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <nav class="course-nav">
+    <div>
+      <a href="../lessons/0001-the-immediate-mode-loop.html">Lesson 0001</a>
+      <a href="./glossary.html">Glossary</a>
+      <a href="./immediate-mode-cheatsheet.html" class="active">Immediate-Mode Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
+  </nav>
+
+  <article class="tufte-article">
+    <h1>Reference: The <code>eframe::App</code> Immediate-Mode Loop</h1>
+    <p class="subtitle">One-page syntax and mental-model reference for Lesson 0001. Keep open or print while writing <code>egui</code> panels.</p>
+
+    <h2>1. The Mental Model (One Frame = One Function Call)</h2>
+    <pre><code>  ┌─────────────────────────────────────────────────────────────────────┐
+  │ Your Rust Struct (Persistent State across frames)                   │
+  │   struct PcbReviewerApp { show_top_copper: bool, ... }              │
+  └───────────────────┬─────────────────────────────────────────────────┘
+                      │  1. eframe calls update(&amp;mut self, ctx, frame)
+                      ▼
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │ SidePanel::left("layers").show(ctx, |ui| {                          │
+  │   ui.checkbox(&amp;mut self.show_top_copper, "Top Copper (F.Cu)");      │
+  │     ├─► Reads self.show_top_copper to draw checked/unchecked box    │
+  │     └─► If clicked this frame, flips self.show_top_copper in place! │
+  │ });                                                                 │
+  └───────────────────┬─────────────────────────────────────────────────┘
+                      │  2. CentralPanel reads updated state immediately
+                      ▼
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │ CentralPanel::default().show(ctx, |ui| {                            │
+  │   if self.show_top_copper { /* paint red F.Cu traces */ }           │
+  │ });                                                                 │
+  └─────────────────────────────────────────────────────────────────────┘</code></pre>
+
+    <h2>2. Canonical <code>eframe</code> Skeleton</h2>
+    <pre><code><span class="kw">use</span> eframe::egui;
+
+<span class="cm">// 1. Persistent domain &amp; view state lives in your struct</span>
+<span class="kw">pub struct</span> <span class="ty">PcbReviewerApp</span> {
+    <span class="kw">pub</span> show_top_copper: <span class="ty">bool</span>,
+    <span class="kw">pub</span> show_bottom_copper: <span class="ty">bool</span>,
+    <span class="kw">pub</span> show_silkscreen: <span class="ty">bool</span>,
+}
+
+<span class="kw">impl</span> <span class="ty">Default</span> <span class="kw">for</span> <span class="ty">PcbReviewerApp</span> {
+    <span class="kw">fn</span> <span class="fn">default</span>() -&gt; <span class="ty">Self</span> {
+        <span class="ty">Self</span> {
+            show_top_copper: <span class="kw">true</span>,
+            show_bottom_copper: <span class="kw">true</span>,
+            show_silkscreen: <span class="kw">true</span>,
+        }
+    }
+}
+
+<span class="cm">// 2. Implement eframe::App to define the per-frame UI</span>
+<span class="kw">impl</span> eframe::<span class="ty">App</span> <span class="kw">for</span> <span class="ty">PcbReviewerApp</span> {
+    <span class="kw">fn</span> <span class="fn">update</span>(<span class="mut">&amp;mut self</span>, ctx: &amp;egui::<span class="ty">Context</span>, _frame: &amp;<span class="kw">mut</span> eframe::<span class="ty">Frame</span>) {
+        <span class="cm">// Always declare SidePanels / TopBottomPanels BEFORE CentralPanel!</span>
+        egui::<span class="ty">SidePanel</span>::<span class="fn">left</span>(<span class="str">"layer_inspector"</span>).<span class="fn">show</span>(ctx, |ui| {
+            ui.<span class="fn">heading</span>(<span class="str">"PCB Layers"</span>);
+            ui.<span class="fn">checkbox</span>(<span class="mut">&amp;mut self.show_top_copper</span>, <span class="str">"Top Copper (F.Cu)"</span>);
+            ui.<span class="fn">checkbox</span>(<span class="mut">&amp;mut self.show_bottom_copper</span>, <span class="str">"Bottom Copper (B.Cu)"</span>);
+            ui.<span class="fn">checkbox</span>(<span class="mut">&amp;mut self.show_silkscreen</span>, <span class="str">"Top Silkscreen (F.SilkS)"</span>);
+
+            <span class="kw">if</span> ui.<span class="fn">button</span>(<span class="str">"Copper Only"</span>).<span class="fn">clicked</span>() {
+                self.show_top_copper = <span class="kw">true</span>;
+                self.show_bottom_copper = <span class="kw">true</span>;
+                self.show_silkscreen = <span class="kw">false</span>;
+            }
+        });
+
+        egui::<span class="ty">CentralPanel</span>::<span class="fn">default</span>().<span class="fn">show</span>(ctx, |ui| {
+            ui.<span class="fn">label</span>(<span class="str">"2D PCB Canvas Viewport"</span>);
+        });
+    }
+}</code></pre>
+
+    <h2>3. Common Panel &amp; Widget Signatures</h2>
+    <table class="ref-table">
+      <thead>
+        <tr>
+          <th>Pattern</th>
+          <th>Rust Code</th>
+          <th>Why It Works This Way</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Two-way boolean toggle</strong></td>
+          <td><code>ui.checkbox(&amp;mut self.flag, "Label")</code></td>
+          <td>Borrows <code>self.flag</code> mutably for the duration of the call; flips the boolean if clicked and returns a <code>Response</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>Momentary action button</strong></td>
+          <td><code>if ui.button("Reset").clicked() { ... }</code></td>
+          <td>Buttons don't store a boolean; they return a <code>Response</code> whose <code>.clicked()</code> method is <code>true</code> on the frame the click occurred.</td>
+        </tr>
+        <tr>
+          <td><strong>Panel ordering rule</strong></td>
+          <td><code>SidePanel</code> first, <code>CentralPanel</code> last</td>
+          <td><code>CentralPanel</code> claims all remaining area left over in <code>ctx</code> after outer panels allocate their widths/heights (<a href="https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html" target="_blank" rel="noopener">docs.rs</a>).</td>
+        </tr>
+      </tbody>
+    </table>
+  </article>
+</body>
+</html>
