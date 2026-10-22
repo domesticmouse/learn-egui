@@ -78,6 +78,7 @@ Keep the course navigable both locally and on GitHub Pages:
    - Preserve the license link (`[Apache License, Version 2.0](./LICENSE.txt)`) and the `This is not an official Google product.` disclaimer in `README.md`.
 2. **GitHub Pages Deployment (`.github/workflows/pages.yml` & `.nojekyll`):**
    - Stage only the static course web files (`index.html`, `.nojekyll`, `assets/`, `lessons/`, `reference/`) into `_site/` in `.github/workflows/pages.yml` (`actions/configure-pages@v5` with `enablement: true`, `actions/upload-pages-artifact@v3`, and `actions/deploy-pages@v4`) so companion Rust crates (`apps/`) and internal markdown files are excluded from the web artifact.
+   - Pass `env: NODE_OPTIONS: --no-deprecation` on the `actions/deploy-pages@v4` step to suppress the benign Node.js `[DEP0040] DeprecationWarning: The punycode module is deprecated` log warning emitted by the action's bundled `@actions/artifact` dependency tree on Node 20+.
    - When enabling GitHub Pages on a new repository, configure workflow-based Pages via `gh api repos/<owner>/<repo>/pages -X POST -f build_type=workflow`. If the initial `push` workflow run executes before the Pages API endpoint is enabled, trigger `gh workflow run pages.yml` after enabling Pages.
 
 The lesson should be short, and completable very quickly. Learners' working memory is very small, and we need to stay within it. But each lesson should give the user a single tangible win that they can build on. It should be directly tied to the mission, and should be in the user's zone of proximal development.
