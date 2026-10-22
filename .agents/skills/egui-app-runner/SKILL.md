@@ -127,3 +127,5 @@ cd apps/<app>-web && trunk serve --release
 ## 5. Troubleshooting, GPU Fallbacks & Environment Variables
 
 For GPU startup recovery (`--safe-gpu`, `WGPU_BACKEND`), single-instance lock behavior (`instance.lock`), log rotation, live design token hot-reloading, and frame latency tracing, read [runtime-flags-and-debugging.md](./references/runtime-flags-and-debugging.md).
+
+For running test suites, `egui_kittest` GPU serialization (`gpu_lock`), real-file corpus oracles, and performance benchmarks (`xtask perf`), use [egui-testing-infrastructure](../egui-testing-infrastructure/SKILL.md).

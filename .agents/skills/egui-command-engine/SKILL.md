@@ -56,7 +56,7 @@ In an engine-first `egui` architecture, **everything is a command**. Menu items,
 
 ### 6. Write Comprehensive Tests
 
-Run the verification suite before finishing:
+Run the verification suite before finishing (see [egui-testing-infrastructure](../egui-testing-infrastructure/SKILL.md) for `panic_hunt`, menu parity ratchets, and MCP acceptance testing):
 
 ```sh
 cargo test -p <app>-engine --lib --tests

@@ -54,7 +54,7 @@ Whenever adding a crate or dependency:
 
 ### 4. Validation Steps
 
-Run these commands to verify architectural compliance:
+Run these commands to verify architectural compliance (see [egui-testing-infrastructure](../egui-testing-infrastructure/SKILL.md) for the full 7-tier verification, corpus, performance, and scorecard workflow):
 
 ```sh
 cargo xtask layers

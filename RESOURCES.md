@@ -20,6 +20,8 @@
   Official Rust SDK for Turso's embedded SQLite-compatible database engine (`libsql` / `turso`) supporting local database files, parameterized SQL queries, and embedded cloud-synced replicas. Use for: storing review pins, comment threads, and DRC sign-off audit trails in Act VI.
 - [Local Skill: `egui-app-architecture`](file:///Users/brett/tmp/learn-egui/.agents/skills/egui-app-architecture/SKILL.md)
   Workspace guide on structuring larger engine-first `egui` applications with strict `L0`–`L7` crate layering. Use for: scaling the prototype into a production multi-crate CAD/review system once core `egui` skills are solid.
+- [Local Skill: `egui-testing-infrastructure`](file:///Users/brett/tmp/learn-egui/.agents/skills/egui-testing-infrastructure/SKILL.md)
+  Workspace guide on the 7-tier verification architecture (`nextest`, `gpu_lock`, real-file corpus oracles, `panic_hunt` command fuzzing, headless `egui_kittest` snapshots, performance budgets, and scorecards). Use for: testing and benchmarking multi-crate `egui` applications in Acts IV–VI.
 
 ## Wisdom (Communities)
 

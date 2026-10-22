@@ -38,6 +38,8 @@ This skill covers how application state is stored, mutated, undone, and persiste
 
 ## Validation Steps
 
+See [egui-testing-infrastructure](../egui-testing-infrastructure/SKILL.md) for property-based (`proptest!`) COW chunk testing, round-trip corpus oracles, and memory/RSS benchmarking:
+
 ```sh
 cargo test -p <app>-doc -p <app>-ops -p <app>-format --lib --tests
 cargo clippy -p <app>-doc -p <app>-ops -p <app>-format --all-targets -- -D warnings
