@@ -29,3 +29,11 @@ cargo run --manifest-path ./apps/0005-hit-testing-and-net-cross-probing/Cargo.to
 cargo test --manifest-path ./apps/0005-hit-testing-and-net-cross-probing/Cargo.toml
 cargo mutants -d ./apps/0005-hit-testing-and-net-cross-probing
 ```
+
+## License
+
+Licensed under the [Apache License, Version 2.0](./LICENSE.txt).
+
+## Disclaimer
+
+This is not an official Google product.
