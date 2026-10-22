@@ -87,6 +87,17 @@ html {
   -webkit-font-smoothing: antialiased;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
+
+:where(a, button, input, summary, [tabindex="0"]):focus-visible {
+  outline: 2px solid var(--accent-silk);
+  outline-offset: 2px;
+}
+
 body {
   font-family: var(--font-serif);
   line-height: 1.68;
@@ -149,6 +160,10 @@ article.tufte-article {
 }
 
 /* Typography */
+h1, h2, h3, th {
+  text-wrap: balance;
+}
+
 h1 {
   font-weight: 400;
   font-size: 2.35rem;
@@ -164,6 +179,7 @@ h1 {
   color: var(--text-muted);
   margin-top: 0;
   margin-bottom: 2rem;
+  text-wrap: balance;
 }
 
 h2 {
@@ -190,6 +206,10 @@ h3 {
 p, ul, ol {
   margin-top: 0;
   margin-bottom: 1.2rem;
+}
+
+p, li, blockquote {
+  text-wrap: pretty;
 }
 
 a {
@@ -519,8 +539,9 @@ pre.mermaid {
   width: 220px;
 }
 
-.code-challenge-input:focus {
+.code-challenge-input:focus-visible {
   outline: 2px solid #82b4ff;
+  outline-offset: 2px;
   border-color: transparent;
 }
 
@@ -756,6 +777,95 @@ table.ref-table th {
   letter-spacing: 0.04em;
   color: var(--text-muted);
   border-bottom: 2px solid var(--border-strong);
+}
+
+/* Course Index Lesson Cards */
+.lesson-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.15rem;
+  margin: 1.25rem 0 2rem 0;
+  font-family: var(--font-sans);
+}
+
+.lesson-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--accent-pcb);
+  border-radius: 6px;
+  padding: 1.2rem 1.35rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.75rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.lesson-card:hover {
+  border-color: var(--border-strong);
+  border-left-color: var(--accent-copper);
+  background: var(--bg-surface);
+}
+
+.lesson-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lesson-card-num {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent-copper);
+  background: var(--bg-code);
+  border: 1px solid var(--border-subtle);
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+}
+
+.lesson-card-mutants {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ok-text);
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-border);
+  padding: 0.12rem 0.5rem;
+  border-radius: 3px;
+}
+
+.lesson-card h3 {
+  margin: 0.2rem 0 0.25rem 0;
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
+.lesson-card h3 a {
+  text-decoration: none;
+  color: var(--text-main);
+}
+
+.lesson-card h3 a:hover {
+  color: var(--accent-silk);
+  text-decoration: underline;
+}
+
+.lesson-card p {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.lesson-card-meta {
+  font-size: 0.8rem;
+  color: var(--text-sidenote);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 /* Responsive adjustments */

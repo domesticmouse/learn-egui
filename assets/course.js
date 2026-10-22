@@ -22,6 +22,13 @@ function loadScript(src) {
 }
 
 async function initSyntaxAndDiagrams() {
+  // Ensure scrollable code blocks are keyboard reachable
+  document.querySelectorAll("pre:has(> code)").forEach((pre) => {
+    if (!pre.hasAttribute("tabindex")) {
+      pre.setAttribute("tabindex", "0");
+    }
+  });
+
   try {
     // Load Prism.js core + languages + keep-markup (preserves <input> inside <pre><code>)
     window.Prism = window.Prism || {};
