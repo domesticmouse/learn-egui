@@ -3,12 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
   <title>Immediate-Mode Cheat Sheet — Rust &amp; egui</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
   <nav class="course-nav">
     <div>
+      <a href="../lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a>
       <a href="../lessons/0001-the-immediate-mode-loop.html">Lesson 0001</a>
       <a href="./glossary.html">Glossary</a>
       <a href="./immediate-mode-cheatsheet.html" class="active">Immediate-Mode Cheat Sheet</a>
@@ -18,69 +20,70 @@
 
   <article class="tufte-article">
     <h1>Reference: The <code>eframe::App</code> Immediate-Mode Loop</h1>
-    <p class="subtitle">One-page syntax and mental-model reference for Lesson 0001. Keep open or print while writing <code>egui</code> panels.</p>
+    <p class="subtitle">One-page syntax and mental-model reference for Lessons 0000 &amp; 0001. Keep open or print while writing <code>egui</code> panels.</p>
 
     <h2>1. The Mental Model (One Frame = One Function Call)</h2>
-    <pre><code>  ┌─────────────────────────────────────────────────────────────────────┐
-  │ Your Rust Struct (Persistent State across frames)                   │
-  │   struct PcbReviewerApp { show_top_copper: bool, ... }              │
-  └───────────────────┬─────────────────────────────────────────────────┘
-                      │  1. eframe calls update(&amp;mut self, ctx, frame)
-                      ▼
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │ SidePanel::left("layers").show(ctx, |ui| {                          │
-  │   ui.checkbox(&amp;mut self.show_top_copper, "Top Copper (F.Cu)");      │
-  │     ├─► Reads self.show_top_copper to draw checked/unchecked box    │
-  │     └─► If clicked this frame, flips self.show_top_copper in place! │
-  │ });                                                                 │
-  └───────────────────┬─────────────────────────────────────────────────┘
-                      │  2. CentralPanel reads updated state immediately
-                      ▼
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │ CentralPanel::default().show(ctx, |ui| {                            │
-  │   if self.show_top_copper { /* paint red F.Cu traces */ }           │
-  │ });                                                                 │
-  └─────────────────────────────────────────────────────────────────────┘</code></pre>
+    <figure class="mermaid-figure">
+      <pre class="mermaid">
+flowchart TD
+    State["Persistent Rust Struct<br/>struct PcbReviewerApp { show_top_copper: bool, ... }"]
+    State -->|"1. eframe calls update(&amp;mut self, ctx, frame)"| Side["SidePanel::left('layers').show(ctx, |ui| { ... })"]
+    Side --> Checkbox["ui.checkbox(&amp;mut self.show_top_copper, 'Top Copper (F.Cu)')"]
+    Checkbox -->|"Reads bool to draw box<br/>Flips bool in-place if clicked"| Central["CentralPanel::default().show(ctx, |ui| { ... })"]
+    Central -->|"2. Reads updated self.show_top_copper"| Paint["Paints visible F.Cu traces &amp; pads for this frame"]
+    Paint -->|"3. End of update(): borrow released"| State
+      </pre>
+      <figcaption>The <code>eframe::App::update</code> lifecycle across a single frame.</figcaption>
+    </figure>
 
-    <h2>2. Canonical <code>eframe</code> Skeleton</h2>
-    <pre><code><span class="kw">use</span> eframe::egui;
+    <h2>2. Complete Runnable Skeleton (<code>src/main.rs</code>)</h2>
+    <pre><code class="language-rust">use eframe::egui;
 
-<span class="cm">// 1. Persistent domain &amp; view state lives in your struct</span>
-<span class="kw">pub struct</span> <span class="ty">PcbReviewerApp</span> {
-    <span class="kw">pub</span> show_top_copper: <span class="ty">bool</span>,
-    <span class="kw">pub</span> show_bottom_copper: <span class="ty">bool</span>,
-    <span class="kw">pub</span> show_silkscreen: <span class="ty">bool</span>,
+fn main() -&gt; eframe::Result {
+    let options = eframe::NativeOptions::default();
+    eframe::run_native(
+        "Schematic &amp; PCB Design Reviewer",
+        options,
+        Box::new(|_cc| Ok(Box::new(PcbReviewerApp::default()))),
+    )
 }
 
-<span class="kw">impl</span> <span class="ty">Default</span> <span class="kw">for</span> <span class="ty">PcbReviewerApp</span> {
-    <span class="kw">fn</span> <span class="fn">default</span>() -&gt; <span class="ty">Self</span> {
-        <span class="ty">Self</span> {
-            show_top_copper: <span class="kw">true</span>,
-            show_bottom_copper: <span class="kw">true</span>,
-            show_silkscreen: <span class="kw">true</span>,
+// 1. Persistent domain &amp; view state lives in your struct
+pub struct PcbReviewerApp {
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+}
+
+impl Default for PcbReviewerApp {
+    fn default() -&gt; Self {
+        Self {
+            show_top_copper: true,
+            show_bottom_copper: true,
+            show_silkscreen: true,
         }
     }
 }
 
-<span class="cm">// 2. Implement eframe::App to define the per-frame UI</span>
-<span class="kw">impl</span> eframe::<span class="ty">App</span> <span class="kw">for</span> <span class="ty">PcbReviewerApp</span> {
-    <span class="kw">fn</span> <span class="fn">update</span>(<span class="mut">&amp;mut self</span>, ctx: &amp;egui::<span class="ty">Context</span>, _frame: &amp;<span class="kw">mut</span> eframe::<span class="ty">Frame</span>) {
-        <span class="cm">// Always declare SidePanels / TopBottomPanels BEFORE CentralPanel!</span>
-        egui::<span class="ty">SidePanel</span>::<span class="fn">left</span>(<span class="str">"layer_inspector"</span>).<span class="fn">show</span>(ctx, |ui| {
-            ui.<span class="fn">heading</span>(<span class="str">"PCB Layers"</span>);
-            ui.<span class="fn">checkbox</span>(<span class="mut">&amp;mut self.show_top_copper</span>, <span class="str">"Top Copper (F.Cu)"</span>);
-            ui.<span class="fn">checkbox</span>(<span class="mut">&amp;mut self.show_bottom_copper</span>, <span class="str">"Bottom Copper (B.Cu)"</span>);
-            ui.<span class="fn">checkbox</span>(<span class="mut">&amp;mut self.show_silkscreen</span>, <span class="str">"Top Silkscreen (F.SilkS)"</span>);
+// 2. Implement eframe::App to define the per-frame UI
+impl eframe::App for PcbReviewerApp {
+    fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame) {
+        // Always declare SidePanels / TopBottomPanels BEFORE CentralPanel!
+        egui::SidePanel::left("layer_inspector").show(ctx, |ui| {
+            ui.heading("PCB Layers");
+            ui.checkbox(&amp;mut self.show_top_copper, "Top Copper (F.Cu)");
+            ui.checkbox(&amp;mut self.show_bottom_copper, "Bottom Copper (B.Cu)");
+            ui.checkbox(&amp;mut self.show_silkscreen, "Top Silkscreen (F.SilkS)");
 
-            <span class="kw">if</span> ui.<span class="fn">button</span>(<span class="str">"Copper Only"</span>).<span class="fn">clicked</span>() {
-                self.show_top_copper = <span class="kw">true</span>;
-                self.show_bottom_copper = <span class="kw">true</span>;
-                self.show_silkscreen = <span class="kw">false</span>;
+            if ui.button("Copper Only").clicked() {
+                self.show_top_copper = true;
+                self.show_bottom_copper = true;
+                self.show_silkscreen = false;
             }
         });
 
-        egui::<span class="ty">CentralPanel</span>::<span class="fn">default</span>().<span class="fn">show</span>(ctx, |ui| {
-            ui.<span class="fn">label</span>(<span class="str">"2D PCB Canvas Viewport"</span>);
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.label("2D PCB Canvas Viewport");
         });
     }
 }</code></pre>
@@ -113,5 +116,7 @@
       </tbody>
     </table>
   </article>
+
+  <script src="../assets/course.js"></script>
 </body>
 </html>

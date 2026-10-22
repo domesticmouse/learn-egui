@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Lesson 0000: Project Setup &amp; Booting eframe — Learn egui</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <nav class="course-nav">
+    <div>
+      <a href="./0000-project-setup-and-eframe-boot.html" class="active">Lesson 0000</a>
+      <a href="./0001-the-immediate-mode-loop.html">Lesson 0001</a>
+      <a href="../reference/glossary.html">Glossary</a>
+      <a href="../reference/immediate-mode-cheatsheet.html">Immediate-Mode Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
+  </nav>
+
+  <article class="tufte-article">
+    <div class="prose-col">
+      <h1>Lesson 0000: Bootstrapping Your Rust &amp; <code>eframe</code> Project</h1>
+      <p class="subtitle">Creating the Cargo workspace and native window shell that your PCB Reviewer code will inhabit</p>
+
+      <p>
+        Before we write the layer-visibility toggles and 2D board viewport in <a href="./0001-the-immediate-mode-loop.html">Lesson 0001</a>, that code needs a real, runnable Rust project to live in. In this lesson, you will learn how Cargo structures a Rust binary, how <a href="../reference/glossary.html"><code>eframe</code></a> and <a href="../reference/glossary.html"><code>egui</code></a> divide responsibilities, and how <code>fn main()</code> boots a native desktop window.
+      </p>
+
+      <h2>1. <code>egui</code> vs. <code>eframe</code>: Who Does What?</h2>
+
+      <p>
+        A common surprise for newcomers is that the <code>egui</code> crate itself does not open OS windows or talk directly to Metal, Vulkan, or OpenGL.<span class="sidenote-number"></span><span class="sidenote">Because <a href="https://docs.rs/egui/latest/egui/" target="_blank" rel="noopener"><code>egui</code></a> only takes input events and outputs 2D triangles and textures, it can be embedded inside game engines, custom CAD renderers, or headless test runners.</span>
+      </p>
+
+      <ul>
+        <li>
+          <strong><code>egui</code> (The UI Core):</strong> Computes widget layouts, processes pointer/keyboard state, and generates 2D vector shapes for a single frame.
+        </li>
+        <li>
+          <strong><code>eframe</code> (The App Shell):</strong> The official framework wrapper (<a href="https://docs.rs/eframe/latest/eframe/" target="_blank" rel="noopener"><code>docs.rs/eframe</code></a>) that creates a native desktop window (or WebAssembly canvas), initializes the GPU painter, and calls your app's <code>update()</code> method on every repaint.
+        </li>
+      </ul>
+
+      <figure class="mermaid-figure">
+        <pre class="mermaid">
+flowchart LR
+    Cargo["Cargo.toml<br/>(eframe = 0.33)"] --> Main["fn main()<br/>eframe::run_native(...)"]
+    Main -->|"Runs once at startup"| Init["PcbReviewerApp::default()<br/>(Initializes struct state)"]
+    Init --> Loop["eframe Event &amp; Render Loop"]
+    Loop -->|"Calls every frame (~60 Hz)"| Update["impl eframe::App for PcbReviewerApp<br/>fn update(&amp;mut self, ctx, frame)"]
+    Update -->|"Emits 2D shapes"| Loop
+        </pre>
+        <figcaption>Figure 0.1: How Cargo and <code>eframe::run_native</code> initialize your state once, then drive the Lesson 0001 <code>update()</code> loop every frame.</figcaption>
+      </figure>
+
+      <h2>2. Creating the Project &amp; Configuring <code>Cargo.toml</code></h2>
+
+      <p>
+        In Rust, <a href="https://doc.rust-lang.org/cargo/guide/creating-a-new-project.html" target="_blank" rel="noopener"><code>cargo new pcb-reviewer</code></a> generates a binary package with two key files: <code>Cargo.toml</code> (the manifest) and <code>src/main.rs</code> (the entry point).
+      </p>
+
+      <p>
+        Here is the complete <code>Cargo.toml</code> for our Schematic &amp; PCB Reviewer:<span class="sidenote-number"></span><span class="sidenote"><strong>Tip: Single Dependency Import.</strong> Because <code>eframe</code> re-exports <code>egui</code> as <code>eframe::egui</code>, we only list <code>eframe</code> under <code>[dependencies]</code>. This guarantees your <code>egui</code> types never suffer a version mismatch with <code>eframe</code>.</span>
+      </p>
+
+      <pre><code class="language-toml">[package]
+name = "pcb-reviewer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.33"
+
+# Optimize dependencies (like egui/eframe) even in debug builds so our
+# 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
+[profile.dev.package."*"]
+opt-level = 2</code></pre>
+
+      <p>
+        That final three-line block (<a href="https://doc.rust-lang.org/cargo/reference/profiles.html#overrides" target="_blank" rel="noopener">Cargo Profile Overrides</a>) is essential for graphics and CAD tools in Rust: unoptimized debug builds (`opt-level = 0`) make software rasterizing and tessellation sluggish, whereas `opt-level = 2` on `package."*"` compiles third-party crates once at near-release speed while compiling your own `src/main.rs` edits in sub-seconds.
+      </p>
+
+      <h2>3. Anatomy of <code>src/main.rs</code></h2>
+
+      <p>
+        Now let's look at the complete, runnable <code>src/main.rs</code> that hosts our <code>PcbReviewerApp</code> struct:<span class="sidenote-number"></span><span class="sidenote">In Rust, <a href="https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html" target="_blank" rel="noopener"><code>Result&lt;T, E&gt;</code></a> represents an operation that either succeeds (<code>Ok(T)</code>) or fails (<code>Err(E)</code>). <code>eframe::Result</code> is a type alias for <code>Result&lt;(), eframe::Error&gt;</code>.</span>
+      </p>
+
+      <pre><code class="language-rust">use eframe::egui;
+
+fn main() -&gt; eframe::Result {
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1024.0, 720.0]),
+        ..Default::default()
+    };
+
+    eframe::run_native(
+        "Schematic &amp; PCB Design Reviewer",
+        options,
+        Box::new(|_cc| Ok(Box::new(PcbReviewerApp::default()))),
+    )
+}
+
+pub struct PcbReviewerApp {
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
+}
+
+impl Default for PcbReviewerApp {
+    fn default() -&gt; Self {
+        Self {
+            show_top_copper: true,
+            show_bottom_copper: true,
+            show_silkscreen: true,
+            show_ratsnest: false,
+        }
+    }
+}
+
+impl eframe::App for PcbReviewerApp {
+    fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame) {
+        // Lesson 0001's SidePanel and CentralPanel code lives right here!
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("PCB Viewport Ready");
+        });
+    }
+}</code></pre>
+
+      <h3>Three Rust Details Worth Unpacking</h3>
+      <ol>
+        <li>
+          <strong>Struct Update Syntax (<code>..Default::default()</code>):</strong> When configuring <code>eframe::NativeOptions</code>, we set <code>viewport</code> to <code>1024×720</code> logical points and tell Rust to fill in all remaining window fields with their defaults (<a href="https://doc.rust-lang.org/book/ch05-01-defining-structs.html#creating-instances-from-other-instances-with-struct-update-syntax" target="_blank" rel="noopener">Rust Book §5.1</a>).
+        </li>
+        <li>
+          <strong>Custom <code>impl Default</code> vs. <code>#[derive(Default)]</code>:</strong> Rust lets you annotate a struct with <code>#[derive(Default)]</code>, which sets every <code>bool</code> field to <code>false</code>. Because an engineer opening a PCB wants copper and silkscreen visible immediately (`true`), we write an explicit <code>impl Default for PcbReviewerApp</code> block.
+        </li>
+        <li>
+          <strong>The App Creator Closure (<code>Box::new(|_cc| Ok(Box::new(...)))</code>):</strong> <a href="https://docs.rs/eframe/latest/eframe/fn.run_native.html" target="_blank" rel="noopener"><code>eframe::run_native</code></a> takes a factory closure that runs <em>once</em> after the GPU context (`_cc: &amp;CreationContext`) is ready, allocating your <code>PcbReviewerApp</code> on the heap (<a href="https://doc.rust-lang.org/book/ch15-01-box.html" target="_blank" rel="noopener"><code>Box::new</code></a>) and handing ownership to <code>eframe</code>.
+        </li>
+      </ol>
+    </div>
+
+    <!-- Interactive Skill 1: Hands-On Project Setup Checklist -->
+    <section class="full-width-panel">
+      <div class="panel-header">
+        <span class="panel-title">Interactive Lab 1: Optional Local Crate Setup</span>
+        <span class="panel-badge">Hands-On Steps • Cargo 1.97</span>
+      </div>
+      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+        If you want to run the code locally alongside these lessons, check off each step as you run it in your terminal:
+      </p>
+      <ul class="step-checklist">
+        <li>
+          <input type="checkbox" id="step-1">
+          <label for="step-1">
+            <strong>1. Scaffold the binary crate:</strong> Run <code>cargo new pcb-reviewer &amp;&amp; cd pcb-reviewer</code> in a scratch folder (or inside this workspace).
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="step-2">
+          <label for="step-2">
+            <strong>2. Add <code>eframe</code> &amp; dev optimization:</strong> Add <code>eframe = "0.33"</code> under <code>[dependencies]</code> and <code>[profile.dev.package."*"] opt-level = 2</code> to <code>Cargo.toml</code>.
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="step-3">
+          <label for="step-3">
+            <strong>3. Paste the <code>src/main.rs</code> skeleton:</strong> Replace <code>src/main.rs</code> with the listing above and run <code>cargo run</code> to open your native 1024×720 window.
+          </label>
+        </li>
+      </ul>
+    </section>
+
+    <!-- Interactive Skill 2: Code Completion Lab -->
+    <section class="full-width-panel">
+      <div class="panel-header">
+        <span class="panel-title">Interactive Lab 2: Complete the Boot Sequence</span>
+        <span class="panel-badge">Skill Practice • Tight Feedback Loop</span>
+      </div>
+      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+        Fill in the three blanks below so our project re-exports <code>egui</code> from <code>eframe</code>, initializes <code>PcbReviewerApp</code> with its default layer state, and implements the <code>eframe::App</code> trait:
+      </p>
+
+      <pre class="keep-markup"><code class="language-rust">use eframe::<input id="boot-blank-1" class="code-challenge-input" style="width:110px;" placeholder="/* 1: crate */" autocomplete="off">;
+
+fn main() -&gt; eframe::Result {
+    let options = eframe::NativeOptions::default();
+    eframe::run_native(
+        "PCB Reviewer",
+        options,
+        Box::new(|_cc| Ok(Box::new(PcbReviewerApp::<input id="boot-blank-2" class="code-challenge-input" style="width:140px;" placeholder="/* 2: init fn */" autocomplete="off">))),
+    )
+}
+
+impl <input id="boot-blank-3" class="code-challenge-input" style="width:145px;" placeholder="/* 3: trait */" autocomplete="off"> for PcbReviewerApp {
+    fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame) {
+        // Frame loop body
+    }
+}</code></pre>
+
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <button type="button" class="btn-primary" id="btn-check-boot">Check Rust Code</button>
+        <button type="button" class="btn-secondary" id="btn-hint-boot">Show Hint</button>
+      </div>
+      <div id="boot-feedback" class="feedback-box"></div>
+    </section>
+
+    <!-- Interactive Skill 3: Retrieval Practice Quiz -->
+    <section class="full-width-panel">
+      <div class="panel-header">
+        <span class="panel-title">Retrieval Practice: Project Structure &amp; Lifecycle</span>
+        <span class="panel-badge">3 Questions • Equal-Length Options</span>
+      </div>
+      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+        Test your retention from memory before moving into the frame loop in <a href="./0001-the-immediate-mode-loop.html">Lesson 0001</a>.
+      </p>
+      <div id="boot-quiz-container"></div>
+    </section>
+
+    <div class="prose-col">
+      <h2>Recommended Primary Source</h2>
+      <div class="callout">
+        <strong>Read (5 mins):</strong> <a href="https://docs.rs/eframe/latest/eframe/#usage-native" target="_blank" rel="noopener"><code>eframe</code> Crate Documentation — "Usage, native"</a>.<br>
+        Compare the minimal `eframe::run_native` example in the official docs with our `PcbReviewerApp` skeleton above.
+      </div>
+
+      <div class="teacher-prompt-box">
+        <strong>Next Step &amp; Questions:</strong> Have any questions about `Cargo.toml`, `Box::new`, or how `eframe::run_native` hands off to `update()`? Ask me in chat! Otherwise, click straight through to <a href="./0001-the-immediate-mode-loop.html"><strong>Lesson 0001: The Immediate-Mode Loop &amp; Mutable State (<code>&amp;mut</code>)</strong></a> to build the interactive PCB Layer Inspector inside `update()`.
+      </div>
+    </div>
+  </article>
+
+  <script src="../assets/course.js"></script>
+  <script>
+    initCodeExercise({
+      checkBtnId: "btn-check-boot",
+      hintBtnId: "btn-hint-boot",
+      feedbackId: "boot-feedback",
+      blanks: [
+        {
+          inputId: "boot-blank-1",
+          accepted: ["egui"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. Which UI crate does <code>eframe</code> re-export at the top of <code>src/main.rs</code>?`,
+        },
+        {
+          inputId: "boot-blank-2",
+          accepted: ["default()"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. Call the <code>Default</code> trait constructor function on <code>PcbReviewerApp</code> (don't forget <code>()</code>).`,
+        },
+        {
+          inputId: "boot-blank-3",
+          accepted: ["eframe::App"],
+          getErrorHint: (val) =>
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. Which trait from <code>eframe</code> defines the per-frame <code>update</code> method?`,
+        },
+      ],
+      hintMessage:
+        "<strong>Hints:</strong> (1) Re-export <code>egui</code> via <code>use eframe::egui;</code>. (2) Construct initial state with <code>default()</code>. (3) Implement <code>eframe::App</code>.",
+      successMessage:
+        "<strong>All correct!</strong> Your binary imports <code>eframe::egui</code>, constructs <code>PcbReviewerApp::default()</code> once inside <code>run_native</code>, and implements <code>eframe::App</code>.",
+    });
+
+    // Strict equal word-count AND equal character-count options per question,
+    // with varied correct answer indices (2 -> 0 -> 3).
+    initQuiz("boot-quiz-container", [
+      {
+        question:
+          "Why do we depend on `eframe` and import `use eframe::egui;` instead of listing both crates separately?",
+        options: [
+          "Listing two crates disables native GPU rendering", // 7 words, 48 chars
+          "Cargo rejects each manifest with paired packages", // 7 words, 48 chars
+          "Single imports prevent version drift across egui", // 7 words, 48 chars (Correct: C)
+          "Unlinked crates cannot compile inside debug mode", // 7 words, 48 chars
+        ],
+        correctIndex: 2,
+        explanation:
+          "Using `eframe::egui` guarantees that the `egui` types your code uses are the exact same version that `eframe` was compiled against.",
+        wrongHint:
+          "Think about what happens in Cargo if you accidentally upgrade `egui` without upgrading `eframe`.",
+      },
+      {
+        question:
+          "What does `[profile.dev.package.\"*\"] opt-level = 2` in `Cargo.toml` achieve during development?",
+        options: [
+          "Dependencies run fast while builds stay quick", // 7 words, 45 chars (Correct: A)
+          "Dependencies skip type checks during dev runs", // 7 words, 45 chars
+          "Applications ship with fewer debug line items", // 7 words, 45 chars
+          "Optimization cuts off borrow checks near main", // 7 words, 45 chars
+        ],
+        correctIndex: 0,
+        explanation:
+          "It compiles external dependencies (`eframe`, `egui`, renderer backends) with optimizations (`opt-level = 2`) once so your 2D canvas runs at 60 FPS, while your own crate still compiles incrementally in debug mode.",
+        wrongHint:
+          "Notice that the selector targets `package.\"*\"` (dependencies) under `profile.dev`.",
+      },
+      {
+        question:
+          "When does the `Box::new(|_cc| Ok(Box::new(PcbReviewerApp::default())))` factory closure run?",
+        options: [
+          "During every single frame before panels draw", // 7 words, 44 chars
+          "Whenever your window resizes across the desk", // 7 words, 44 chars
+          "Moments after your native window closes down", // 7 words, 44 chars
+          "Once during startup to initialize root state", // 7 words, 44 chars (Correct: D)
+        ],
+        correctIndex: 3,
+        explanation:
+          "`eframe::run_native` invokes the creation closure once at startup after creating the window and GPU context, constructing your `PcbReviewerApp` state before the `update()` loop begins.",
+        wrongHint:
+          "Contrast `PcbReviewerApp::default()` in `run_native` with `fn update(&mut self, ...)`.",
+      },
+    ]);
+  </script>
+</body>
+</html>

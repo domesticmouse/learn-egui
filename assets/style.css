@@ -1,27 +1,38 @@
 /* ==========================================================================
-   Learn egui — Tufte-Inspired Course & Reference Stylesheet
+   Learn egui — Tufte-Inspired Dark-Mode Course & Reference Stylesheet
    Shared across all ./lessons/*.html and ./reference/*.html
+   Includes Prism.js token theme & Mermaid.js diagram container styling
    ========================================================================== */
 
 :root {
-  --bg-paper: #fffff8;
-  --bg-elevated: #f7f6f0;
-  --bg-code: #181c20;
-  --text-main: #111111;
-  --text-muted: #555550;
-  --text-sidenote: #454540;
-  --accent-pcb: #1b6b4a;       /* Solder-mask green accent */
-  --accent-copper: #b84a27;    /* Top-copper rust/terracotta accent */
-  --accent-silk: #2a5c8a;      /* Blueprint / silkscreen blue */
-  --border-subtle: #dcdad0;
-  --border-strong: #99968a;
-  --ok-bg: #eaf6ef;
-  --ok-border: #287d4e;
-  --err-bg: #fdf0ed;
-  --err-border: #b83a27;
+  /* MANDATORY: Apply color-scheme to :root so viewport scrollbars, form controls,
+     and initial canvas background adopt dark mode */
+  color-scheme: dark;
+
+  --bg-paper: #121518;
+  --bg-elevated: #1a1f24;
+  --bg-surface: #222830;
+  --bg-code: #0c0e11;
+  --text-main: #e8e6df;
+  --text-muted: #9da6b0;
+  --text-sidenote: #adb6c0;
+  --accent-pcb: #3dd68c;       /* Luminous solder-mask green accent */
+  --accent-pcb-btn: #1f7a4c;   /* Button fill green */
+  --accent-copper: #ff8b6b;    /* Luminous top-copper rust/terracotta accent */
+  --accent-silk: #6cb6ff;      /* Blueprint / silkscreen sky blue */
+  --border-subtle: #2d353f;
+  --border-strong: #465260;
+  --ok-bg: #132a20;
+  --ok-border: #3dd68c;
+  --ok-text: #b4f4d3;
+  --err-bg: #2d1614;
+  --err-border: #ff6b5b;
+  --err-text: #ffbab3;
   --font-serif: "ETBook", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+
+  accent-color: var(--accent-pcb);
 }
 
 * {
@@ -43,6 +54,7 @@ body {
   max-width: 1180px;
   margin-left: auto;
   margin-right: auto;
+  counter-reset: sidenote-counter;
 }
 
 /* Top Navigation Bar */
@@ -86,7 +98,7 @@ body {
   letter-spacing: 0;
 }
 
-/* Tufte Two-Column Layout: Main Prose (62%) + Right Sidenote Margin (34%) */
+/* Tufte Two-Column Layout: Main Prose (63%) + Right Sidenote Margin (44% offset) */
 article.tufte-article {
   position: relative;
 }
@@ -121,6 +133,7 @@ h2 {
   margin-bottom: 0.8rem;
   border-bottom: 1px solid var(--border-subtle);
   padding-bottom: 0.3rem;
+  color: var(--text-main);
 }
 
 h3 {
@@ -193,42 +206,125 @@ a:hover {
   padding-left: 0.85rem;
 }
 
-/* Inline & Block Code */
+/* Inline & Block Code + Prism.js Theme */
 code {
   font-family: var(--font-mono);
   font-size: 0.84em;
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  padding: 0.1rem 0.32rem;
+  color: #f0ede6;
+  padding: 0.1rem 0.35rem;
   border-radius: 3px;
 }
 
-pre {
+pre[class*="language-"],
+pre.code-block {
   background: var(--bg-code);
   color: #e8e6df;
   padding: 1.15rem 1.35rem;
   border-radius: 5px;
   overflow-x: auto;
-  line-height: 1.5;
+  line-height: 1.52;
   margin: 1.25rem 0 1.5rem 0;
+  border: 1px solid var(--border-subtle);
   border-left: 4px solid var(--accent-copper);
+  tab-size: 4;
 }
 
-pre code {
+pre code,
+pre[class*="language-"] code {
   background: transparent;
   border: none;
   padding: 0;
   color: inherit;
   font-size: 0.84rem;
+  font-family: var(--font-mono);
 }
 
-/* Syntax Highlighting Spans */
-.kw { color: #ff8b7b; font-weight: 600; }
-.ty { color: #7fd1b9; }
-.fn { color: #82b4ff; }
-.str { color: #e5c07b; }
-.cm { color: #7f8994; font-style: italic; }
-.mut { color: #ffb86c; font-weight: 600; text-decoration: underline dotted #ffb86c; }
+/* Prism.js Token Colors (PCB / Dark Blueprint Palette) */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #7f8994;
+  font-style: italic;
+}
+
+.token.punctuation {
+  color: #c5c8c6;
+}
+
+.token.keyword,
+.token.operator,
+.token.tag {
+  color: #ff8b7b;
+  font-weight: 600;
+}
+
+.token.class-name,
+.token.type-definition,
+.token.namespace {
+  color: #7fd1b9;
+}
+
+.token.function,
+.token.macro.property {
+  color: #82b4ff;
+}
+
+.token.string,
+.token.char,
+.token.attr-value {
+  color: #e5c07b;
+}
+
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol {
+  color: #ffb86c;
+  font-weight: 600;
+}
+
+.token.attribute,
+.token.atrule,
+.token.property,
+.token.table {
+  color: #c792ea;
+}
+
+.token.lifetime-annotation {
+  color: #f78c6c;
+}
+
+/* Mermaid.js Diagram Containers */
+.mermaid-figure {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--accent-pcb);
+  border-radius: 5px;
+  padding: 1.25rem 1.5rem;
+  margin: 1.5rem 0 1.8rem 0;
+  overflow-x: auto;
+}
+
+.mermaid-figure figcaption {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.75rem;
+  text-align: center;
+}
+
+pre.mermaid {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: center;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+}
 
 /* Full-Bleed Figures & Interactive Widgets */
 .full-width-panel {
@@ -260,7 +356,7 @@ pre code {
 
 .panel-badge {
   font-size: 0.78rem;
-  background: #fff;
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   padding: 0.2rem 0.6rem;
   border-radius: 3px;
@@ -270,14 +366,14 @@ pre code {
 /* Interactive Simulator Layout */
 .sim-grid {
   display: grid;
-  grid-template-columns: 260px 1fr 310px;
+  grid-template-columns: 270px 1fr 310px;
   gap: 1.25rem;
   align-items: stretch;
   font-family: var(--font-sans);
 }
 
 .sim-box {
-  background: #ffffff;
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 5px;
   padding: 1rem;
@@ -373,12 +469,12 @@ pre code {
 /* Interactive Code Exercise */
 .code-challenge-input {
   font-family: var(--font-mono);
-  font-size: 0.85rem;
-  background: #262c34;
+  font-size: 0.84rem;
+  background: #1f262e;
   color: #ffb86c;
-  border: 1px solid #5c6773;
+  border: 1px solid #58697a;
   border-radius: 3px;
-  padding: 0.15rem 0.4rem;
+  padding: 0.12rem 0.4rem;
   width: 220px;
 }
 
@@ -389,9 +485,9 @@ pre code {
 
 .btn-primary {
   font-family: var(--font-sans);
-  background: var(--accent-pcb);
-  color: #fff;
-  border: none;
+  background: var(--accent-pcb-btn);
+  color: #ffffff;
+  border: 1px solid var(--accent-pcb);
   border-radius: 4px;
   padding: 0.5rem 1rem;
   font-size: 0.86rem;
@@ -400,12 +496,12 @@ pre code {
 }
 
 .btn-primary:hover {
-  background: #145339;
+  background: #28975f;
 }
 
 .btn-secondary {
   font-family: var(--font-sans);
-  background: #fff;
+  background: var(--bg-surface);
   color: var(--text-main);
   border: 1px solid var(--border-strong);
   border-radius: 4px;
@@ -415,7 +511,7 @@ pre code {
 }
 
 .btn-secondary:hover {
-  background: var(--bg-elevated);
+  background: #2c3540;
 }
 
 /* Feedback Banner */
@@ -432,19 +528,19 @@ pre code {
   display: block;
   background: var(--ok-bg);
   border-left: 4px solid var(--ok-border);
-  color: #16492d;
+  color: var(--ok-text);
 }
 
 .feedback-box.err {
   display: block;
   background: var(--err-bg);
   border-left: 4px solid var(--err-border);
-  color: #6e1f14;
+  color: var(--err-text);
 }
 
 /* Quiz Styles */
 .quiz-question {
-  background: #ffffff;
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 5px;
   padding: 1.15rem 1.25rem;
@@ -456,6 +552,7 @@ pre code {
   font-weight: 600;
   font-size: 0.95rem;
   margin-bottom: 0.75rem;
+  color: var(--text-main);
 }
 
 .quiz-options {
@@ -479,23 +576,51 @@ pre code {
 
 .quiz-option-btn:hover {
   border-color: var(--accent-silk);
-  background: #f2f6fa;
+  background: #1a2430;
 }
 
 .quiz-option-btn.selected-correct {
   background: var(--ok-bg);
   border-color: var(--ok-border);
+  color: var(--ok-text);
   font-weight: 600;
 }
 
 .quiz-option-btn.selected-wrong {
   background: var(--err-bg);
   border-color: var(--err-border);
+  color: var(--err-text);
+}
+
+/* Step Checklist (for Hands-on Setup Steps) */
+.step-checklist {
+  list-style: none;
+  padding-left: 0;
+  font-family: var(--font-sans);
+}
+
+.step-checklist li {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.step-checklist input[type="checkbox"] {
+  margin-top: 0.28rem;
+  transform: scale(1.15);
+  accent-color: var(--accent-pcb);
+  cursor: pointer;
 }
 
 /* Callouts & Footer */
 .callout {
   background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
   border-left: 3px solid var(--accent-silk);
   padding: 0.9rem 1.15rem;
   margin: 1.4rem 0;
@@ -503,8 +628,8 @@ pre code {
 }
 
 .teacher-prompt-box {
-  background: #f2f6f4;
-  border: 1px solid #bdd4c8;
+  background: #15221c;
+  border: 1px solid #264637;
   border-left: 4px solid var(--accent-pcb);
   border-radius: 5px;
   padding: 1.15rem 1.35rem;
@@ -560,8 +685,20 @@ table.ref-table th {
 
 /* Print-friendly styling for ./reference/*.html and ./lessons/*.html */
 @media print {
+  :root {
+    color-scheme: light;
+    --bg-paper: #ffffff;
+    --bg-elevated: #f7f7f7;
+    --bg-surface: #ffffff;
+    --text-main: #111111;
+    --text-muted: #444444;
+    --text-sidenote: #333333;
+    --border-subtle: #cccccc;
+    --border-strong: #666666;
+  }
   body {
     background: #fff;
+    color: #000;
     padding: 0;
     font-size: 11pt;
   }
@@ -572,6 +709,7 @@ table.ref-table th {
   }
   .full-width-panel,
   .quiz-question,
+  .mermaid-figure,
   pre {
     break-inside: avoid;
   }

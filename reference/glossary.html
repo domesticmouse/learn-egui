@@ -3,12 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
   <title>Glossary — Rust &amp; egui for Schematic/PCB Review</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
   <nav class="course-nav">
     <div>
+      <a href="../lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a>
       <a href="../lessons/0001-the-immediate-mode-loop.html">Lesson 0001</a>
       <a href="./glossary.html" class="active">Glossary</a>
       <a href="./immediate-mode-cheatsheet.html">Immediate-Mode Cheat Sheet</a>
@@ -54,9 +56,24 @@
       </thead>
       <tbody>
         <tr>
+          <td><strong>Manifest (<code>Cargo.toml</code>)</strong></td>
+          <td>The configuration file for a Rust package defining its metadata, external dependencies (like <code>eframe</code>), and compiler optimization profiles (<a href="https://doc.rust-lang.org/cargo/reference/manifest.html" target="_blank" rel="noopener">Cargo Book</a>).</td>
+          <td>Declares <code>eframe = "0.33"</code> and <code>[profile.dev.package."*"] opt-level = 2</code>.</td>
+        </tr>
+        <tr>
           <td><strong>Struct (<code>struct</code>)</strong></td>
           <td>A composite data type that groups named fields together into a single unit of ownership (<a href="https://doc.rust-lang.org/book/ch05-01-defining-structs.html" target="_blank" rel="noopener">Rust Book §5.1</a>).</td>
           <td><code>struct PcbReviewerApp</code> holds your persistent layer toggles, zoom level, and netlist state across frames.</td>
+        </tr>
+        <tr>
+          <td><strong>Default Trait (<code>Default</code>)</strong></td>
+          <td>A standard library trait granting a type a canonical constructor (<code>T::default()</code>) for initial values (<a href="https://doc.rust-lang.org/std/default/trait.Default.html" target="_blank" rel="noopener">std::default::Default</a>).</td>
+          <td><code>impl Default for PcbReviewerApp</code> sets <code>show_top_copper: true</code> when the reviewer boots.</td>
+        </tr>
+        <tr>
+          <td><strong>Heap Box (<code>Box&lt;T&gt;</code>)</strong></td>
+          <td>A smart pointer that allocates a value of type <code>T</code> on the heap and owns it with a fixed-size pointer on the stack (<a href="https://doc.rust-lang.org/book/ch15-01-box.html" target="_blank" rel="noopener">Rust Book §15.1</a>).</td>
+          <td><code>Box::new(PcbReviewerApp::default())</code> hands your app instance to <code>eframe::run_native</code>.</td>
         </tr>
         <tr>
           <td><strong>Shared Borrow (<code>&amp;T</code>)</strong></td>
@@ -87,6 +104,11 @@
       </thead>
       <tbody>
         <tr>
+          <td><code>eframe::run_native</code></td>
+          <td>Opens a native desktop OS window, initializes the GPU renderer, calls your creation closure once to construct your app struct, and starts the event loop.</td>
+          <td><a href="https://docs.rs/eframe/latest/eframe/fn.run_native.html" target="_blank" rel="noopener"><code>eframe::run_native</code> docs</a></td>
+        </tr>
+        <tr>
           <td><code>eframe::App</code></td>
           <td>The trait your root application struct implements. Its core method, <code>fn update(&amp;mut self, ctx: &amp;egui::Context, frame: &amp;mut eframe::Frame)</code>, is invoked on every repaint.</td>
           <td><a href="https://docs.rs/eframe/latest/eframe/trait.App.html" target="_blank" rel="noopener"><code>eframe::App</code> docs</a></td>
@@ -109,5 +131,7 @@
       </tbody>
     </table>
   </article>
+
+  <script src="../assets/course.js"></script>
 </body>
 </html>

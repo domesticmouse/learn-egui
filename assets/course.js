@@ -1,7 +1,68 @@
 /* ==========================================================================
    Learn egui — Reusable Interactive Course Components
-   Shared across ./lessons/*.html
+   Shared across ./lessons/*.html and ./reference/*.html
+   Includes shared loader for Prism.js (syntax highlighting) & Mermaid.js
    ========================================================================== */
+
+/**
+ * 0. Shared Prism.js & Mermaid.js Loader
+ * Dynamically loads Prism (with Rust, TOML, Bash, and keep-markup support)
+ * and Mermaid.js so all lessons & references get consistent highlighting
+ * and diagram rendering from a single shared component.
+ */
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.async = false;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function initSyntaxAndDiagrams() {
+  try {
+    // Load Prism.js core + languages + keep-markup (preserves <input> inside <pre><code>)
+    window.Prism = window.Prism || {};
+    window.Prism.manual = true;
+    await loadScript("https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js");
+    await loadScript("https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-clike.min.js");
+    await loadScript("https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-rust.min.js");
+    await loadScript("https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-toml.min.js");
+    await loadScript("https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js");
+    await loadScript("https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/keep-markup/prism-keep-markup.min.js");
+    if (window.Prism && window.Prism.highlightAll) {
+      window.Prism.highlightAll();
+    }
+  } catch (err) {
+    console.warn("Prism.js failed to load from CDN:", err);
+  }
+
+  try {
+    // Load Mermaid.js and render all <pre class="mermaid"> diagrams
+    await loadScript("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js");
+    if (window.mermaid) {
+      window.mermaid.initialize({
+        startOnLoad: false,
+        theme: "dark",
+        securityLevel: "loose",
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      });
+      await window.mermaid.run({
+        querySelector: "pre.mermaid",
+      });
+    }
+  } catch (err) {
+    console.warn("Mermaid.js failed to load from CDN:", err);
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initSyntaxAndDiagrams);
+} else {
+  initSyntaxAndDiagrams();
+}
 
 /**
  * 1. Immediate-Mode PCB Layer Frame Simulator
@@ -22,15 +83,18 @@ function initPcbLayerSimulator(containerId) {
   };
 
   function render() {
-    // Update Rust struct state inspector
+    // Update Rust struct state inspector and re-highlight with Prism if available
     const stateEl = root.querySelector("[data-role='rust-state']");
     if (stateEl) {
-      stateEl.innerHTML = `<span class="kw">struct</span> <span class="ty">PcbReviewerApp</span> {
-  show_top_copper: <span class="mut">${state.showTopCopper}</span>,
-  show_bottom_copper: <span class="mut">${state.showBottomCopper}</span>,
-  show_silkscreen: <span class="mut">${state.showSilkscreen}</span>,
-  show_ratsnest: <span class="mut">${state.showRatsnest}</span>,
+      stateEl.textContent = `struct PcbReviewerApp {
+    show_top_copper: ${state.showTopCopper},
+    show_bottom_copper: ${state.showBottomCopper},
+    show_silkscreen: ${state.showSilkscreen},
+    show_ratsnest: ${state.showRatsnest},
 }`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
     }
 
     // Update frame counter badge
