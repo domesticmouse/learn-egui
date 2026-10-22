@@ -48,7 +48,13 @@ Fluency can give the user an illusory sense of mastery, but storage strength is 
 
 A lesson is the main thing you produce: the unit in which knowledge and skills reach the user. Each lesson is one self-contained HTML file, saved to `./lessons/` and titled `0001-<dash-case-name>.html` where the number increments each time.
 
-A lesson should be **beautiful**, with clean, readable typography and layout, since the user will return to these later to review. Think Tufte.
+When teaching a programming language, framework, or tool where the code in `0001` needs a real project, manifest, and entry-point file to inhabit (especially when the learner is new to the ecosystem), start with a `0000-<dash-case-name>.html` bootstrap lesson covering initial project setup and scaffolding so Lesson `0001`'s code has a concrete, runnable home.
+
+A lesson should be **beautiful**, with clean, readable typography and layout, since the user will return to these later to review. Think Tufte:
+
+- **Dark mode by default**: Use dark mode across all lessons and `./reference/*.html` documents (`<meta name="color-scheme" content="dark">` in `<head>` and `:root { color-scheme: dark; }` in the shared stylesheet), paired with a `@media print` light-mode override so lessons and reference documents still print cleanly on paper.
+- **Prism.js for syntax highlighting**: Format all code blocks with Prism.js (`<pre><code class="language-...">`), and load the Prism `keep-markup` plugin when embedding interactive `<input>` blanks inside code blocks. Never hand-roll syntax `<span>` tags.
+- **Mermaid.js for diagrams**: Use Mermaid.js (`<pre class="mermaid">` configured with `theme: "dark"`) for architecture, lifecycle, and flow diagrams instead of ASCII-art diagrams.
 
 The lesson should be short, and completable very quickly. Learners' working memory is very small, and we need to stay within it. But each lesson should give the user a single tangible win that they can build on. It should be directly tied to the mission, and should be in the user's zone of proximal development.
 
@@ -66,13 +72,13 @@ Lessons are built from reusable **components**, stored in `./assets/`: styleshee
 
 Reuse is the default, not the exception. Before authoring a lesson, read `./assets/` and build from the components already there. When a lesson needs something new and reusable, write it as a component in `./assets/` and link to it; never inline code a future lesson would duplicate.
 
-A shared stylesheet is the first component every workspace earns: every lesson links it, so the lessons look like one consistent course rather than a pile of one-offs. As the workspace grows, so should the component library.
+A shared dark-mode stylesheet (`./assets/style.css`) and a shared script (`./assets/course.js`) that centrally loads and configures **Prism.js** (including `keep-markup`) and **Mermaid.js** (`theme: "dark"`) alongside reusable quiz/exercise widgets are the first components every workspace earns: every lesson and reference sheet links them, so the workspace looks like one consistent course rather than a pile of one-offs. As the workspace grows, so should the component library.
 
 ## The Mission
 
 Every lesson should be tied into the mission - the reason that the user is interested in learning about the topic.
 
-If the user is unclear about the mission, or the `MISSION.md` is not populated, your first job should be to question the user on why they want to learn this.
+If the user is unclear about the mission, or the `MISSION.md` is not populated, your first job should be to question the user on why they want to learn this. Ask clarifying questions **one at a time** to uncover their concrete real-world goal, starting point, and what success looks like.
 
 Failing to understand the mission will mean knowledge acquisition is not grounded in real-world goals. Lessons will feel too abstract. You will have no way of judging what the user should do next.
 
