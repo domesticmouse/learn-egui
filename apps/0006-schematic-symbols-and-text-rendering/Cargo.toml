@@ -1,0 +1,15 @@
+[package]
+name = "pcb-reviewer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.33"
+
+[dev-dependencies]
+egui_kittest = { version = "0.33", features = ["eframe"] }
+
+# Optimize dependencies (like egui/eframe) even in debug builds so our
+# 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
+[profile.dev.package."*"]
+opt-level = 2

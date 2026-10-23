@@ -17,6 +17,10 @@
       <a href="../lessons/0003-world-to-screen-transforms-pan-and-zoom.html">0003</a>
       <a href="../lessons/0004-modeling-layers-traces-and-footprints.html">0004</a>
       <a href="../lessons/0005-hit-testing-and-net-cross-probing.html">0005</a>
+      <a href="../lessons/0006-schematic-symbols-and-text-rendering.html">0006</a>
+      <a href="../lessons/0007-split-viewports-and-egui-scene.html">0007</a>
+      <a href="../lessons/0008-searchable-netlist-and-bom-inspector.html">0008</a>
+      <a href="../lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html">0009</a>
       <a href="./glossary.html" class="active">Glossary</a>
       <a href="./immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="./testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
@@ -111,6 +115,21 @@
           <td>Rust's null-free representation of a value that may be present (<code>Some(T)</code>) or absent (<code>None</code>).</td>
           <td><code>hovered_net: Option&lt;NetId&gt;</code> and <code>selected_net.or(hovered_net)</code> in Lesson 0005.</td>
         </tr>
+        <tr>
+          <td><strong>String Slice vs. Owned String (<code>&amp;'static str</code> vs. <code>String</code>)</strong></td>
+          <td><code>&amp;'static str</code> is a zero-allocation borrowed reference to UTF-8 text baked into the compiled binary; <code>String</code> is a heap-allocated, growable UTF-8 buffer constructed dynamically with <code>format!(...)</code> or mutated by <code>TextEdit</code> (<a href="https://doc.rust-lang.org/book/ch08-02-strings.html" target="_blank" rel="noopener">Rust Book §8.2</a>).</td>
+          <td>Fixed pin labels use <code>&amp;'static str</code>; formatted schematic headers and search queries use <code>String</code> (Lessons 0006 &amp; 0008).</td>
+        </tr>
+        <tr>
+          <td><strong>Disjoint Struct Field Borrowing</strong></td>
+          <td>Rust's borrow checker tracks borrows per struct field when fields are accessed directly, allowing a shared borrow (<code>&amp;self.board</code>) and a mutable borrow (<code>&amp;mut self.view</code>) to coexist in the same scope (<a href="https://doc.rust-lang.org/nomicon/borrow-splitting.html" target="_blank" rel="noopener">Rustonomicon</a>).</td>
+          <td>Passing <code>&amp;self.board</code> and <code>&amp;mut self.view</code> simultaneously to split Schematic and PCB viewports in Lesson 0007.</td>
+        </tr>
+        <tr>
+          <td><strong>Data-Carrying Enum (Tagged Union)</strong></td>
+          <td>A Rust <code>enum</code> whose variants store variant-specific payload fields directly inside the variant (e.g., <code>Measuring { start_mm: Pos2, end_mm: Pos2 }</code>), making invalid state combinations unrepresentable (<a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html" target="_blank" rel="noopener">Rust Book §6.1</a>).</td>
+          <td><code>enum ActiveTool</code> state machine for the Point-to-Point CAD Ruler in Lesson 0009.</td>
+        </tr>
       </tbody>
     </table>
 
@@ -151,13 +170,33 @@
         </tr>
         <tr>
           <td><code>egui::Painter</code></td>
-          <td>The 2D vector drawing API returned by <code>ui.allocate_painter(size, sense)</code>. Emits clipped shapes (<code>rect</code>, <code>rect_filled</code>, <code>line_segment</code>, <code>circle</code>) in back-to-front order.</td>
+          <td>The 2D vector drawing API returned by <code>ui.allocate_painter(size, sense)</code>. Emits clipped shapes (<code>rect</code>, <code>rect_filled</code>, <code>line_segment</code>, <code>circle</code>, <code>text</code>) in back-to-front order.</td>
           <td><a href="https://docs.rs/egui/latest/egui/struct.Painter.html" target="_blank" rel="noopener"><code>egui::Painter</code> docs</a></td>
         </tr>
         <tr>
           <td><code>egui::emath::TSTransform</code></td>
           <td>A 2D translation + uniform scaling transform (<code>scaling * pt + translation</code>) with <code>.inverse()</code> for mapping between physical board millimeters (world space) and window points (screen space).</td>
           <td><a href="https://docs.rs/emath/latest/emath/struct.TSTransform.html" target="_blank" rel="noopener"><code>TSTransform</code> docs</a></td>
+        </tr>
+        <tr>
+          <td><code>egui::Align2</code> &amp; <code>FontId</code></td>
+          <td>Controls 2D text anchor placement (<code>LEFT_CENTER</code>, <code>RIGHT_CENTER</code>, <code>CENTER_BOTTOM</code>) and font family/point size when calling <code>painter.text(...)</code> (Lesson 0006).</td>
+          <td><a href="https://docs.rs/egui/latest/egui/struct.Align2.html" target="_blank" rel="noopener"><code>egui::Align2</code> docs</a></td>
+        </tr>
+        <tr>
+          <td><code>egui::Scene</code></td>
+          <td>Built-in infinite pan/zoom 2D container that transforms child <code>Ui</code> coordinates using a mutable <code>scene_rect: &amp;mut Rect</code> (Lesson 0007).</td>
+          <td><a href="https://docs.rs/egui/latest/egui/containers/scene/struct.Scene.html" target="_blank" rel="noopener"><code>egui::Scene</code> docs</a></td>
+        </tr>
+        <tr>
+          <td><code>ScrollArea::show_rows</code></td>
+          <td>Virtualized scrolling container that passes a <code>row_range: Range&lt;usize&gt;</code> closure argument so only visible rows are laid out each frame (Lesson 0008).</td>
+          <td><a href="https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows" target="_blank" rel="noopener"><code>show_rows</code> docs</a></td>
+        </tr>
+        <tr>
+          <td><code>InputState::consume_key</code></td>
+          <td>Checks whether a keyboard shortcut (<code>Modifiers</code> + <code>Key</code>) was pressed this frame and removes it from the input queue so it cannot trigger twice (Lesson 0009).</td>
+          <td><a href="https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key" target="_blank" rel="noopener"><code>consume_key</code> docs</a></td>
         </tr>
       </tbody>
     </table>

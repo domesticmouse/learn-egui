@@ -18,6 +18,10 @@
         <a href="./lessons/0003-world-to-screen-transforms-pan-and-zoom.html">0003</a>
         <a href="./lessons/0004-modeling-layers-traces-and-footprints.html">0004</a>
         <a href="./lessons/0005-hit-testing-and-net-cross-probing.html">0005</a>
+        <a href="./lessons/0006-schematic-symbols-and-text-rendering.html">0006</a>
+        <a href="./lessons/0007-split-viewports-and-egui-scene.html">0007</a>
+        <a href="./lessons/0008-searchable-netlist-and-bom-inspector.html">0008</a>
+        <a href="./lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html">0009</a>
         <a href="./reference/glossary.html">Glossary</a>
         <a href="./reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
         <a href="./reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
@@ -49,7 +53,7 @@ flowchart LR
           <figcaption>Five-Act Curriculum Progression: Every lesson builds toward a production Schematic &amp; PCB Design Review System verified with unit tests and mutation coverage.</figcaption>
         </figure>
 
-        <h2>Published Interactive Lessons (<code>0000</code>–<code>0005</code>)</h2>
+        <h2>Published Interactive Lessons (<code>0000</code>–<code>0009</code>)</h2>
         <p>
           Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a> to set up your Cargo project and mutation-testing harness, or jump directly to any completed module below:
         </p>
@@ -149,6 +153,70 @@ flowchart LR
             <span><strong><code>egui</code> Skill:</strong> <code>Sense::click_and_drag()</code>, hover vs. locked selection</span>
             <span><strong>Rust Concept:</strong> <code>Option&lt;NetId&gt;</code>, <code>if let Some(...)</code>, <code>.or(...)</code></span>
             <span><strong>Runnable App:</strong> <code>apps/0005-hit-testing-and-net-cross-probing</code></span>
+          </div>
+        </article>
+
+        <article class="lesson-card">
+          <div>
+            <div class="lesson-card-header">
+              <span class="lesson-card-num">Lesson 0006</span>
+              <span class="lesson-card-mutants">35 / 35 Mutants Caught</span>
+            </div>
+            <h3><a href="./lessons/0006-schematic-symbols-and-text-rendering.html">Schematic Symbols, Text Rendering &amp; Headless UI Verification (<code>egui_kittest</code>)</a></h3>
+            <p>Render silkscreen IC reference designators (`U1`, `R12`, `J1`) and net names using `Painter::text`, `FontId`, and `Align2`, and boot your app headlessly with `egui_kittest::Harness`.</p>
+          </div>
+          <div class="lesson-card-meta">
+            <span><strong><code>egui</code> Skill:</strong> <code>Painter::text</code>, <code>FontId</code>, <code>Align2</code>, <code>egui_kittest</code></span>
+            <span><strong>Rust Concept:</strong> Owned <code>String</code> vs. borrowed <code>&amp;str</code> &amp; <code>format!(...)</code></span>
+            <span><strong>Runnable App:</strong> <code>apps/0006-schematic-symbols-and-text-rendering</code></span>
+          </div>
+        </article>
+
+        <article class="lesson-card">
+          <div>
+            <div class="lesson-card-header">
+              <span class="lesson-card-num">Lesson 0007</span>
+              <span class="lesson-card-mutants">40 / 40 Mutants Caught</span>
+            </div>
+            <h3><a href="./lessons/0007-split-viewports-and-egui-scene.html">Split Viewports, <code>egui::Scene</code> &amp; Schematic-to-PCB Cross-Probing</a></h3>
+            <p>Add a top schematic symbol bar with `TopBottomPanel`, wrap the 2D board in `egui::Scene`, and cross-probe schematic components to center the PCB camera rectangle.</p>
+          </div>
+          <div class="lesson-card-meta">
+            <span><strong><code>egui</code> Skill:</strong> <code>TopBottomPanel</code>, <code>egui::Scene</code>, camera focusing</span>
+            <span><strong>Rust Concept:</strong> Disjoint struct borrows (<code>&amp;BoardModel</code> vs. <code>&amp;mut ViewState</code>)</span>
+            <span><strong>Runnable App:</strong> <code>apps/0007-split-viewports-and-egui-scene</code></span>
+          </div>
+        </article>
+
+        <article class="lesson-card">
+          <div>
+            <div class="lesson-card-header">
+              <span class="lesson-card-num">Lesson 0008</span>
+              <span class="lesson-card-mutants">47 / 47 Mutants Caught</span>
+            </div>
+            <h3><a href="./lessons/0008-searchable-netlist-and-bom-inspector.html">Searchable Netlist, Virtualized BOM &amp; Iterator Adapters</a></h3>
+            <p>Filter components and nets live with `TextEdit::singleline`, lay out virtualized rows using `ScrollArea::show_rows` and `egui::Grid`, and catch boolean filter mutants.</p>
+          </div>
+          <div class="lesson-card-meta">
+            <span><strong><code>egui</code> Skill:</strong> <code>TextEdit::singleline</code>, <code>ScrollArea::show_rows</code>, <code>Grid</code></span>
+            <span><strong>Rust Concept:</strong> Iterator adapters (<code>.filter()</code>), slices &amp; case-insensitive search</span>
+            <span><strong>Runnable App:</strong> <code>apps/0008-searchable-netlist-and-bom-inspector</code></span>
+          </div>
+        </article>
+
+        <article class="lesson-card">
+          <div>
+            <div class="lesson-card-header">
+              <span class="lesson-card-num">Lesson 0009</span>
+              <span class="lesson-card-mutants">59 / 59 Mutants Caught</span>
+            </div>
+            <h3><a href="./lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html">Keyboard Shortcuts (<code>F</code>, <code>M</code>, <code>Esc</code>) &amp; Point-to-Point CAD Ruler</a></h3>
+            <p>Consume single-key CAD shortcuts with `ctx.input_mut` and `consume_key`, model tool states with data-carrying enums, and render a live $\Delta x / \Delta y$ distance ruler.</p>
+          </div>
+          <div class="lesson-card-meta">
+            <span><strong><code>egui</code> Skill:</strong> <code>InputState::consume_key</code>, <code>Key</code>, CAD ruler overlay</span>
+            <span><strong>Rust Concept:</strong> Data-carrying enums (<code>enum ActiveTool</code>) &amp; pattern matching</span>
+            <span><strong>Runnable App:</strong> <code>apps/0009-keyboard-shortcuts-and-point-to-point-ruler</code></span>
           </div>
         </article>
       </section>

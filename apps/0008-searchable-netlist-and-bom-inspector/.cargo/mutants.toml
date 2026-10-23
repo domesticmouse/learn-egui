@@ -1,0 +1,14 @@
+# .cargo/mutants.toml
+# Reuse the target directory across scratch builds so mutation runs finish quickly.
+copy_target = true
+
+# `update`, `render_schematic_bar`, `render_side_panel`, `matches_query`, and `filter_components`
+# are all actively mutated and verified via unit + egui_kittest tests!
+exclude_re = [
+    "replace main",
+    "PcbReviewerApp::render_canvas",
+    "PcbReviewerApp::paint_board",
+    "sample_traces",
+    "sample_pads",
+    "sample_components",
+]

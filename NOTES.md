@@ -24,7 +24,7 @@
 
 ## Curriculum Arc (`0000`–`0025`) with Continuous Verification & Mutation Testing
 
-### Completed Lessons (`0000`–`0005`: Foundation + Act I)
+### Completed Lessons (`0000`–`0009`: Foundation + Act I + Act II)
 - `0000-project-setup-and-eframe-boot.html` (App: `apps/0000-project-setup-and-eframe-boot`)
   - **`egui` Skill & PCB Feature**: Creating the Cargo crate (`Cargo.toml`, `eframe = "0.33"`, dev-profile optimization) and booting the native window with `eframe::run_native`.
   - **Just-in-Time Rust**: `impl Default` delegating to `reset_layers(&mut self)`, `ViewportBuilder` method chaining, `Box::new`, and `#[cfg(test)]` / `#[test]` / `assert!`.
@@ -53,24 +53,24 @@
   - **Just-in-Time Rust**: `Option<NetId>`, `if let Some(id) = ...`, `.or(...)`, and iterator filtering.
   - **Cargo Verification & Mutation Coverage**: 11 unit tests verifying `hit_test_net_at_mm` (hit, miss in empty space, hidden-layer rejection, and overlapping Z-order priority) and `active_net`; `cargo mutants --in-place` catches `25 / 25 viable mutants (10 unviable, 0 missed)`.
 
-### Act II: Schematic Views, Layout & Inspection (`0006`–`0009`)
+### Act II: Schematic Views, Layout & Inspection (`0006`–`0009`) — *Completed*
 *Goal: Add schematic symbols, dual-pane cross-probing, and searchable BOM tables while introducing headless UI widget & interaction testing with `egui_kittest`.*
-- `0006-schematic-symbols-and-text-rendering.html`
-  - **`egui` Skill & PCB Feature**: Draw IC packages, pin numbers, net labels, and reference designators (`U1`, `R12`) using `Painter::text`, `FontId`, and `Align2`.
+- `0006-schematic-symbols-and-text-rendering.html` (App: `apps/0006-schematic-symbols-and-text-rendering`)
+  - **`egui` Skill & PCB Feature**: Draw IC packages, pin numbers, net labels, and reference designators (`U1`, `R12`, `J1`) using `Painter::text`, `FontId`, and `Align2`.
   - **Just-in-Time Rust**: `String` vs. `&str` string slices and `format!()`.
-  - **Cargo Verification & Mutation Coverage**: Introduce [`egui_kittest::Harness`](https://docs.rs/egui_kittest/latest/egui_kittest/) in `[dev-dependencies]`! Boot our `eframe::App` headlessly inside `cargo test`, un-skip UI panel rendering in `.cargo/mutants.toml`, and verify rendered reference-designator labels so `cargo mutants` catches deleted UI label calls.
-- `0007-split-viewports-and-egui-scene.html`
-  - **`egui` Skill & PCB Feature**: Side-by-side or tabbed Schematic + PCB viewports (`TopBottomPanel`, `egui::Scene`), clicking a schematic pin to pan/zoom the PCB view to that footprint.
-  - **Just-in-Time Rust**: Shared immutable state (`&Board`) vs. scoped mutable view state (`&mut ViewState`).
-  - **Cargo Verification & Mutation Coverage**: Drive a cross-probe selection in `egui_kittest` and assert that selecting `U1` in the schematic updates the PCB camera rect; verify with `cargo mutants` that cross-probe state synchronization cannot be stubbed out.
-- `0008-searchable-netlist-and-bom-inspector.html`
-  - **`egui` Skill & PCB Feature**: Filterable component/net list using `TextEdit::singleline`, `ScrollArea::vertical().show_rows(...)` (virtualized scrolling for 10,000+ pins), and `Grid`.
-  - **Just-in-Time Rust**: Iterator adapters (`.filter()`, `.enumerate()`), string matching, and slices (`&[T]`).
-  - **Cargo Verification & Mutation Coverage**: Test case-insensitive BOM query filtering (`"u1"`, `"GND"`, empty query) via unit + `egui_kittest` harness tests; run `cargo mutants` to catch filter-predicate negations (`!` flips).
-- `0009-keyboard-shortcuts-and-point-to-point-ruler.html`
-  - **`egui` Skill & PCB Feature**: Bind hotkeys (`F` to fit board, `M` for measurement tool, `Esc` to clear) via `ctx.input_mut` + `consume_key`, and draw a live Δx/Δy/distance CAD ruler overlay.
-  - **Just-in-Time Rust**: State machines with data-carrying enums (`enum Tool { Select, Measure { start: Option<Pos2> } }`).
-  - **Cargo Verification & Mutation Coverage**: Simulate key presses (`harness.key_press(egui::Key::M)`, `Key::Escape`, `Key::F`) in `egui_kittest` and verify Euclidean Δx/Δy/hypotenuse math; confirm `cargo mutants` catches every state-transition and hotkey branch mutant.
+  - **Cargo Verification & Mutation Coverage**: Introduced [`egui_kittest::Harness`](https://docs.rs/egui_kittest/latest/egui_kittest/) in `[dev-dependencies]`, removed `<impl eframe::App for PcbReviewerApp>::update` from `.cargo/mutants.toml` exclusions, and verified 14 unit + headless UI tests (`35 / 35 viable mutants caught, 10 unviable, 0 missed`).
+- `0007-split-viewports-and-egui-scene.html` (App: `apps/0007-split-viewports-and-egui-scene`)
+  - **`egui` Skill & PCB Feature**: Split Schematic + PCB viewports (`TopBottomPanel`, `egui::Scene`), clicking a schematic symbol button to center the PCB camera rect (`pcb_scene_rect`) on that footprint.
+  - **Just-in-Time Rust**: Shared immutable state (`&BoardModel`) vs. scoped mutable view state (`&mut ViewState`).
+  - **Cargo Verification & Mutation Coverage**: 16 unit + `egui_kittest` tests verifying cross-probe selection and camera centering (`40 / 40 viable mutants caught, 11 unviable, 0 missed`).
+- `0008-searchable-netlist-and-bom-inspector.html` (App: `apps/0008-searchable-netlist-and-bom-inspector`)
+  - **`egui` Skill & PCB Feature**: Filterable component/net list using `TextEdit::singleline`, `ScrollArea::vertical().show_rows(...)`, and `egui::Grid`.
+  - **Just-in-Time Rust**: Iterator adapters (`.filter()`), case-insensitive string matching, and slices (`&[T]`).
+  - **Cargo Verification & Mutation Coverage**: 17 unit + `egui_kittest` tests verifying case-insensitive BOM query filtering across all 4 fields (`47 / 47 viable mutants caught, 12 unviable, 0 missed`).
+- `0009-keyboard-shortcuts-and-point-to-point-ruler.html` (App: `apps/0009-keyboard-shortcuts-and-point-to-point-ruler`)
+  - **`egui` Skill & PCB Feature**: Bind hotkeys (`F` to fit board, `M` for measurement tool, `Esc` to clear) via `ctx.input_mut` + `consume_key`, and draw a live $\Delta x / \Delta y$ / Euclidean distance CAD ruler overlay.
+  - **Just-in-Time Rust**: State machines with data-carrying enums (`enum ActiveTool { Select, Measure { start_mm: Option<Pos2>, end_mm: Option<Pos2> } }`).
+  - **Cargo Verification & Mutation Coverage**: 19 unit + `egui_kittest` tests simulating key presses (`Key::M`, `Key::Escape`, `Key::F`) and verifying Euclidean $\Delta x / \Delta y$ / hypotenuse math (`59 / 59 viable mutants caught, 14 unviable, 0 missed`).
 
 ### Act III: Design Review Workflows (`0010`–`0013`)
 *Goal: Turn the viewer into an engineering review tool with annotations, DRC markers, and custom widgets, testing multi-step UI workflows and custom `egui::Widget` traits.*

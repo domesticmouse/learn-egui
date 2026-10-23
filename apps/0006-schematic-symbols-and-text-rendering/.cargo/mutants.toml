@@ -1,0 +1,14 @@
+# .cargo/mutants.toml
+# Reuse the target directory across scratch builds so mutation runs finish quickly.
+copy_target = true
+
+# Notice that `<impl eframe::App for PcbReviewerApp>::update` and `render_side_panel`
+# are NO LONGER excluded! Only the OS window launcher and raw Painter canvas remain excluded.
+exclude_re = [
+    "replace main",
+    "PcbReviewerApp::render_canvas",
+    "PcbReviewerApp::paint_board",
+    "sample_traces",
+    "sample_pads",
+    "sample_components",
+]

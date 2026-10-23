@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Lesson 0008: Searchable Netlist &amp; Virtualized BOM Inspector — Learn egui</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <nav class="course-nav">
+    <div>
+      <a href="../index.html">Index</a>
+      <a href="./0000-project-setup-and-eframe-boot.html">0000</a>
+      <a href="./0001-the-immediate-mode-loop.html">0001</a>
+      <a href="./0002-custom-2d-canvas-and-painter.html">0002</a>
+      <a href="./0003-world-to-screen-transforms-pan-and-zoom.html">0003</a>
+      <a href="./0004-modeling-layers-traces-and-footprints.html">0004</a>
+      <a href="./0005-hit-testing-and-net-cross-probing.html">0005</a>
+      <a href="./0006-schematic-symbols-and-text-rendering.html">0006</a>
+      <a href="./0007-split-viewports-and-egui-scene.html">0007</a>
+      <a href="./0008-searchable-netlist-and-bom-inspector.html" class="active">0008</a>
+      <a href="./0009-keyboard-shortcuts-and-point-to-point-ruler.html">0009</a>
+      <a href="../reference/glossary.html">Glossary</a>
+      <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Act II: Schematic Views, Layout &amp; egui_kittest</span>
+  </nav>
+
+  <article class="tufte-article">
+    <div class="prose-col">
+      <h1>Lesson 0008: Searchable Netlist, Virtualized BOM &amp; Iterator Adapters</h1>
+      <p class="subtitle">Filtering components and nets with <code>TextEdit::singleline</code>, <code>.filter()</code>, and virtualized scrolling via <code>ScrollArea::vertical().show_rows(...)</code></p>
+
+      <p>
+        In <a href="./0007-split-viewports-and-egui-scene.html">Lesson 0007</a>, we wired schematic-to-PCB cross-probing across split viewports. On a production board with hundreds of passive components and ICs, engineers need a fast <strong>Bill of Materials (BOM) &amp; Netlist Inspector</strong> where typing <code>"u1"</code>, <code>"10k"</code>, or <code>"spi_clk"</code> filters the component list in real time and clicking any matching row cross-probes that footprint on the canvas.
+      </p>
+
+      <figure class="mermaid-figure">
+        <pre class="mermaid">
+flowchart LR
+    Edit["ui.text_edit_singleline(&amp;mut self.view.bom_search_query)"] --> Filter["board.filter_components(&amp;query)<br/>.iter().filter(|c| c.matches_query(q))"]
+    Filter --> Virt["ScrollArea::vertical().show_rows(ui, 22.0, matching.len(), |ui, row_range| ...)"]
+    Virt --> Slice["&amp;matching[row_range]<br/>(Only visible rows laid out!)"]
+    Slice --> Probe["Click BOM Row -> view.focus_component(&amp;board, &amp;comp.ref_des)"]
+        </pre>
+        <figcaption>Figure 8.1: <code>TextEdit::singleline</code> mutates the query string in place, <code>.filter()</code> selects matching components, and <code>show_rows</code> virtualizes layout to only the visible slice <code>&amp;matching[row_range]</code>.</figcaption>
+      </figure>
+
+      <h2>1. Just-in-Time Rust: Iterator Adapters (<code>.filter()</code>, <code>.enumerate()</code>) &amp; Slices (<code>&amp;[T]</code>)</h2>
+
+      <p>
+        To filter components case-insensitively across their reference designator (<code>U1</code>), value (<code>LDO_3V3</code>), package (<code>SOT-23</code>), or connected net name (<code>VCC_3V3</code>), we normalize the query with <code>.trim().to_ascii_lowercase()</code> and chain Rust's zero-cost iterator adapters (<a href="https://doc.rust-lang.org/book/ch13-02-iterators.html" target="_blank" rel="noopener">Rust Book §13.2</a>):<span class="sidenote-number"></span><span class="sidenote">Why return <code>Vec&lt;ComponentSymbol&gt;</code> or slice indices via <code>&amp;matching[row_range]</code>? A Rust slice <code>&amp;matching[row_range]</code> (`Range&lt;usize&gt;`) is a bounds-checked window into the contiguous vector that lets us iterate over just the visible viewport rows with <code>.enumerate()</code>!</span>
+      </p>
+
+      <pre><code class="language-rust">impl ComponentSymbol {
+    pub fn matches_query(&amp;self, query: &amp;str) -&gt; bool {
+        let needle = query.trim().to_ascii_lowercase();
+        if needle.is_empty() {
+            return true;
+        }
+        self.ref_des.to_ascii_lowercase().contains(&amp;needle)
+            || self.value.to_ascii_lowercase().contains(&amp;needle)
+            || self.package_name.to_ascii_lowercase().contains(&amp;needle)
+            || self
+                .primary_net
+                .signal_name()
+                .to_ascii_lowercase()
+                .contains(&amp;needle)
+    }
+}
+
+impl BoardModel {
+    pub fn filter_components(&amp;self, query: &amp;str) -&gt; Vec&lt;ComponentSymbol&gt; {
+        self.components
+            .iter()
+            .filter(|c| c.matches_query(query))
+            .cloned()
+            .collect()
+    }
+}</code></pre>
+
+      <h2>2. Virtualized Scrolling with <code>ScrollArea::show_rows</code> &amp; <code>Grid</code></h2>
+
+      <p>
+        Even in an immediate-mode GUI, laying out 10,000 offscreen table rows every frame would waste CPU time. <a href="https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows" target="_blank" rel="noopener"><code>ScrollArea::show_rows</code></a> computes the exact <code>row_range: Range&lt;usize&gt;</code> currently visible inside the scroll viewport based on <code>row_height_sans_spacing</code> and calls your closure for <em>only those visible rows</em>:
+      </p>
+
+      <pre><code class="language-rust">ui.horizontal(|ui| {
+    ui.label("Filter BOM:");
+    ui.text_edit_singleline(&amp;mut self.view.bom_search_query);
+    if ui.button("Clear Filter").clicked() {
+        self.view.clear_bom_query();
+    }
+});
+
+let matching = self.board.filter_components(&amp;self.view.bom_search_query);
+egui::ScrollArea::vertical()
+    .max_height(180.0)
+    .show_rows(ui, 22.0, matching.len(), |ui, row_range| {
+        egui::Grid::new("bom_inspector_grid")
+            .striped(true)
+            .show(ui, |ui| {
+                for (offset, comp) in matching[row_range.clone()].iter().enumerate() {
+                    let row_idx = row_range.start + offset;
+                    ui.label(format!("#{}", row_idx + 1));
+                    if ui.button(comp.inspector_label()).clicked() {
+                        self.view.focus_component(&amp;self.board, &amp;comp.ref_des);
+                    }
+                    ui.end_row();
+                }
+            });
+    });</code></pre>
+    </div>
+
+    <!-- Interactive Skill 1: BOM Search & Virtualized Scroll Simulator -->
+    <section class="full-width-panel" id="bom-scroll-sim">
+      <div class="panel-header">
+        <span class="panel-title">Interactive Lab 1: Live BOM Filter &amp; Virtualized <code>show_rows</code> Inspector</span>
+        <span class="panel-badge">TextEdit::singleline • .filter() • ScrollArea::show_rows</span>
+      </div>
+      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+        Type a query like <code>u1</code>, <code>0603</code>, <code>vcc</code>, or <code>spi</code> into the simulated <code>TextEdit::singleline</code> box below, and click any row in the virtualized <code>Grid</code> to cross-probe that component:
+      </p>
+
+      <div class="sim-grid">
+        <div class="sim-box">
+          <h4>1. <code>TextEdit::singleline</code> Filter</h4>
+          <label style="display:block; font-size:0.82rem; margin-bottom:0.6rem;">
+            <code>&amp;mut self.view.bom_search_query</code>:<br>
+            <input type="text" data-role="bom-query-input" placeholder="e.g. u1, 10k, vcc_3v3..." style="width:100%; margin-top:0.3rem; padding:0.4rem 0.55rem; background:var(--bg-code); color:var(--text-main); border:1px solid var(--border-strong); border-radius:4px; font-family:var(--font-mono); font-size:0.82rem;">
+          </label>
+          <button type="button" class="egui-btn" data-action="clear-bom-query">Clear Filter (<code>clear_bom_query()</code>)</button>
+        </div>
+
+        <div class="sim-box" style="overflow-x:auto;">
+          <h4>2. Virtualized <code>egui::Grid</code> (<code>&amp;matching[row_range]</code>)</h4>
+          <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border-strong); color:var(--text-muted); text-align:left;">
+                <th style="padding:0.3rem 0.5rem;">Idx</th>
+                <th style="padding:0.3rem 0.5rem;">RefDes</th>
+                <th style="padding:0.3rem 0.5rem;">Value</th>
+                <th style="padding:0.3rem 0.5rem;">Primary Net</th>
+              </tr>
+            </thead>
+            <tbody data-role="bom-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="sim-box">
+          <h4>3. Iterator &amp; Slice State</h4>
+          <pre class="language-rust" style="margin:0; font-size:0.75rem; padding:0.75rem;"><code class="language-rust" data-role="bom-state"></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Interactive Skill 2: Code Completion Lab -->
+    <section class="full-width-panel">
+      <div class="panel-header">
+        <span class="panel-title">Interactive Lab 2: Complete the BOM Filter &amp; Virtualized Scroll Loop</span>
+        <span class="panel-badge">.filter() • text_edit_singleline • show_rows</span>
+      </div>
+      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+        Fill in the three blanks below to (1) filter components matching the query, (2) bind the search input to <code>&amp;mut self.view.bom_search_query</code>, and (3) virtualize row rendering with <code>show_rows</code>:
+      </p>
+
+      <pre class="keep-markup"><code class="language-rust">pub fn filter_components(&amp;self, query: &amp;str) -&gt; Vec&lt;ComponentSymbol&gt; {
+    self.components
+        .iter()
+        .<input id="bom-blank-1" class="code-challenge-input" style="width:110px;" placeholder="/* 1: adapter */" autocomplete="off">(|c| c.matches_query(query))
+        .cloned()
+        .collect()
+}
+
+// Inside render_side_panel():
+ui.<input id="bom-blank-2" class="code-challenge-input" style="width:185px;" placeholder="/* 2: singleline edit */" autocomplete="off">(&amp;mut self.view.bom_search_query);
+
+let matching = self.board.filter_components(&amp;self.view.bom_search_query);
+egui::ScrollArea::vertical()
+    .max_height(180.0)
+    .<input id="bom-blank-3" class="code-challenge-input" style="width:120px;" placeholder="/* 3: virtual */" autocomplete="off">(ui, 22.0, matching.len(), |ui, row_range| {
+        for comp in &amp;matching[row_range] {
+            if ui.button(comp.inspector_label()).clicked() {
+                self.view.focus_component(&amp;self.board, &amp;comp.ref_des);
+            }
+        }
+    });</code></pre>
+
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <button type="button" class="btn-primary" id="btn-check-bom">Check Rust Code</button>
+        <button type="button" class="btn-secondary" id="btn-hint-bom">Show Hint</button>
+      </div>
+      <div id="bom-feedback" class="feedback-box"></div>
+    </section>
+
+    <!-- Interactive Skill 3: Cargo Verification & Mutation Coverage Gate -->
+    <section class="full-width-panel">
+      <div class="panel-header">
+        <span class="panel-title">Interactive Lab 3: Catching <code>!</code> and <code>||</code> → <code>&amp;&amp;</code> Filter Mutants</span>
+        <span class="panel-badge">cargo test + cargo mutants</span>
+      </div>
+      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+        In <code>ComponentSymbol::matches_query</code>, four <code>||</code> branches test <code>ref_des</code>, <code>value</code>, <code>package_name</code>, and <code>primary_net.signal_name()</code>. When <code>cargo mutants</code> flips any single <code>||</code> into <code>&amp;&amp;</code>, a test that only searches for <code>"U1"</code> would miss the mutations on the other three branches! By asserting queries that match <em>exclusively</em> each field (<code>"r12"</code>, <code>"ldo_3v3"</code>, <code>"header"</code>, <code>"spi_clk"</code>, plus an empty query and a non-matching query <code>"zz_nonexistent"</code>), our test suite catches every single boolean mutant!
+      </p>
+
+      <pre><code class="language-rust">#[test]
+fn matches_query_checks_ref_des_value_package_and_net_case_insensitively() {
+    let board = BoardModel::default();
+
+    // 1. Empty or whitespace query matches all 3 components
+    assert_eq!(board.filter_components("   ").len(), 3);
+
+    // 2. Match exclusively by ref_des ("r12"), value ("ldo"), package ("header"), or net ("spi_clk")
+    assert_eq!(board.filter_components("r12").len(), 1);
+    assert_eq!(board.filter_components("ldo_3v3").len(), 1);
+    assert_eq!(board.filter_components("header").len(), 1);
+    assert_eq!(board.filter_components("spi_clk").len(), 1);
+
+    // 3. Non-matching query returns empty Vec
+    assert!(board.filter_components("zz_missing").is_empty());
+}</code></pre>
+
+      <div class="mutation-scoreboard">
+        <div class="mutation-stat tier">
+          <div class="stat-label">Verification Tier</div>
+          <div class="stat-value">Tier 2 + 6: BOM Filter &amp; UI</div>
+        </div>
+        <div class="mutation-stat caught">
+          <div class="stat-label">Target Caught Mutants</div>
+          <div class="stat-value">47 Caught (12 Unviable)</div>
+        </div>
+        <div class="mutation-stat missed">
+          <div class="stat-label">Target Missed Mutants</div>
+          <div class="stat-value">0 Missed</div>
+        </div>
+      </div>
+
+      <ul class="step-checklist">
+        <li>
+          <input type="checkbox" id="verify-0008-1">
+          <label for="verify-0008-1">
+            <strong>1. Run <code>cargo test</code> in <code>apps/0008-searchable-netlist-and-bom-inspector</code>:</strong> Confirm all 17 unit + headless <code>egui_kittest</code> tests pass.
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0008-2">
+          <label for="verify-0008-2">
+            <strong>2. Run <code>cargo mutants --in-place</code>:</strong> Verify that all 47 viable mutants (including every <code>||</code> → <code>&amp;&amp;</code> and <code>!</code> mutation in <code>matches_query</code>) are <strong>Caught</strong> with <strong>0 Missed</strong>.
+          </label>
+        </li>
+      </ul>
+    </section>
+
+    <!-- Interactive Skill 4: Retrieval Practice Quiz -->
+    <section class="full-width-panel">
+      <div class="panel-header">
+        <span class="panel-title">Retrieval Practice: Virtualized Scrolling, Iterators &amp; Filter Mutants</span>
+        <span class="panel-badge">3 Questions • Equal-Length Options</span>
+      </div>
+      <div id="quiz-0008"></div>
+    </section>
+
+    <div class="prose-col">
+      <h2>Recommended Primary Source</h2>
+      <div class="callout">
+        <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows" target="_blank" rel="noopener"><code>egui::ScrollArea::show_rows</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/book/ch13-02-iterators.html" target="_blank" rel="noopener">The Rust Programming Language — §13.2 "Processing a Series of Items with Iterators"</a>.
+      </div>
+
+      <div class="teacher-prompt-box">
+        <strong>Up Next (Lesson 0009 — Act II Finale):</strong> Ready to add CAD keyboard shortcuts (<code>F</code>, <code>M</code>, <code>Esc</code>) and an interactive point-to-point distance ruler? Continue to <a href="./0009-keyboard-shortcuts-and-point-to-point-ruler.html"><strong>Lesson 0009: Keyboard Shortcuts, Data-Carrying Enums &amp; Point-to-Point CAD Ruler</strong></a>!
+      </div>
+    </div>
+  </article>
+
+  <script src="../assets/course.js"></script>
+  <script>
+    initBomVirtualScrollSimulator("bom-scroll-sim");
+
+    initCodeExercise({
+      checkBtnId: "btn-check-bom",
+      hintBtnId: "btn-hint-bom",
+      feedbackId: "bom-feedback",
+      blanks: [
+        {
+          inputId: "bom-blank-1",
+          accepted: ["filter"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. Use the iterator adapter that keeps only elements satisfying a predicate (<code>filter</code>).`,
+        },
+        {
+          inputId: "bom-blank-2",
+          accepted: ["text_edit_singleline"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. Call the <code>Ui</code> convenience method for a single-line text box (<code>text_edit_singleline</code>).`,
+        },
+        {
+          inputId: "bom-blank-3",
+          accepted: ["show_rows"],
+          getErrorHint: (val) =>
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. Call the <code>ScrollArea</code> method that virtualizes fixed-height rows (<code>show_rows</code>).`,
+        },
+      ],
+      hintMessage:
+        "<strong>Hints:</strong> (1) <code>filter</code>. (2) <code>text_edit_singleline</code>. (3) <code>show_rows</code>.",
+      successMessage:
+        "<strong>Excellent!</strong> Your BOM inspector filters components with <code>.filter()</code>, edits the query in place with <code>ui.text_edit_singleline(...)</code>, and virtualizes layout via <code>show_rows(...)</code>.",
+    });
+
+    // Strict equal word-count AND equal character-count options per question (indices: 1 -> 3 -> 0)
+    initQuiz("quiz-0008", [
+      {
+        question:
+          "How does `ScrollArea::vertical().show_rows(ui, row_height, total_rows, ...)` stay fast on large BOMs?",
+        options: [
+          "Caching every row inside background thread", // 6 words, 42 chars
+          "Creating widgets only inside visible range", // 6 words, 42 chars (Correct: B)
+          "Sorting every symbol string inside shaders", // 6 words, 42 chars
+          "Skipping font layout during pointer motion", // 6 words, 42 chars
+        ],
+        correctIndex: 1,
+        explanation:
+          "`show_rows` calculates the visible `Range<usize>` from the current scroll offset and viewport height, invoking your closure only for rows currently on screen.",
+        wrongHint:
+          "Look at the `row_range: Range<usize>` argument passed into the `show_rows` closure.",
+      },
+      {
+        question:
+          "How does `ui.text_edit_singleline(&mut self.view.bom_search_query)` update the filter as you type?",
+        options: [
+          "Spawning worker threads for keystroke event", // 6 words, 43 chars
+          "Replacing the struct after pressing buttons", // 6 words, 43 chars
+          "Writing ascii bytes directly inside buffers", // 6 words, 43 chars
+          "Mutating borrowed query buffers every frame", // 6 words, 43 chars (Correct: D)
+        ],
+        correctIndex: 3,
+        explanation:
+          "`text_edit_singleline` takes `&mut String` and mutates your query buffer directly during the frame whenever keystrokes arrive.",
+        wrongHint:
+          "Notice the `&mut self.view.bom_search_query` mutable borrow passed to `text_edit_singleline`.",
+      },
+      {
+        question:
+          "Why must our unit test assert queries matching ONLY `ref_des`, ONLY `value`, ONLY `package`, and ONLY `net`?",
+        options: [
+          "Catching disjunctions mutated into && arms", // 6 words, 42 chars (Correct: A)
+          "Preventing compiler inlining on slice iter", // 6 words, 42 chars
+          "Forcing heap allocations during empty runs", // 6 words, 42 chars
+          "Sorting component slices before text edits", // 6 words, 42 chars
+        ],
+        correctIndex: 0,
+        explanation:
+          "When `cargo mutants` flips any `||` into `&&` inside `matches_query`, only a test where one clause is `true` and the others are `false` will fail and catch the mutant.",
+        wrongHint:
+          "Think about what happens to `A || B || C || D` when `cargo mutants` mutates one `||` into `&&`.",
+      },
+    ]);
+  </script>
+</body>
+</html>

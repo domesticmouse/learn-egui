@@ -12,6 +12,10 @@ Interactive engineering course for learning **Rust** and **[`egui`](https://docs
   - [Lesson 0003: World-to-Screen Transforms, Drag Panning & Cursor-Centered Zoom](https://domesticmouse.github.io/learn-egui/lessons/0003-world-to-screen-transforms-pan-and-zoom.html) (`apps/0003-world-to-screen-transforms-pan-and-zoom`)
   - [Lesson 0004: Modeling PCB Layers, Traces & Deterministic Z-Ordering](https://domesticmouse.github.io/learn-egui/lessons/0004-modeling-layers-traces-and-footprints.html) (`apps/0004-modeling-layers-traces-and-footprints`)
   - [Lesson 0005: Spatial Hit-Testing, Selection State & Net Cross-Probing](https://domesticmouse.github.io/learn-egui/lessons/0005-hit-testing-and-net-cross-probing.html) (`apps/0005-hit-testing-and-net-cross-probing`)
+  - [Lesson 0006: Schematic Symbols, Text Rendering & Headless UI Verification (`egui_kittest`)](https://domesticmouse.github.io/learn-egui/lessons/0006-schematic-symbols-and-text-rendering.html) (`apps/0006-schematic-symbols-and-text-rendering`)
+  - [Lesson 0007: Split Viewports (`egui::Scene`) & Schematic-to-PCB Cross-Probing](https://domesticmouse.github.io/learn-egui/lessons/0007-split-viewports-and-egui-scene.html) (`apps/0007-split-viewports-and-egui-scene`)
+  - [Lesson 0008: Searchable Netlist & Virtualized BOM Inspector](https://domesticmouse.github.io/learn-egui/lessons/0008-searchable-netlist-and-bom-inspector.html) (`apps/0008-searchable-netlist-and-bom-inspector`)
+  - [Lesson 0009: Keyboard Shortcuts (`F`, `M`, `Esc`) & Point-to-Point CAD Ruler](https://domesticmouse.github.io/learn-egui/lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html) (`apps/0009-keyboard-shortcuts-and-point-to-point-ruler`)
 - **Reference & Cheat Sheets:**
   - [Glossary of Rust & `egui` Terms](https://domesticmouse.github.io/learn-egui/reference/glossary.html)
   - [Immediate-Mode GUI Cheat Sheet](https://domesticmouse.github.io/learn-egui/reference/immediate-mode-cheatsheet.html)

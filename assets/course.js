@@ -835,3 +835,418 @@ active_net(): ${fmtOpt(active)},`;
 
   render();
 }
+
+/**
+ * 8. Lesson 0006 Simulator: Painter::text, Align2 & egui_kittest Accessibility Tree
+ */
+function initSchematicTextSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const state = {
+    align: "CENTER_CENTER",
+    fontSize: 13,
+    showSilkscreen: true,
+    selectedNet: 1,
+  };
+
+  const alignMap = {
+    CENTER_CENTER: { anchor: "middle", dy: "0.35em", dx: 0 },
+    LEFT_TOP: { anchor: "start", dy: "0.9em", dx: 0 },
+    RIGHT_BOTTOM: { anchor: "end", dy: "-0.15em", dx: 0 },
+  };
+
+  function render() {
+    const a = alignMap[state.align] || alignMap.CENTER_CENTER;
+
+    root.querySelectorAll("[data-svg='refdes-label']").forEach((el) => {
+      el.setAttribute("text-anchor", a.anchor);
+      el.setAttribute("dy", a.dy);
+      el.setAttribute("font-size", state.fontSize);
+      el.style.opacity = state.showSilkscreen ? "1" : "0.08";
+    });
+
+    const silkGroup = root.querySelector("[data-svg='silk-outlines']");
+    if (silkGroup) {
+      silkGroup.style.opacity = state.showSilkscreen ? "1" : "0.12";
+    }
+
+    const codeEl = root.querySelector("[data-role='text-painter-code']");
+    if (codeEl) {
+      const netLine =
+        state.selectedNet === 1
+          ? `Some(NetId(1)) => "Active Net: NET_1 (VCC_3V3)"`
+          : state.selectedNet === 2
+          ? `Some(NetId(2)) => "Active Net: NET_2 (SPI_CLK)"`
+          : `None => "Hover or click a pad..."`;
+      codeEl.textContent = `// 1. Canvas text via Painter::text (&str + FontId + Align2)
+painter.text(
+    anchor_px,
+    Align2::${state.align},
+    &comp.ref_des, // &String -> &str coercion
+    FontId::monospace(${state.fontSize.toFixed(1)}),
+    Color32::from_rgb(240, 230, 140),
+);
+
+// 2. SidePanel format!() -> owned String
+// ${netLine}`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(codeEl);
+      }
+    }
+
+    const kittestEl = root.querySelector("[data-role='kittest-tree']");
+    if (kittestEl) {
+      const silkNodes = state.showSilkscreen
+        ? `  ├─ Label("U1: LDO_3V3 (SOT-23)")  [FOUND]\n  ├─ Label("R12: 10k (0603)")       [FOUND]\n  ├─ Label("J1: CONN_2P (Header)")  [FOUND]\n`
+        : `  ├─ (Silkscreen hidden: 0 RefDes labels in tree)\n`;
+      const netNode =
+        state.selectedNet === 1
+          ? `  ├─ Label("Active Net: NET_1 (VCC_3V3)")\n  └─ Button("Clear Selection")`
+          : state.selectedNet === 2
+          ? `  ├─ Label("Active Net: NET_2 (SPI_CLK)")\n  └─ Button("Clear Selection")`
+          : `  └─ Label("Hover or click a pad to cross-probe its net.")`;
+
+      kittestEl.textContent = `Harness::new_eframe(|_cc| PcbReviewerApp::default())
+SidePanel("layer_panel")
+  ├─ CheckBox("Top Copper (F.Cu)")
+  ├─ CheckBox("Silkscreen (F.SilkS)") = ${state.showSilkscreen}
+${silkNodes}${netNode}`;
+    }
+  }
+
+  const alignSel = root.querySelector("[data-param='align']");
+  if (alignSel) {
+    alignSel.addEventListener("change", () => {
+      state.align = alignSel.value;
+      render();
+    });
+  }
+
+  const sizeInput = root.querySelector("[data-param='fontSize']");
+  if (sizeInput) {
+    sizeInput.addEventListener("input", () => {
+      state.fontSize = parseFloat(sizeInput.value);
+      render();
+    });
+  }
+
+  const silkCheck = root.querySelector("[data-param='silk']");
+  if (silkCheck) {
+    silkCheck.addEventListener("change", () => {
+      state.showSilkscreen = silkCheck.checked;
+      render();
+    });
+  }
+
+  root.querySelectorAll("[data-select-net]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const v = btn.getAttribute("data-select-net");
+      state.selectedNet = v === "none" ? null : parseInt(v, 10);
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 9. Lesson 0007 Simulator: Dual-Pane Schematic + PCB egui::Scene Cross-Probing
+ */
+function initDualSceneCrossProbeSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const components = {
+    U1: {
+      refDes: "U1",
+      value: "LDO_3V3",
+      netId: 1,
+      pcbCenter: { x: 20.0, y: 27.0 },
+      svgTarget: { x: 78, y: 80 },
+    },
+    R12: {
+      refDes: "R12",
+      value: "10k",
+      netId: 2,
+      pcbCenter: { x: 52.0, y: 35.0 },
+      svgTarget: { x: 162, y: 112 },
+    },
+    J1: {
+      refDes: "J1",
+      value: "CONN_2P",
+      netId: 1,
+      pcbCenter: { x: 68.0, y: 35.0 },
+      svgTarget: { x: 242, y: 102 },
+    },
+  };
+
+  const state = {
+    selectedRef: "U1",
+  };
+
+  function render() {
+    const comp = components[state.selectedRef] || components.U1;
+
+    root.querySelectorAll("[data-sch-comp]").forEach((el) => {
+      const ref = el.getAttribute("data-sch-comp");
+      const active = ref === state.selectedRef;
+      el.setAttribute("stroke", active ? "#ffe664" : "#6cb6ff");
+      el.setAttribute("stroke-width", active ? "3" : "1.8");
+    });
+
+    root.querySelectorAll("[data-pcb-comp]").forEach((el) => {
+      const ref = el.getAttribute("data-pcb-comp");
+      const active = ref === state.selectedRef;
+      el.setAttribute("stroke", active ? "#ffe664" : "#f0e68c");
+      el.setAttribute("stroke-width", active ? "3" : "1.6");
+    });
+
+    const camBox = root.querySelector("[data-svg='pcb-camera-box']");
+    if (camBox) {
+      camBox.setAttribute("x", comp.svgTarget.x - 36);
+      camBox.setAttribute("y", comp.svgTarget.y - 28);
+    }
+
+    const stateEl = root.querySelector("[data-role='scene-state']");
+    if (stateEl) {
+      const minX = (comp.pcbCenter.x - 20.0).toFixed(1);
+      const minY = (comp.pcbCenter.y - 15.0).toFixed(1);
+      const maxX = (comp.pcbCenter.x + 20.0).toFixed(1);
+      const maxY = (comp.pcbCenter.y + 15.0).toFixed(1);
+      stateEl.textContent = `// Split borrow: &self.board (shared) + &mut self.view (mutable)
+self.view.focus_component(&self.board, "${comp.refDes}");
+
+ViewState {
+    selected_component: Some("${comp.refDes}"),
+    selected_net: Some(NetId(${comp.netId})),
+    pcb_scene_rect: Rect {
+        min: pos2(${minX}, ${minY}),
+        max: pos2(${maxX}, ${maxY}),
+    },
+}`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-probe-ref]").forEach((el) => {
+    el.addEventListener("click", () => {
+      state.selectedRef = el.getAttribute("data-probe-ref");
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 10. Lesson 0008 Simulator: Searchable BOM & Virtualized ScrollArea::show_rows
+ */
+function initBomVirtualScrollSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const allRows = [
+    { ref: "U1", val: "LDO_3V3", pkg: "SOT-23", net: "VCC_3V3", netId: 1 },
+    { ref: "U2", val: "MCU_RP2040", pkg: "QFN-56", net: "SPI_CLK", netId: 2 },
+    { ref: "R12", val: "10k_1%", pkg: "0603", net: "SPI_CLK", netId: 2 },
+    { ref: "R15", val: "4.7k_I2C", pkg: "0603", net: "VCC_3V3", netId: 1 },
+    { ref: "C1", val: "100nF_X7R", pkg: "0402", net: "GND", netId: 3 },
+    { ref: "C2", val: "10uF_MLCC", pkg: "0805", net: "VCC_3V3", netId: 1 },
+    { ref: "J1", val: "CONN_2P", pkg: "Header_1x02", net: "VCC_3V3", netId: 1 },
+    { ref: "D1", val: "LED_GREEN", pkg: "0603", net: "STATUS_LED", netId: 4 },
+  ];
+
+  const state = {
+    query: "",
+    selectedRef: "U1",
+  };
+
+  function render() {
+    const q = state.query.trim().toLowerCase();
+    const filtered = allRows.filter(
+      (r) =>
+        q === "" ||
+        r.ref.toLowerCase().includes(q) ||
+        r.val.toLowerCase().includes(q) ||
+        r.net.toLowerCase().includes(q)
+    );
+
+    const tbody = root.querySelector("[data-role='bom-tbody']");
+    if (tbody) {
+      tbody.innerHTML = "";
+      filtered.forEach((row, idx) => {
+        const tr = document.createElement("tr");
+        const isSel = row.ref === state.selectedRef;
+        tr.style.background = isSel ? "#193529" : "transparent";
+        tr.style.cursor = "pointer";
+        tr.innerHTML = `
+          <td style="padding:0.35rem 0.5rem; font-family:var(--font-mono);">${idx}</td>
+          <td style="padding:0.35rem 0.5rem; font-family:var(--font-mono); font-weight:700; color:var(--accent-copper);">${row.ref}</td>
+          <td style="padding:0.35rem 0.5rem;">${row.val}</td>
+          <td style="padding:0.35rem 0.5rem; font-family:var(--font-mono); color:var(--accent-silk);">${row.net}</td>
+        `;
+        tr.addEventListener("click", () => {
+          state.selectedRef = row.ref;
+          render();
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    const stateEl = root.querySelector("[data-role='bom-state']");
+    if (stateEl) {
+      stateEl.textContent = `// Query filter: .filter() + case-insensitive match
+bom_search_query: "${state.query}",
+matching_rows: ${filtered.length} / ${allRows.length},
+
+// ScrollArea::vertical().show_rows(ui, 22.0, ${filtered.length}, |ui, row_range| {
+//     for (idx, comp) in filtered[row_range].iter().enumerate() { ... }
+// })
+selected_component: Some("${state.selectedRef}"),`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
+    }
+  }
+
+  const input = root.querySelector("[data-role='bom-query-input']");
+  if (input) {
+    input.addEventListener("input", () => {
+      state.query = input.value;
+      render();
+    });
+  }
+
+  const clearBtn = root.querySelector("[data-action='clear-bom-query']");
+  if (clearBtn && input) {
+    clearBtn.addEventListener("click", () => {
+      input.value = "";
+      state.query = "";
+      render();
+    });
+  }
+
+  render();
+}
+
+/**
+ * 11. Lesson 0009 Simulator: Keyboard Shortcuts (F / M / Esc) & Point-to-Point CAD Ruler
+ */
+function initHotkeyRulerSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const state = {
+    tool: "Measure",
+    startMm: { x: 20.0, y: 22.0 },
+    endMm: { x: 68.0, y: 58.0 },
+    zoom: 6.0,
+    lastKey: "Key::M (Measure Tool)",
+  };
+
+  const mmToSvg = (pt) => ({
+    x: 20 + pt.x * 2.8,
+    y: 16 + pt.y * 2.5,
+  });
+
+  function render() {
+    const dx = state.endMm.x - state.startMm.x;
+    const dy = state.endMm.y - state.startMm.y;
+    const dist = Math.hypot(dx, dy);
+
+    const p0 = mmToSvg(state.startMm);
+    const p1 = mmToSvg(state.endMm);
+
+    const rulerGroup = root.querySelector("[data-svg='ruler-overlay']");
+    if (rulerGroup) {
+      rulerGroup.style.display = state.tool === "Measure" ? "block" : "none";
+    }
+
+    const lineHyp = root.querySelector("[data-svg='ruler-hyp']");
+    if (lineHyp) {
+      lineHyp.setAttribute("x1", p0.x);
+      lineHyp.setAttribute("y1", p0.y);
+      lineHyp.setAttribute("x2", p1.x);
+      lineHyp.setAttribute("y2", p1.y);
+    }
+
+    const lineDx = root.querySelector("[data-svg='ruler-dx']");
+    if (lineDx) {
+      lineDx.setAttribute("x1", p0.x);
+      lineDx.setAttribute("y1", p0.y);
+      lineDx.setAttribute("x2", p1.x);
+      lineDx.setAttribute("y2", p0.y);
+    }
+
+    const lineDy = root.querySelector("[data-svg='ruler-dy']");
+    if (lineDy) {
+      lineDy.setAttribute("x1", p1.x);
+      lineDy.setAttribute("y1", p0.y);
+      lineDy.setAttribute("x2", p1.x);
+      lineDy.setAttribute("y2", p1.y);
+    }
+
+    const endDot = root.querySelector("[data-svg='ruler-end-dot']");
+    if (endDot) {
+      endDot.setAttribute("cx", p1.x);
+      endDot.setAttribute("cy", p1.y);
+    }
+
+    const labelEl = root.querySelector("[data-svg='ruler-label']");
+    if (labelEl) {
+      labelEl.setAttribute("x", (p0.x + p1.x) / 2);
+      labelEl.setAttribute("y", (p0.y + p1.y) / 2 - 8);
+      labelEl.textContent = `Δx=${dx.toFixed(1)} Δy=${dy.toFixed(1)} d=${dist.toFixed(1)}mm`;
+    }
+
+    const stateEl = root.querySelector("[data-role='ruler-state']");
+    if (stateEl) {
+      const toolStr =
+        state.tool === "Measure"
+          ? `ActiveTool::Measure {\n    start_mm: Some(pos2(${state.startMm.x.toFixed(1)}, ${state.startMm.y.toFixed(1)})),\n    end_mm: Some(pos2(${state.endMm.x.toFixed(1)}, ${state.endMm.y.toFixed(1)})),\n}`
+          : `ActiveTool::Select`;
+      stateEl.textContent = `// Last hotkey: ${state.lastKey}
+active_tool: ${toolStr},
+// RulerMeasurement::between(start, end):
+// dx_mm: ${dx.toFixed(1)}, dy_mm: ${dy.toFixed(1)}, distance_mm: ${dist.toFixed(1)}`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-key]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const k = btn.getAttribute("data-key");
+      if (k === "M") {
+        state.tool = "Measure";
+        state.lastKey = "Key::M -> activate Measure tool";
+      } else if (k === "Escape") {
+        state.tool = "Select";
+        state.lastKey = "Key::Escape -> reset to ActiveTool::Select";
+      } else if (k === "F") {
+        state.zoom = 6.0;
+        state.lastKey = "Key::F -> fit_board_in_viewport()";
+      }
+      render();
+    });
+  });
+
+  root.querySelectorAll("[data-ruler-preset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.tool = "Measure";
+      const [x, y] = btn
+        .getAttribute("data-ruler-preset")
+        .split(",")
+        .map(parseFloat);
+      state.endMm = { x, y };
+      state.lastKey = `Measure end_mm updated to (${x.toFixed(1)}, ${y.toFixed(1)}) mm`;
+      render();
+    });
+  });
+
+  render();
+}
