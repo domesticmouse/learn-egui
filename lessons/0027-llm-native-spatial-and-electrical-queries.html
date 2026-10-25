@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Lesson 0027: LLM-Native Spatial &amp; Electrical Queries with schemars — Learn Rust &amp; egui</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
+    <div>
+      <a href="../index.html">Index</a>
+      <a href="./0001-project-setup-and-eframe-boot.html">0001</a>
+      <a href="./0002-the-immediate-mode-loop.html">0002</a>
+      <a href="./0003-custom-2d-canvas-and-painter.html">0003</a>
+      <a href="./0004-world-to-screen-transforms-pan-and-zoom.html">0004</a>
+      <a href="./0005-modeling-layers-traces-and-footprints.html">0005</a>
+      <a href="./0006-hit-testing-and-net-cross-probing.html">0006</a>
+      <a href="./0007-schematic-symbols-and-text-rendering.html">0007</a>
+      <a href="./0008-split-viewports-and-egui-scene.html">0008</a>
+      <a href="./0009-searchable-netlist-and-bom-inspector.html">0009</a>
+      <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html">0010</a>
+      <a href="./0011-review-pins-and-sticky-note-callouts.html">0011</a>
+      <a href="./0012-review-status-workflow-and-popups.html">0012</a>
+      <a href="./0013-drc-violation-overlay-and-minimap.html">0013</a>
+      <a href="./0014-custom-layer-swatch-widget-and-design-tokens.html">0014</a>
+      <a href="./0015-multi-crate-workspace-doc-vs-ui-egui.html">0015</a>
+      <a href="./0016-loading-board-and-review-files-serde.html">0016</a>
+      <a href="./0017-copy-on-write-arc-document-snapshots.html">0017</a>
+      <a href="./0018-undo-redo-history-and-slider-coalescing.html">0018</a>
+      <a href="./0019-the-command-pattern-and-command-palette.html">0019</a>
+      <a href="./0020-viewport-culling-and-cached-tessellation.html">0020</a>
+      <a href="./0021-non-blocking-file-import-and-progress-ui.html">0021</a>
+      <a href="./0022-headless-snapshot-testing-and-wasm-build.html">0022</a>
+      <a href="./0023-sexpr-tokenizer-and-ast-with-nom.html">0023</a>
+      <a href="./0024-parsing-kicad-pcb-and-sch-into-domain-model.html">0024</a>
+      <a href="./0025-embedded-sql-review-store-with-turso.html">0025</a>
+      <a href="./0026-local-first-review-sync-and-audit-trail.html">0026</a>
+      <a href="./0027-llm-native-spatial-and-electrical-queries.html" class="active">0027</a>
+      <a href="./0028-headless-mcp-server-rmcp-and-mock-client.html">0028</a>
+      <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html">0029</a>
+      <a href="./0030-egui-mcp-inspector-workbench-and-agent-playbooks.html">0030</a>
+      <a href="../reference/glossary.html">Glossary</a>
+      <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Act VII • Agentic Hardware Review &amp; MCP (rmcp)</span>
+  </nav>
+  </header>
+
+  <main>
+    <article class="tufte-article">
+<div class="prose-col">
+<h1>0027. LLM-Native Spatial &amp; Electrical Queries (<code>schemars</code> JSON Schema)</h1>
+<p class="subtitle">Equipping <code>pcb-doc</code> (<code>L1</code>/<code>L2</code>) with high-leverage spatial neighborhood, net-topology, and custom DRC queries that LLMs cannot reliably compute from raw S-expressions, and deriving JSON Schema 2020-12 contracts with <code>schemars::JsonSchema</code>.</p>
+
+<h2 id="why-raw-s-expressions-fail-ai-hardware-reviewers">Why Raw S-Expressions Fail AI Hardware Reviewers</h2>
+<p>Large Language Models excel at high-level reasoning across datasheets and design checklists, but they struggle when asked to compute Euclidean pad-to-pad clearances or trace net connectivity directly from thousands of raw <code>(segment (start ...))</code> lines in a <code>.kicad_pcb</code> file.<span class="sidenote-number"></span><span class="sidenote"><strong>High-Leverage Agent Queries vs. Raw Token Dumps:</strong> Instead of feeding an entire <code>.kicad_pcb</code> file into an LLM context window and hoping it calculates $\sqrt{\Delta x^2 + \Delta y^2}$ accurately, an engine-first CAD tool exposes deterministic spatial and topological query methods backed by strict <code>schemars::JsonSchema</code> parameter contracts.</span></p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
+flowchart LR
+    Params["SpatialQueryParams&lt;br/&gt;#[derive(JsonSchema)]"] --&gt; Schema["spatial_query_json_schema()&lt;br/&gt;JSON Schema 2020-12"]
+    Params --&gt; Spatial["query_spatial_neighborhood()&lt;br/&gt;Pads, Components &amp; Min Gap"]
+    Net["NetId(1) (VCC_3V3)"] --&gt; Topo["query_net_topology()&lt;br/&gt;Pads, Traces &amp; Connected Refs"]
+    Drc["CustomDrcParams&lt;br/&gt;#[derive(JsonSchema)]"] --&gt; RunDrc["run_custom_drc()&lt;br/&gt;Clearance &amp; Min Trace Width"]
+    style Spatial fill:#14231c,stroke:#3dd68c,color:#e6edf3
+    style Topo fill:#14231c,stroke:#3dd68c,color:#e6edf3
+    style RunDrc fill:#14231c,stroke:#3dd68c,color:#e6edf3
+  </pre>
+</figure>
+<h2 id="spatial-neighborhood-net-topology-amp-schemars-jsonschema">Spatial Neighborhood, Net Topology &amp; <code>schemars::JsonSchema</code></h2>
+<p>By deriving <code>schemars::JsonSchema</code> alongside <code>Serialize</code> and <code>Deserialize</code>, Rust generates a standard JSON Schema 2020-12 specification via <code>schemars::schema_for!(SpatialQueryParams)</code> that MCP servers (<code>rmcp</code>) advertise directly to AI agents:</p>
+<figure>
+  <figcaption>Typed spatial, net-topology, and custom DRC queries in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">use schemars::{JsonSchema, schema_for};
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SpatialQueryParams {
+    pub ref_des: String,
+    pub radius_mm: f32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct NetTopologyReport {
+    pub net: NetId,
+    pub signal_name: String,
+    pub pad_count: usize,
+    pub trace_count: usize,
+    pub connected_refs: Vec&lt;String&gt;,
+}
+
+pub fn spatial_query_json_schema() -&gt; serde_json::Value {
+    serde_json::to_value(schema_for!(SpatialQueryParams)).unwrap_or_default()
+}</code></pre>
+</figure>
+</div>
+
+<section class="full-width-panel" id="spatial-query-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: LLM-Native Spatial &amp; Electrical Queries + <code>schemars::JsonSchema</code></span>
+    <span class="panel-badge">query_spatial_neighborhood • query_net_topology • schema_for!</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Execute high-leverage spatial and electrical queries that LLMs cannot reliably compute from raw S-expression text, or inspect the generated JSON Schema 2020-12 contract derived via <code>#[derive(schemars::JsonSchema)]</code>.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Engine Query Selector</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-sq-act="spatial-u1"><code>query_spatial_neighborhood("U1", 15.0)</code></button>
+        <button type="button" class="egui-btn" data-sq-act="net-vcc"><code>query_net_topology(NetId(1))</code> (<code>VCC_3V3</code>)</button>
+        <button type="button" class="egui-btn" data-sq-act="custom-drc"><code>run_custom_drc(8.0, 0.5)</code></button>
+        <button type="button" class="egui-btn" data-sq-act="json-schema">Inspect <code>schema_for!(SpatialQueryParams)</code></button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Query Output / JSON Schema</h4>
+      <div data-role="sq-output" style="font-family:var(--font-mono); font-size:0.75rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. Rust Query Telemetry</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="sq-state"></code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 2: Implement Spatial Neighborhood &amp; Custom DRC Queries</span>
+    <span class="panel-badge">Skill Practice • Spatial Queries &amp; schemars</span>
+  </div>
+  <p>Complete <code>BoardModel::query_spatial_neighborhood</code> and <code>BoardModel::run_custom_drc</code> in <code>crates/pcb-doc/src/lib.rs</code>.</p>
+<pre class="keep-markup"><code class="language-rust">pub fn query_spatial_neighborhood(
+    &amp;self,
+    params: &amp;SpatialQueryParams,
+) -&gt; Result&lt;SpatialNeighborhoodReport, AgentQueryError&gt; {
+    let trimmed = params.ref_des.trim();
+    if trimmed.is_empty() {
+        return Err(AgentQueryError::EmptyRefDes);
+    }
+    if params.radius_mm &lt;= 0.0 {
+        return Err(AgentQueryError::NonPositiveRadius);
+    }
+    let Some(anchor) = self.find_component(trimmed) else {
+        return Err(AgentQueryError::UnknownComponent(trimmed.to_owned()));
+    };
+    let nearby_pads = self
+        .pads
+        .iter()
+        .filter(|p| {
+            let dist = (p.center_mm - anchor.center_mm).length();
+            dist <input id="ex0027-blank-1" class="code-challenge-input" style="width:165px;" placeholder="&lt;= params.radius_mm" autocomplete="off">
+        })
+        .count();
+    let nearby_components = self
+        .components
+        .iter()
+        .filter(|c| {
+            c.ref_des != anchor.ref_des
+                &amp;&amp; (c.center_mm - anchor.center_mm).length() &lt;= params.radius_mm
+        })
+        .count();
+    Ok(SpatialNeighborhoodReport {
+        ref_des: anchor.ref_des.clone(),
+        nearby_pads,
+        nearby_components,
+    })
+}
+
+pub fn run_custom_drc(
+    &amp;self,
+    params: &amp;CustomDrcParams,
+) -&gt; Result&lt;CustomDrcReport, AgentQueryError&gt; {
+    if params.min_clearance_mm &lt;= 0.0 || params.min_copper_width_mm &lt;= 0.0 {
+        return Err(AgentQueryError::InvalidDrcThreshold);
+    }
+    let clearance_violations = self
+        .detect_pad_clearance_violations(params.min_clearance_mm)
+        .len();
+    let narrow_traces = self
+        .traces
+        .iter()
+        .filter(|t| {
+            matches!(t.layer, PcbLayer::TopCopper | PcbLayer::BottomCopper)
+                &amp;&amp; t.width_mm <input id="ex0027-blank-2" class="code-challenge-input" style="width:215px;" placeholder="&lt; params.min_copper_width_mm" autocomplete="off">
+        })
+        .count();
+    Ok(CustomDrcReport {
+        clearance_violations,
+        narrow_traces,
+    })
+}</code></pre>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn-primary" id="btn-check-ex0027">Check Rust Code</button>
+    <button type="button" class="btn-secondary" id="btn-hint-ex0027">Show Hint</button>
+  </div>
+  <div id="ex0027-feedback" class="feedback-box"></div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Lab 3: Spatial Query, Net Topology &amp; JSON Schema Mutation Gate (<code>0027</code>)</span>
+    <span class="panel-badge">cargo test --workspace + proptest + cargo mutants</span>
+  </div>
+  <p>Run the workspace test suite (including <code>llm_spatial_topology_and_custom_drc_queries_preserve_invariants</code>) and mutate all spatial query, topology, and schema helper methods:</p>
+<figure>
+  <figcaption>Run spatial query, net topology, and JSON Schema mutation gate on 0026</figcaption>
+  <pre><code class="language-bash">cargo test --manifest-path ./apps/0027-llm-native-spatial-and-electrical-queries/Cargo.toml --workspace
+cargo mutants --manifest-path ./apps/0027-llm-native-spatial-and-electrical-queries/Cargo.toml --workspace --in-place -F "spatial_query_json_schema|query_spatial_neighborhood|query_net_topology|run_custom_drc|SpatialNeighborhoodReport|NetTopologyReport|CustomDrcReport|run_u1_spatial_query|run_vcc_net_query|run_board_custom_drc"</code></pre>
+</figure>
+  <div class="mutation-scoreboard">
+    <div class="mutation-stat tier">
+      <div class="stat-label">Verification Tier</div>
+      <div class="stat-value">Tier 2 + Tier 5 (Schema &amp; Spatial Query Gate)</div>
+    </div>
+    <div class="mutation-stat caught">
+      <div class="stat-label">Target Caught Mutants</div>
+      <div class="stat-value">497 / 497 (100%)</div>
+    </div>
+    <div class="mutation-stat missed">
+      <div class="stat-label">Target Missed Mutants</div>
+      <div class="stat-value">0 Missed</div>
+    </div>
+  </div>
+      <ul class="step-checklist">
+        <li>
+          <input type="checkbox" id="verify-0027-1">
+          <label for="verify-0027-1">
+            <code>cargo test --manifest-path ./apps/0027-llm-native-spatial-and-electrical-queries/Cargo.toml --workspace</code> passes all <strong>28 tests</strong> (<strong>3</strong> in <code>kicad-sexpr</code>, <strong>19</strong> in <code>pcb-doc</code>, and <strong>6</strong> in <code>pcb-reviewer</code>).
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0027-2">
+          <label for="verify-0027-2">
+            <code>spatial_query_json_schema()</code> produces a valid JSON Schema 2020-12 object declaring <code>&quot;ref_des&quot;</code> and <code>&quot;radius_mm&quot;</code> as required properties.
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0027-3">
+          <label for="verify-0027-3">
+            <code>cargo mutants</code> catches <strong>100% of viable spatial, net-topology, and custom DRC mutants</strong> (<code>0 missed</code>).
+          </label>
+        </li>
+      </ul>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Retrieval Practice</span>
+    <span class="panel-badge">3 Questions • Equal-Length Options</span>
+  </div>
+  <div id="quiz-0027"></div>
+</section>
+
+<div class="prose-col">
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
+<div class="callout">
+  <strong>Read (5 mins):</strong> <a href="https://docs.rs/schemars/latest/schemars/"><code>schemars</code> Official Documentation on docs.rs</a> — deriving <code>JsonSchema</code> and inspecting generated schemas with <code>schema_for!</code>.
+</div>
+<div class="teacher-prompt-box">
+  Next up in <a href="./0028-headless-mcp-server-rmcp-and-mock-client.html"><strong>Lesson 0028: Headless MCP Server (<code>rmcp</code>) &amp; In-Memory Duplex Mock Client</strong></a>, we will wrap <code>BoardModel</code> and our <code>schemars</code> queries inside an official <code>rmcp</code> <code>ServerHandler</code> (<code>#[tool_router]</code>, <code>#[tool]</code>, <code>#[tool_handler]</code>), expose <code>kicad://</code> resources and review prompts, and verify full client$\leftrightarrow$server round-trips over <code>tokio::io::duplex</code>!
+</div>
+</div>
+    </article>
+  </main>
+
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
+
+  <script src="../assets/course.js"></script>
+  <script>
+    initCodeExercise({
+      checkBtnId: "btn-check-ex0027",
+      hintBtnId: "btn-hint-ex0027",
+      feedbackId: "ex0027-feedback",
+      blanks: [
+        {
+          inputId: "ex0027-blank-1",
+          accepted: ["<= params.radius_mm"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Include pads whose Euclidean distance from anchor.center_mm is &lt;= params.radius_mm",
+        },
+        {
+          inputId: "ex0027-blank-2",
+          accepted: ["< params.min_copper_width_mm"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Flag copper traces whose width_mm is strictly less than params.min_copper_width_mm",
+        }
+      ],
+      hintMessage: "Check <code>dist &lt;= params.radius_mm</code> when counting pads within the neighborhood radius, and flag copper traces where <code>t.width_mm &lt; params.min_copper_width_mm</code>.",
+      successMessage: "Your <code>pcb-doc</code> engine now executes deterministic spatial neighborhood, net-topology, and custom DRC queries backed by <code>schemars::JsonSchema</code>!",
+    });
+
+    initQuiz("quiz-0027", [
+      {
+            "question": "Why should a CAD engine expose dedicated spatial neighborhood queries instead of asking an LLM to inspect raw KiCad S-expression coordinates directly?",
+            "options": [
+                  "Deterministic Euclidean queries prevent LLM coordinate arithmetic hallucinations",
+                  "Raw S-expression text automatically calculates Euclidean clearance gaps",
+                  "Large language models cannot read standard JSON objects",
+                  "Spatial queries delete copper traces outside the viewport"
+            ],
+            "correctIndex": 0,
+            "explanation": "LLMs are probabilistic token predictors; computing exact 2D Euclidean distances and pad-to-pad clearances in Rust (`pcb-doc`) gives the agent exact geometric facts in a compact JSON payload.",
+            "wrongHint": "Consider how LLMs process floating-point coordinate pairs in raw text."
+      },
+      {
+            "question": "What does `#[derive(schemars::JsonSchema)]` on `SpatialQueryParams` enable in an MCP-capable Rust application?",
+            "options": [
+                  "It compiles GLSL fragment shaders for the 2D canvas",
+                  "It generates machine-readable JSON Schema contracts for tool parameters",
+                  "It encrypts SQLite database rows before local replica sync",
+                  "It replaces the Cargo workspace resolver with a script"
+            ],
+            "correctIndex": 1,
+            "explanation": "`schemars::JsonSchema` derives compile-time reflection metadata so `schema_for!(SpatialQueryParams)` (and `rmcp`'s `#[tool]` macro) can publish exact JSON Schema 2020-12 parameter definitions.",
+            "wrongHint": "Inspect `spatial_query_json_schema()` in `crates/pcb-doc/src/lib.rs`."
+      },
+      {
+            "question": "Which trace layers are inspected for minimum copper width violations inside `BoardModel::run_custom_drc`?",
+            "options": [
+                  "Only Silkscreen text outlines and unrouted Ratsnest airwires",
+                  "Every non-copper mechanical courtyard and board edge layer",
+                  "Only physical `TopCopper` and `BottomCopper` routed trace segments",
+                  "Only schematic symbol pin labels inside the toolbar"
+            ],
+            "correctIndex": 2,
+            "explanation": "`run_custom_drc` filters traces with `matches!(t.layer, PcbLayer::TopCopper | PcbLayer::BottomCopper)` so silkscreen lines (`0.3 mm`) and ratsnest airwires (`0.25 mm`) are not false-flagged as narrow copper traces.",
+            "wrongHint": "Check the `matches!(t.layer, ...)` filter inside `run_custom_drc`."
+      }
+]);
+
+    initSpatialQuerySimulator("spatial-query-sim");
+  </script>
+</body>
+</html>

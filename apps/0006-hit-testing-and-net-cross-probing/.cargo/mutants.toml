@@ -1,0 +1,13 @@
+# .cargo/mutants.toml
+# Reuse the target directory across scratch builds so mutation runs finish quickly.
+copy_target = true
+
+# Skip the OS window launcher and raw Painter/panel draw loops until Lesson 0007
+# introduces headless UI testing with egui_kittest.
+exclude_re = [
+    "replace main",
+    "<impl eframe::App for PcbReviewerApp>::update",
+    "PcbReviewerApp::paint_board",
+    "sample_traces",
+    "sample_pads",
+]

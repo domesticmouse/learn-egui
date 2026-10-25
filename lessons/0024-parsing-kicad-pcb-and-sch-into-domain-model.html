@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Lesson 0024: Lowering KiCad .kicad_pcb &amp; .kicad_sch ASTs into the Domain Model &amp; Corpus Oracles — Learn Rust &amp; egui</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
+    <div>
+      <a href="../index.html">Index</a>
+      <a href="./0001-project-setup-and-eframe-boot.html">0001</a>
+      <a href="./0002-the-immediate-mode-loop.html">0002</a>
+      <a href="./0003-custom-2d-canvas-and-painter.html">0003</a>
+      <a href="./0004-world-to-screen-transforms-pan-and-zoom.html">0004</a>
+      <a href="./0005-modeling-layers-traces-and-footprints.html">0005</a>
+      <a href="./0006-hit-testing-and-net-cross-probing.html">0006</a>
+      <a href="./0007-schematic-symbols-and-text-rendering.html">0007</a>
+      <a href="./0008-split-viewports-and-egui-scene.html">0008</a>
+      <a href="./0009-searchable-netlist-and-bom-inspector.html">0009</a>
+      <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html">0010</a>
+      <a href="./0011-review-pins-and-sticky-note-callouts.html">0011</a>
+      <a href="./0012-review-status-workflow-and-popups.html">0012</a>
+      <a href="./0013-drc-violation-overlay-and-minimap.html">0013</a>
+      <a href="./0014-custom-layer-swatch-widget-and-design-tokens.html">0014</a>
+      <a href="./0015-multi-crate-workspace-doc-vs-ui-egui.html">0015</a>
+      <a href="./0016-loading-board-and-review-files-serde.html">0016</a>
+      <a href="./0017-copy-on-write-arc-document-snapshots.html">0017</a>
+      <a href="./0018-undo-redo-history-and-slider-coalescing.html">0018</a>
+      <a href="./0019-the-command-pattern-and-command-palette.html">0019</a>
+      <a href="./0020-viewport-culling-and-cached-tessellation.html">0020</a>
+      <a href="./0021-non-blocking-file-import-and-progress-ui.html">0021</a>
+      <a href="./0022-headless-snapshot-testing-and-wasm-build.html">0022</a>
+      <a href="./0023-sexpr-tokenizer-and-ast-with-nom.html">0023</a>
+      <a href="./0024-parsing-kicad-pcb-and-sch-into-domain-model.html" class="active">0024</a>
+      <a href="./0025-embedded-sql-review-store-with-turso.html">0025</a>
+      <a href="./0026-local-first-review-sync-and-audit-trail.html">0026</a>
+      <a href="./0027-llm-native-spatial-and-electrical-queries.html">0027</a>
+      <a href="./0028-headless-mcp-server-rmcp-and-mock-client.html">0028</a>
+      <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html">0029</a>
+      <a href="./0030-egui-mcp-inspector-workbench-and-agent-playbooks.html">0030</a>
+      <a href="../reference/glossary.html">Glossary</a>
+      <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Act VI • Real-World KiCad Parsing &amp; Embedded SQL</span>
+  </nav>
+  </header>
+
+  <main>
+    <article class="tufte-article">
+<div class="prose-col">
+<h1>0024. Lowering KiCad <code>.kicad_pcb</code> &amp; <code>.kicad_sch</code> ASTs into the Domain Model &amp; Corpus Oracles</h1>
+<p class="subtitle">Lowering untyped <code>SexprNode</code> syntax trees into typed <code>ComponentSymbol</code>, <code>SmdPad</code>, and <code>TraceSegment</code> domain structs with <code>KicadLowerError</code>, exporting lossless <code>.kicad_pcb</code> S-expressions, and enforcing Tier 4 pinned corpus oracle ratchets (<code>CORPUS_PASS_FLOOR</code> &amp; <code>CORPUS_ROUNDTRIP_FLOOR</code>).</p>
+
+<h2 id="two-phase-parsing-untyped-sexprnode-l0-to-typed-boardmodel-l1-l4">Two-Phase Parsing: Untyped <code>SexprNode</code> (<code>L0</code>) $\to$ Typed <code>BoardModel</code> (<code>L1</code>/<code>L4</code>)</h2>
+<p>In Lesson 0023, our standalone <code>L0</code> <code>kicad-sexpr</code> crate turned raw KiCad text into an untyped <code>SexprNode</code> tree. However, a syntactically valid S-expression like <code>(pad &quot;1&quot; smd (at 20.0 &quot;not_a_float&quot;) (layer &quot;Unknown.Layer&quot;))</code> is still semantically invalid for a 2D PCB CAD engine.<span class="sidenote-number"></span><span class="sidenote"><strong>Tier 4 Pinned Corpus Oracles (<code>egui-testing-infrastructure</code>):</strong> Real-world file importers are verified against a pinned corpus of <code>.kicad_pcb</code> fixtures (<code>PINNED_KICAD_CORPUS</code>). Every fixture must pass both import (<code>CORPUS_PASS_FLOOR</code>) and <code>import -&gt; export -&gt; re-import</code> round-trip equivalence (<code>CORPUS_ROUNDTRIP_FLOOR</code>), and ratchets only move up!</span></p>
+<p>By separating <strong>Phase 1 (Syntax Tokenization &amp; AST)</strong> from <strong>Phase 2 (Semantic Lowering into <code>BoardModel</code>)</strong>, we get clean, granular error reporting via <code>KicadLowerError</code>:</p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
+flowchart LR
+    Sexpr["SexprNode::List&lt;br/&gt;(kicad_pcb ...)"] --&gt; RootCheck{"tag_name() ==&lt;br/&gt;Some(\"kicad_pcb\")?"}
+    RootCheck -- "No" --&gt; ErrRoot["Err(KicadLowerError::UnexpectedRootTag)"]
+    RootCheck -- "Yes" --&gt; Lower["Lower child nodes:&lt;br/&gt;(footprint ...) -&gt; ComponentSymbol&lt;br/&gt;(pad ...) -&gt; SmdPad&lt;br/&gt;(segment ...) -&gt; TraceSegment"]
+    Lower --&gt; Export["BoardModel::to_kicad_pcb_sexpr()"]
+    Export --&gt; Reload["Re-parse &amp; Compare&lt;br/&gt;reloaded == original"]
+    Reload --&gt; Oracle["CorpusOracleReport&lt;br/&gt;meets_ratchet_floors()"]
+    style Oracle fill:#14231c,stroke:#3dd68c,color:#e6edf3
+    style ErrRoot fill:#2a1418,stroke:#ff5555,color:#e6edf3
+  </pre>
+</figure>
+<h2 id="lowering-footprint-pad-and-segment-with-kicadlowererror">Lowering <code>(footprint ...)</code>, <code>(pad ...)</code>, and <code>(segment ...)</code> with <code>KicadLowerError</code></h2>
+<figure>
+  <figcaption>Typed KiCad S-expression lowering and CorpusOracleReport in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">pub const CORPUS_PASS_FLOOR: usize = 3;
+pub const CORPUS_ROUNDTRIP_FLOOR: usize = 3;
+
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum KicadLowerError {
+    #[error("S-expression parse error: {0}")]
+    Sexpr(#[from] SexprParseError),
+    #[error("expected `(kicad_pcb ...)` root node, found `{0}`")]
+    UnexpectedRootTag(String),
+    #[error("missing required field `{0}`")]
+    MissingField(&amp;'static str),
+    #[error("invalid numeric coordinate `{0}`")]
+    InvalidNumber(String),
+    #[error("unknown KiCad layer `{0}`")]
+    UnknownLayer(String),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CorpusOracleReport {
+    pub total_files: usize,
+    pub passed_files: usize,
+    pub roundtrip_files: usize,
+}
+
+impl CorpusOracleReport {
+    pub fn meets_ratchet_floors(&amp;self) -&gt; bool {
+        self.passed_files &gt;= CORPUS_PASS_FLOOR
+            &amp;&amp; self.roundtrip_files &gt;= CORPUS_ROUNDTRIP_FLOOR
+            &amp;&amp; self.passed_files == self.total_files
+    }
+}</code></pre>
+</figure>
+</div>
+
+<section class="full-width-panel" id="kicad-corpus-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: KiCad AST Lowering &amp; Tier 4 Pinned Corpus Oracle</span>
+    <span class="panel-badge">from_kicad_pcb_sexpr • to_kicad_pcb_sexpr • CorpusOracleReport</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Inspect the pinned <code>PINNED_KICAD_CORPUS</code> fixtures or inject a synthetic regression to see how <code>BoardModel::from_kicad_pcb_sexpr</code> and <code>CorpusOracleReport::meets_ratchet_floors()</code> enforce Tier 4 round-trip ratchets.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Corpus Fixture Selector</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-corpus-board="ldo"><code>ldo-power-rev-a.kicad_pcb</code> (Valid)</button>
+        <button type="button" class="egui-btn" data-corpus-board="spi"><code>spi-sensor-rev-b.kicad_pcb</code> (Valid)</button>
+        <button type="button" class="egui-btn" data-corpus-board="usb"><code>usb-header-rev-c.kicad_pcb</code> (Valid)</button>
+        <button type="button" class="egui-btn" data-corpus-board="bad-layer">Synthetic: Unknown Layer <code>In1.Cu</code></button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Lowered <code>BoardModel</code> Entities</h4>
+      <div data-role="corpus-entities" style="font-family:var(--font-mono); font-size:0.76rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. <code>CorpusOracleReport</code> Ratchet</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="corpus-state"></code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 2: Map KiCad Layer Names &amp; Enforce Corpus Floor Ratchets</span>
+    <span class="panel-badge">Skill Practice • AST Lowering &amp; Corpus Ratchets</span>
+  </div>
+  <p>Complete <code>PcbLayer::from_kicad_name</code> and <code>CorpusOracleReport::meets_ratchet_floors</code> in <code>crates/pcb-doc/src/lib.rs</code>.</p>
+<pre class="keep-markup"><code class="language-rust">impl PcbLayer {
+    pub fn from_kicad_name(name: &amp;str) -&gt; Result&lt;Self, KicadLowerError&gt; {
+        match name {
+            "B.Cu" =&gt; Ok(PcbLayer::BottomCopper),
+            "F.Cu" =&gt; Ok(PcbLayer::<input id="ex0024-blank-1" class="code-challenge-input" style="width:120px;" placeholder="TopCopper" autocomplete="off">),
+            "F.SilkS" =&gt; Ok(PcbLayer::Silkscreen),
+            "Ratsnest" =&gt; Ok(PcbLayer::Ratsnest),
+            other =&gt; Err(KicadLowerError::<input id="ex0024-blank-2" class="code-challenge-input" style="width:145px;" placeholder="UnknownLayer" autocomplete="off">(other.to_owned())),
+        }
+    }
+}
+
+impl CorpusOracleReport {
+    pub fn meets_ratchet_floors(&amp;self) -&gt; bool {
+        self.passed_files &gt;= <input id="ex0024-blank-3" class="code-challenge-input" style="width:195px;" placeholder="CORPUS_PASS_FLOOR" autocomplete="off">
+            &amp;&amp; self.roundtrip_files &gt;= CORPUS_ROUNDTRIP_FLOOR
+            &amp;&amp; self.passed_files == self.total_files
+    }
+}</code></pre>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn-primary" id="btn-check-ex0024">Check Rust Code</button>
+    <button type="button" class="btn-secondary" id="btn-hint-ex0024">Show Hint</button>
+  </div>
+  <div id="ex0024-feedback" class="feedback-box"></div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Lab 3: KiCad AST Lowering, Tier 4 Corpus Oracle Ratchets &amp; Mutation Gate (<code>0024</code>)</span>
+    <span class="panel-badge">cargo test --workspace + corpus oracle + cargo mutants</span>
+  </div>
+  <p>Run the workspace test suite (including <code>kicad_pcb_lowering_roundtrip_and_corpus_oracle_ratchets_work</code>) and mutate all KiCad lowering helpers, round-trip formatters, and corpus ratchet methods:</p>
+<figure>
+  <figcaption>Run Tier 4 corpus oracle tests and cargo-mutants on 0023</figcaption>
+  <pre><code class="language-bash">cargo test --manifest-path ./apps/0024-parsing-kicad-pcb-and-sch-into-domain-model/Cargo.toml --workspace
+cargo mutants --manifest-path ./apps/0024-parsing-kicad-pcb-and-sch-into-domain-model/Cargo.toml --workspace --in-place -F "kicad_name|from_kicad_name|parse_child_f32_pair|parse_child_text|parse_child_u32|lower_footprint_node|lower_pad_node|lower_segment_node|from_kicad_pcb_sexpr|to_kicad_pcb_sexpr|CorpusOracleReport|run_pinned_kicad_corpus|import_kicad_sexpr_board|export_kicad_sexpr_board"</code></pre>
+</figure>
+  <div class="mutation-scoreboard">
+    <div class="mutation-stat tier">
+      <div class="stat-label">Verification Tier</div>
+      <div class="stat-value">Tier 2 + Tier 4 (Pinned Corpus Oracles)</div>
+    </div>
+    <div class="mutation-stat caught">
+      <div class="stat-label">Target Caught Mutants</div>
+      <div class="stat-value">385 / 385 (100%)</div>
+    </div>
+    <div class="mutation-stat missed">
+      <div class="stat-label">Target Missed Mutants</div>
+      <div class="stat-value">0 Missed</div>
+    </div>
+  </div>
+      <ul class="step-checklist">
+        <li>
+          <input type="checkbox" id="verify-0024-1">
+          <label for="verify-0024-1">
+            <code>cargo test --manifest-path ./apps/0024-parsing-kicad-pcb-and-sch-into-domain-model/Cargo.toml --workspace</code> passes all <strong>25 tests</strong> (<strong>3</strong> in <code>kicad-sexpr</code>, <strong>16</strong> in <code>pcb-doc</code>, and <strong>6</strong> in <code>pcb-reviewer</code>).
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0024-2">
+          <label for="verify-0024-2">
+            <code>kicad_pcb_lowering_roundtrip_and_corpus_oracle_ratchets_work</code> verifies <code>run_pinned_kicad_corpus().meets_ratchet_floors()</code>, lossless <code>to_kicad_pcb_sexpr -&gt; from_kicad_pcb_sexpr</code> round-tripping, and synthetic regression rejection on malformed coordinates and unknown layers.
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0024-3">
+          <label for="verify-0024-3">
+            <code>cargo mutants</code> catches <strong>100% of viable KiCad lowering &amp; corpus oracle mutants</strong> (<code>0 missed</code>).
+          </label>
+        </li>
+      </ul>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Retrieval Practice</span>
+    <span class="panel-badge">3 Questions • Equal-Length Options</span>
+  </div>
+  <div id="quiz-0024"></div>
+</section>
+
+<div class="prose-col">
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
+<div class="callout">
+  <strong>Read (5 mins):</strong> <a href="https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/">KiCad Documentation — &quot;S-Expression Board File Format (<code>.kicad_pcb</code>)&quot;</a> and <a href="https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html">The Rust Programming Language — §9.2 &quot;Recoverable Errors with <code>Result</code> and the <code>?</code> Operator&quot;</a>.
+</div>
+<div class="teacher-prompt-box">
+  Next up: <a href="./0025-embedded-sql-review-store-with-turso.html">Lesson 0025: Embedded SQL Review Store with Turso (<code>turso_parser</code> &amp; Async <code>tokio</code> Bridge)</a>, where we validate SQL DDL/DML ASTs with <code>turso_parser::parser::Parser</code> and persist multi-engineer review threads in an async <code>TursoReviewStore</code>!
+</div>
+</div>
+    </article>
+  </main>
+
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
+
+  <script src="../assets/course.js"></script>
+  <script>
+    initCodeExercise({
+      checkBtnId: "btn-check-ex0024",
+      hintBtnId: "btn-hint-ex0024",
+      feedbackId: "ex0024-feedback",
+      blanks: [
+        {
+          inputId: "ex0024-blank-1",
+          accepted: ["TopCopper"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Map KiCad's F.Cu front copper layer to PcbLayer::TopCopper",
+        },
+        {
+          inputId: "ex0024-blank-2",
+          accepted: ["UnknownLayer"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Return KicadLowerError::UnknownLayer for unrecognized layer names",
+        },
+        {
+          inputId: "ex0024-blank-3",
+          accepted: ["CORPUS_PASS_FLOOR"],
+          getErrorHint: (val) =>
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Require passed_files &gt;= CORPUS_PASS_FLOOR",
+        }
+      ],
+      hintMessage: "Map <code>&quot;F.Cu&quot;</code> to <code>PcbLayer::TopCopper</code>, wrap unknown layer strings in <code>KicadLowerError::UnknownLayer(other.to_owned())</code>, and check <code>self.passed_files &gt;= CORPUS_PASS_FLOOR</code>.",
+      successMessage: "Spot on! Every KiCad <code>(footprint ...)</code>, <code>(pad ...)</code>, and <code>(segment ...)</code> lowers into typed <code>BoardModel</code> structs and passes our Tier 4 corpus oracle ratchets.",
+    });
+
+    initQuiz("quiz-0024", [
+      {
+            "question": "Why do we separate S-expression syntax parsing (`L0` `kicad-sexpr`) from domain lowering (`L1`/`L4` `BoardModel::from_kicad_pcb_sexpr`)?",
+            "options": [
+                  "To isolate untyped syntax errors from typed domain validation",
+                  "To force the tokenizer to allocate GPU vertex buffers",
+                  "To allow broken parentheses inside valid copper pad coordinates",
+                  "To skip all numeric coordinate checks during file import"
+            ],
+            "correctIndex": 0,
+            "explanation": "Separating `L0` S-expression syntax parsing from `L1`/`L4` semantic lowering keeps `kicad-sexpr` independent of domain types while giving `KicadLowerError` precise diagnostics for missing fields, bad floats, or unknown layer names.",
+            "wrongHint": "Compare `SexprParseError` and `KicadLowerError` in `crates/pcb-doc/src/lib.rs`."
+      },
+      {
+            "question": "What does our Tier 4 pinned KiCad corpus oracle verify for every board fixture?",
+            "options": [
+                  "That every board contains zero copper trace segments",
+                  "That parsing and S-expression round-tripping meet ratchet floors",
+                  "That external corpus files overwrite source code files",
+                  "That invalid layer names silently default to silkscreen"
+            ],
+            "correctIndex": 1,
+            "explanation": "`run_pinned_kicad_corpus()` parses every pinned `.kicad_pcb` board, exports it back via `to_kicad_pcb_sexpr()`, re-parses the exported text, and asserts `meets_ratchet_floors()`.",
+            "wrongHint": "Inspect `run_pinned_kicad_corpus()` and `CorpusOracleReport::meets_ratchet_floors()`."
+      },
+      {
+            "question": "According to Critical Rule #4 of our testing architecture, how must every corpus crash fix be verified?",
+            "options": [
+                  "By deleting the failing board from the test suite",
+                  "By lowering the corpus pass floor constant to zero",
+                  "By adding a small deterministic synthetic regression unit test",
+                  "By disabling clippy lints across the workspace parser crate"
+            ],
+            "correctIndex": 2,
+            "explanation": "Every parser or lowering crash discovered against a corpus file must be captured as a small, self-contained synthetic regression test in the test suite so it can never recur.",
+            "wrongHint": "Check Critical Rule #4 in our Testing & Mutation Coverage Cheat Sheet."
+      }
+]);
+
+    initKicadCorpusSimulator("kicad-corpus-sim");
+  </script>
+</body>
+</html>

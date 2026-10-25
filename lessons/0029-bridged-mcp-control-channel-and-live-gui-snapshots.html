@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Lesson 0029: Bridged MCP Control Channel, Bearer Auth &amp; Cropped Live GUI Snapshots — Learn Rust &amp; egui</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
+    <div>
+      <a href="../index.html">Index</a>
+      <a href="./0001-project-setup-and-eframe-boot.html">0001</a>
+      <a href="./0002-the-immediate-mode-loop.html">0002</a>
+      <a href="./0003-custom-2d-canvas-and-painter.html">0003</a>
+      <a href="./0004-world-to-screen-transforms-pan-and-zoom.html">0004</a>
+      <a href="./0005-modeling-layers-traces-and-footprints.html">0005</a>
+      <a href="./0006-hit-testing-and-net-cross-probing.html">0006</a>
+      <a href="./0007-schematic-symbols-and-text-rendering.html">0007</a>
+      <a href="./0008-split-viewports-and-egui-scene.html">0008</a>
+      <a href="./0009-searchable-netlist-and-bom-inspector.html">0009</a>
+      <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html">0010</a>
+      <a href="./0011-review-pins-and-sticky-note-callouts.html">0011</a>
+      <a href="./0012-review-status-workflow-and-popups.html">0012</a>
+      <a href="./0013-drc-violation-overlay-and-minimap.html">0013</a>
+      <a href="./0014-custom-layer-swatch-widget-and-design-tokens.html">0014</a>
+      <a href="./0015-multi-crate-workspace-doc-vs-ui-egui.html">0015</a>
+      <a href="./0016-loading-board-and-review-files-serde.html">0016</a>
+      <a href="./0017-copy-on-write-arc-document-snapshots.html">0017</a>
+      <a href="./0018-undo-redo-history-and-slider-coalescing.html">0018</a>
+      <a href="./0019-the-command-pattern-and-command-palette.html">0019</a>
+      <a href="./0020-viewport-culling-and-cached-tessellation.html">0020</a>
+      <a href="./0021-non-blocking-file-import-and-progress-ui.html">0021</a>
+      <a href="./0022-headless-snapshot-testing-and-wasm-build.html">0022</a>
+      <a href="./0023-sexpr-tokenizer-and-ast-with-nom.html">0023</a>
+      <a href="./0024-parsing-kicad-pcb-and-sch-into-domain-model.html">0024</a>
+      <a href="./0025-embedded-sql-review-store-with-turso.html">0025</a>
+      <a href="./0026-local-first-review-sync-and-audit-trail.html">0026</a>
+      <a href="./0027-llm-native-spatial-and-electrical-queries.html">0027</a>
+      <a href="./0028-headless-mcp-server-rmcp-and-mock-client.html">0028</a>
+      <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html" class="active">0029</a>
+      <a href="./0030-egui-mcp-inspector-workbench-and-agent-playbooks.html">0030</a>
+      <a href="../reference/glossary.html">Glossary</a>
+      <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Act VII • Agentic Hardware Review &amp; MCP (rmcp)</span>
+  </nav>
+  </header>
+
+  <main>
+    <article class="tufte-article">
+<div class="prose-col">
+<h1>0029. Bridged MCP Control Channel, Bearer Auth &amp; Cropped Live GUI Snapshots</h1>
+<p class="subtitle">Authenticating loopback GUI control commands with constant-time bearer token verification (<code>verify_bearer_token</code>), driving live <code>egui</code> camera focus and layer visibility via <code>LoopbackControlBridge</code>, and generating magic-verified cropped PNG region snapshots (<code>capture_cropped_region_png</code>).</p>
+
+<h2 id="bridging-rmcp-to-the-live-egui-desktop-viewport">Bridging <code>rmcp</code> to the Live <code>egui</code> Desktop Viewport</h2>
+<p>In Lesson <code>0028</code>, our <code>PcbMcpServer</code> ran headlessly in memory—ideal for CI pipelines, but during an interactive design review, an electrical engineer is looking at the live <code>egui</code> canvas. When the engineer asks an AI co-pilot to <em>&quot;Focus on <code>U1</code> and show me a close-up snapshot of the top copper pads,&quot;</em> the MCP server must bridge into the running GUI (<code>LoopbackControlBridge</code>) with <strong>constant-time bearer token authentication</strong> (<code>verify_bearer_token</code>) and bounded <strong>cropped PNG region snapshots</strong> (<code>capture_cropped_region_png</code>).<span class="sidenote-number"></span><span class="sidenote"><strong>Why Constant-Time Bearer Auth &amp; Cropped Snapshots Matter:</strong> Even on <code>127.0.0.1</code>, unauthenticated local sockets are vulnerable to DNS rebinding or untrusted local scripts, and naive string equality (<code>==</code>) leaks token prefixes via timing side channels. Likewise, returning a bounded cropped region ($W \times H \le 16{,}384$) with a verified <code>PNG_MAGIC_HEADER</code> (<code>\x89PNG\r\n\x1a\n</code>) avoids flooding vision models with 4K desktop screenshots.</span></p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
+flowchart LR
+    Agent["MCP Agent / Co-Pilot"] --&gt;|"ControlRequest&lt;br/&gt;+ Bearer Token"| Bridge["LoopbackControlBridge&lt;br/&gt;verify_bearer_token()"]
+    Bridge --&gt;|"FocusRegion / SetLayer"| Viewport["Live egui Viewport&lt;br/&gt;Camera Rect &amp; Layer Flags"]
+    Bridge --&gt;|"CaptureRegionSnapshot"| Png["capture_cropped_region_png()&lt;br/&gt;PNG_MAGIC_HEADER + IHDR/IEND"]
+    style Bridge fill:#14231c,stroke:#3dd68c,color:#e6edf3
+    style Png fill:#141a21,stroke:#3b8eea,color:#e6edf3
+  </pre>
+</figure>
+<h2 id="constant-time-bearer-token-verification-amp-cropped-png-encoding">Constant-Time Bearer Token Verification &amp; Cropped PNG Encoding</h2>
+<p>We accumulate bitwise XOR differences across all overlapping bytes (<code>diff |= usize::from(a ^ b)</code>) after seeding <code>diff</code> with <code>exp_bytes.len() ^ prov_bytes.len()</code>:</p>
+<p>$$
+\text{diff} = \bigl(\text{len}(A) \oplus \text{len}(B)\bigr) ;\lor; \bigoplus_{i=0}^{\min(\text{len}(A),,\text{len}(B))-1} \bigl(A_i \oplus B_i\bigr)
+$$</p>
+<figure>
+  <figcaption>Constant-time bearer verification and cropped PNG snapshot generator in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">pub const PNG_MAGIC_HEADER: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CroppedPngSnapshot {
+    pub min_x_mm: i64,
+    pub min_y_mm: i64,
+    pub max_x_mm: i64,
+    pub max_y_mm: i64,
+    pub width_px: u32,
+    pub height_px: u32,
+    pub visible_pad_count: usize,
+    pub png_bytes: Vec&lt;u8&gt;,
+}</code></pre>
+</figure>
+</div>
+
+<section class="full-width-panel" id="bridged-mcp-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Authenticated Loopback Control Bridge &amp; Cropped PNG Snapshots</span>
+    <span class="panel-badge">verify_bearer_token • ui.focus_region • ContentBlock::image</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Test bearer-token authentication on the loopback control channel, focus the live <code>egui</code> camera on a region, and capture a cropped board snapshot returned as MCP <code>ContentBlock::image</code>.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Bridge Control Actions</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-br-act="auth-ok">1. Authenticate Valid Bearer Token</button>
+        <button type="button" class="egui-btn" data-br-act="auth-fail">2. Test Invalid Token (Rejected)</button>
+        <button type="button" class="egui-btn" data-br-act="focus-u1">3. <code>ui.focus_region</code> around <code>U1</code></button>
+        <button type="button" class="egui-btn" data-br-act="snapshot">4. <code>ui.region_snapshot</code> (Base64 PNG)</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Live <code>egui</code> Viewport &amp; Image Payload</h4>
+      <div data-role="br-preview" style="font-family:var(--font-mono); font-size:0.75rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. Bridge Telemetry</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="br-state"></code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 2: Constant-Time Bearer Verification &amp; Cropped PNG Bounds</span>
+    <span class="panel-badge">Skill Practice • Security &amp; Multimodal Snapshots</span>
+  </div>
+  <p>Complete <code>verify_bearer_token</code> and <code>capture_cropped_region_png</code> in <code>crates/pcb-doc/src/lib.rs</code>.</p>
+<pre class="keep-markup"><code class="language-rust">pub fn verify_bearer_token(expected: &amp;str, provided: &amp;str) -&gt; Result&lt;(), ControlError&gt; {
+    if expected.is_empty() {
+        return Err(ControlError::Unauthorized);
+    }
+    let exp_bytes = expected.as_bytes();
+    let prov_bytes = provided.as_bytes();
+    let mut diff = exp_bytes.len() ^ prov_bytes.len();
+    for (&amp;a, &amp;b) in exp_bytes.iter().zip(prov_bytes.iter()) {
+        diff |= <input id="ex0029-blank-1" class="code-challenge-input" style="width:175px;" placeholder="usize::from(a ^ b)" autocomplete="off">;
+    }
+    if diff == 0 {
+        Ok(())
+    } else {
+        Err(ControlError::Unauthorized)
+    }
+}
+
+pub fn capture_cropped_region_png(
+    board: &amp;BoardModel,
+    min_x_mm: i64,
+    min_y_mm: i64,
+    max_x_mm: i64,
+    max_y_mm: i64,
+    width_px: u32,
+    height_px: u32,
+) -&gt; Result&lt;CroppedPngSnapshot, ControlError&gt; {
+    if min_x_mm &gt;= max_x_mm || min_y_mm &gt;= max_y_mm {
+        return Err(ControlError::InvalidRegionBounds);
+    }
+    if width_px == 0 || height_px == 0 || width_px.saturating_mul(height_px) &gt; 16_384 {
+        return Err(ControlError::InvalidSnapshotDimensions);
+    }
+    let mut png_bytes = Vec::with_capacity(24);
+    png_bytes.extend_from_slice(&amp;<input id="ex0029-blank-2" class="code-challenge-input" style="width:170px;" placeholder="PNG_MAGIC_HEADER" autocomplete="off">);
+    png_bytes.extend_from_slice(&amp;width_px.to_be_bytes());
+    png_bytes.extend_from_slice(&amp;height_px.to_be_bytes());
+    let visible_pad_count = board
+        .pads
+        .iter()
+        .filter(|p| {
+            let x = p.center_mm.x.round() as i64;
+            let y = p.center_mm.y.round() as i64;
+            x &gt;= min_x_mm &amp;&amp; x &lt;= max_x_mm &amp;&amp; y &gt;= min_y_mm &amp;&amp; y &lt;= max_y_mm
+        })
+        .count();
+    png_bytes.extend_from_slice(&amp;(visible_pad_count as u32).to_be_bytes());
+    png_bytes.extend_from_slice(b"IEND");
+    Ok(CroppedPngSnapshot {
+        min_x_mm,
+        min_y_mm,
+        max_x_mm,
+        max_y_mm,
+        width_px,
+        height_px,
+        visible_pad_count,
+        png_bytes,
+    })
+}</code></pre>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn-primary" id="btn-check-ex0029">Check Rust Code</button>
+    <button type="button" class="btn-secondary" id="btn-hint-ex0029">Show Hint</button>
+  </div>
+  <div id="ex0029-feedback" class="feedback-box"></div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Lab 3: Bearer Token Auth, Loopback Control Bridge &amp; Cropped PNG Mutation Gate (<code>0029</code>)</span>
+    <span class="panel-badge">cargo test --workspace + cargo mutants</span>
+  </div>
+  <p>Run the workspace test suite (including <code>bridged_control_channel_bearer_auth_and_cropped_png_snapshots_work</code>) and mutate all bearer-auth, loopback bridge, and cropped PNG snapshot functions:</p>
+<figure>
+  <figcaption>Run bearer auth, loopback bridge, and cropped PNG mutation gate on 0028</figcaption>
+  <pre><code class="language-bash">cargo test --manifest-path ./apps/0029-bridged-mcp-control-channel-and-live-gui-snapshots/Cargo.toml --workspace
+cargo mutants --manifest-path ./apps/0029-bridged-mcp-control-channel-and-live-gui-snapshots/Cargo.toml --workspace --in-place -F "verify_bearer_token|capture_cropped_region_png|LoopbackControlBridge::dispatch|focus_u1_via_bridge|capture_u1_cropped_png"</code></pre>
+</figure>
+  <div class="mutation-scoreboard">
+    <div class="mutation-stat tier">
+      <div class="stat-label">Verification Tier</div>
+      <div class="stat-value">Tier 5 + Tier 6 (Security &amp; Multimodal Snapshot Gate)</div>
+    </div>
+    <div class="mutation-stat caught">
+      <div class="stat-label">Target Caught Mutants</div>
+      <div class="stat-value">533 / 533 (100%)</div>
+    </div>
+    <div class="mutation-stat missed">
+      <div class="stat-label">Target Missed Mutants</div>
+      <div class="stat-value">0 Missed</div>
+    </div>
+  </div>
+      <ul class="step-checklist">
+        <li>
+          <input type="checkbox" id="verify-0029-1">
+          <label for="verify-0029-1">
+            <code>cargo test --manifest-path ./apps/0029-bridged-mcp-control-channel-and-live-gui-snapshots/Cargo.toml --workspace</code> passes all <strong>30 tests</strong> (<strong>3</strong> in <code>kicad-sexpr</code>, <strong>21</strong> in <code>pcb-doc</code>, and <strong>6</strong> in <code>pcb-reviewer</code>).
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0029-2">
+          <label for="verify-0029-2">
+            <code>bridged_control_channel_bearer_auth_and_cropped_png_snapshots_work</code> verifies constant-time bearer rejection on empty/mismatched tokens, region bounds and pixel budget checks (<code>16_384</code> max pixels), <code>PNG_MAGIC_HEADER</code> prefix verification, and <code>LoopbackControlBridge::dispatch</code>.
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0029-3">
+          <label for="verify-0029-3">
+            <code>cargo mutants</code> catches <strong>100% of viable bearer-auth, loopback bridge, and cropped PNG mutants</strong> (<code>0 missed</code>).
+          </label>
+        </li>
+      </ul>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Retrieval Practice</span>
+    <span class="panel-badge">3 Questions • Equal-Length Options</span>
+  </div>
+  <div id="quiz-0029"></div>
+</section>
+
+<div class="prose-col">
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
+<div class="callout">
+  <strong>Read (5 mins):</strong> <a href="https://www.w3.org/TR/png/#5PNG-file-signature">PNG Specification — File Signature (<code>89 50 4E 47 0D 0A 1A 0A</code>)</a> and <a href="https://modelcontextprotocol.io/specification/2025-03-26/server/tools#image-content">Model Context Protocol — Image Content Blocks</a>.
+</div>
+<div class="teacher-prompt-box">
+  Next up in <a href="./0030-egui-mcp-inspector-workbench-and-agent-playbooks.html"><strong>Lesson 0030: Embedded <code>egui</code> MCP Inspector Workbench, Agent Playbooks &amp; Act VII Scorecard</strong></a>, we will embed an interactive <strong>MCP Inspector Workbench</strong> directly inside our <code>egui</code> app to toggle between <code>HeadlessDuplex</code> and <code>BridgedLoopback</code> transports, audit JSON-RPC 2.0 frames, execute a 4-step <strong>Power Integrity Agent Playbook</strong>, and seal the final Act VII <code>QualityScorecard</code>!
+</div>
+</div>
+    </article>
+  </main>
+
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
+
+  <script src="../assets/course.js"></script>
+  <script>
+    initCodeExercise({
+      checkBtnId: "btn-check-ex0029",
+      hintBtnId: "btn-hint-ex0029",
+      feedbackId: "ex0029-feedback",
+      blanks: [
+        {
+          inputId: "ex0029-blank-1",
+          accepted: ["usize::from(a ^ b)"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Accumulate bitwise XOR byte differences via usize::from(a ^ b)",
+        },
+        {
+          inputId: "ex0029-blank-2",
+          accepted: ["PNG_MAGIC_HEADER"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Prefix the snapshot buffer with the 8-byte PNG_MAGIC_HEADER",
+        }
+      ],
+      hintMessage: "Accumulate byte differences with <code>usize::from(a ^ b)</code> and prefix the PNG byte stream with <code>PNG_MAGIC_HEADER</code>.",
+      successMessage: "Your loopback bridge now authenticates bearer tokens in constant time and produces magic-verified cropped PNG snapshots!",
+    });
+
+    initQuiz("quiz-0029", [
+      {
+            "question": "Why does `verify_bearer_token` accumulate byte differences with bitwise XOR (`^`) and OR (`|=`) instead of returning on the first mismatched character?",
+            "options": [
+                  "Returning early leaks token prefix lengths through measurable timing side channels",
+                  "Bitwise XOR automatically encrypts the bearer token inside system memory pages",
+                  "Standard equality operators cannot compare UTF-8 slices across async task boundaries",
+                  "Rust forbids early return statements inside functions returning custom error enums"
+            ],
+            "correctIndex": 0,
+            "explanation": "Constant-time comparison inspects every overlapping byte before branching on `diff == 0` so an attacker cannot guess the bearer token one character at a time by measuring response latency.",
+            "wrongHint": "Inspect the `for (&a, &b) in exp_bytes.iter().zip(prov_bytes.iter())` loop in `verify_bearer_token`."
+      },
+      {
+            "question": "What happens when an MCP agent calls `capture_cropped_region_png` with `min_x_mm = 120` and `max_x_mm = 90`?",
+            "options": [
+                  "The snapshot generator swaps the coordinates and renders the region normally",
+                  "The function rejects the inverted box with `ControlError::InvalidRegionBounds` before allocating pixels",
+                  "The function returns an empty byte vector with zero pixel dimensions",
+                  "The `egui` viewport resets the camera zoom to the board origin"
+            ],
+            "correctIndex": 1,
+            "explanation": "Rejecting inverted or zero-area bounding boxes (`min_x_mm >= max_x_mm || min_y_mm >= max_y_mm`) prevents silent mis-crops when an LLM reverses minimum and maximum coordinates.",
+            "wrongHint": "Check the first guard in `capture_cropped_region_png`."
+      },
+      {
+            "question": "How does `capture_cropped_region_png` verify that a generated snapshot begins with a valid PNG file signature?",
+            "options": [
+                  "It Base64-encodes the JSON schema and prepends an ASCII header line",
+                  "It writes a temporary file and invokes an external image viewer",
+                  "It prefixes `png_bytes` with the eight-byte `PNG_MAGIC_HEADER` signature before encoding dimensions",
+                  "It hashes the board title with CRC-32 and stores the checksum"
+            ],
+            "correctIndex": 2,
+            "explanation": "Every valid PNG stream begins with the 8-byte signature `89 50 4E 47 0D 0A 1A 0A` (`PNG_MAGIC_HEADER`), which downstream MCP clients and tests verify immediately.",
+            "wrongHint": "Look at `PNG_MAGIC_HEADER` in `crates/pcb-doc/src/lib.rs`."
+      }
+]);
+
+    initBridgedMcpSimulator("bridged-mcp-sim");
+  </script>
+</body>
+</html>

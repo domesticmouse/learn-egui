@@ -1,4 +1,4 @@
-# Act II (`0006`–`0009`) Implemented: Schematic Views, `egui::Scene`, Virtualized BOM & `egui_kittest`
+# Act II (`0007`–`0010`) Implemented: Schematic Views, `egui::Scene`, Virtualized BOM & `egui_kittest`
 
 Implemented both the runnable Rust/egui applications (`apps/0006-*` through `apps/0009-*`) and interactive HTML lessons (`lessons/0006-*` through `lessons/0009-*`) for Act II, advancing [[MISSION.md]] and following [[0003-continuous-testing-and-mutation-coverage.md]] and [[0004-act-1-2d-cad-canvas-and-viewport-implemented.md]].
 
@@ -9,4 +9,4 @@ Implemented both the runnable Rust/egui applications (`apps/0006-*` through `app
 - **`0009-keyboard-shortcuts-and-point-to-point-ruler`**: 19 unit + `egui_kittest` tests pass; `cargo mutants --in-place` catches `59 / 59 viable mutants (14 unviable, 0 missed)`.
 
 ## Implications
-- Ready to advance to Act III (`0010`–`0013`: Design Review Workflows), covering anchored review pins (`HashMap<PinId, ReviewNote>`), triage popups (`Response::context_menu`, `ComboBox`), DRC violation overlays & minimap clamping, and custom `egui::Widget` layer swatches.
+- Ready to advance to Act III (`0011`–`0014`: Design Review Workflows), covering anchored review pins (`HashMap<PinId, ReviewNote>`), triage popups (`Response::context_menu`, `ComboBox`), DRC violation overlays & minimap clamping, and custom `egui::Widget` layer swatches.

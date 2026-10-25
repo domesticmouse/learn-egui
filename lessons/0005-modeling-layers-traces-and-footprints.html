@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Lesson 0005: Modelling Layers, Traces &amp; Deterministic Z-Order</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
+    <div>
+      <a href="../index.html">Index</a>
+      <a href="./0001-project-setup-and-eframe-boot.html">0001</a>
+      <a href="./0002-the-immediate-mode-loop.html">0002</a>
+      <a href="./0003-custom-2d-canvas-and-painter.html">0003</a>
+      <a href="./0004-world-to-screen-transforms-pan-and-zoom.html">0004</a>
+      <a href="./0005-modeling-layers-traces-and-footprints.html" class="active">0005</a>
+      <a href="./0006-hit-testing-and-net-cross-probing.html">0006</a>
+      <a href="./0007-schematic-symbols-and-text-rendering.html">0007</a>
+      <a href="./0008-split-viewports-and-egui-scene.html">0008</a>
+      <a href="./0009-searchable-netlist-and-bom-inspector.html">0009</a>
+      <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html">0010</a>
+      <a href="./0011-review-pins-and-sticky-note-callouts.html">0011</a>
+      <a href="./0012-review-status-workflow-and-popups.html">0012</a>
+      <a href="./0013-drc-violation-overlay-and-minimap.html">0013</a>
+      <a href="./0014-custom-layer-swatch-widget-and-design-tokens.html">0014</a>
+      <a href="./0015-multi-crate-workspace-doc-vs-ui-egui.html">0015</a>
+      <a href="./0016-loading-board-and-review-files-serde.html">0016</a>
+      <a href="./0017-copy-on-write-arc-document-snapshots.html">0017</a>
+      <a href="./0018-undo-redo-history-and-slider-coalescing.html">0018</a>
+      <a href="./0019-the-command-pattern-and-command-palette.html">0019</a>
+      <a href="./0020-viewport-culling-and-cached-tessellation.html">0020</a>
+      <a href="./0021-non-blocking-file-import-and-progress-ui.html">0021</a>
+      <a href="./0022-headless-snapshot-testing-and-wasm-build.html">0022</a>
+      <a href="./0023-sexpr-tokenizer-and-ast-with-nom.html">0023</a>
+      <a href="./0024-parsing-kicad-pcb-and-sch-into-domain-model.html">0024</a>
+      <a href="./0025-embedded-sql-review-store-with-turso.html">0025</a>
+      <a href="./0026-local-first-review-sync-and-audit-trail.html">0026</a>
+      <a href="./0027-llm-native-spatial-and-electrical-queries.html">0027</a>
+      <a href="./0028-headless-mcp-server-rmcp-and-mock-client.html">0028</a>
+      <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html">0029</a>
+      <a href="./0030-egui-mcp-inspector-workbench-and-agent-playbooks.html">0030</a>
+      <a href="../reference/glossary.html">Glossary</a>
+      <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Act I: The 2D CAD Canvas &amp; Viewport</span>
+  </nav>
+  </header>
+
+  <main>
+    <article class="tufte-article">
+<div class="prose-col">
+<h1>Lesson 0005: Modelling Layers, Traces &amp; Deterministic Z-Order</h1>
+<p class="subtitle">Structuring PCB geometry with <code>enum PcbLayer</code>, <code>Vec&lt;TraceSegment&gt;</code>, exhaustive <code>match</code>, and shared loop borrowing</p>
+
+<p>In <a href="./0004-world-to-screen-transforms-pan-and-zoom.html">Lesson 0004</a>, we transformed physical millimetre coordinates into screen space, but our traces were still individual hardcoded lines inside <code>paint_board</code>. Real KiCad files, on the other hand, contain thousands of segments across multiple layers—and they can appear in whatever order the router happened to save them.</p>
+<p>Now, because <code>egui::Painter</code> uses the classic <strong>painter's algorithm</strong> (every shape you emit is drawn directly on top of earlier shapes), drawing traces in raw file order means a <code>BottomCopper</code> ground trace can paint right over the top of a <code>TopCopper</code> pad or <code>Silkscreen</code> label. Not ideal when you are trying to debug a board.</p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
+flowchart LR
+    Raw["self.traces: Vec&lt;TraceSegment&gt;&lt;br/&gt;(Any file order)"] --&gt; Filter["Filter by self.is_layer_visible(t.layer)"]
+    Filter --&gt; Sort["Sort by t.layer.z_rank()&lt;br/&gt;0: BottomCu → 1: TopCu → 2: Silk → 3: Ratsnest"]
+    Sort --&gt; Borrow["for seg in &amp;ordered_traces&lt;br/&gt;(Shared borrow &amp;T)"]
+    Borrow --&gt; Paint["painter.line_segment([p0, p1], Stroke)"]
+  </pre>
+</figure>
+<p><em>Figure 5.1: Filtering visible segments and sorting by <code>PcbLayer::z_rank()</code> guarantees deterministic back-to-front CAD rendering every frame.</em></p>
+<h2 id="1-exhaustive-layer-modelling-with-enum-pcblayer">1. Exhaustive Layer Modelling with <code>enum PcbLayer</code></h2>
+<p>So, instead of scattering four separate boolean <code>if</code> blocks across our renderer, let's model a PCB layer as a proper Rust <a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"><code>enum</code></a> and attach pure methods using exhaustive <a href="https://doc.rust-lang.org/book/ch06-02-match.html"><code>match</code></a> expressions:<span class="sidenote-number"></span><span class="sidenote">Because Rust's <code>match</code> is exhaustive at compile time, if you add an inner copper layer like <code>PcbLayer::In1Cu</code> later, <code>rustc</code> immediately flags every <code>match</code> block (<code>z_rank</code>, <code>color</code>, <code>is_layer_visible</code>) that needs updating.</span></p>
+<pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PcbLayer {
+    BottomCopper,
+    TopCopper,
+    Silkscreen,
+    Ratsnest,
+}
+
+impl PcbLayer {
+    /// Deterministic back-to-front draw rank (0 = furthest back, 3 = topmost overlay).
+    pub fn z_rank(self) -&gt; u8 {
+        match self {
+            PcbLayer::BottomCopper =&gt; 0,
+            PcbLayer::TopCopper =&gt; 1,
+            PcbLayer::Silkscreen =&gt; 2,
+            PcbLayer::Ratsnest =&gt; 3,
+        }
+    }
+
+    pub fn color(self) -&gt; Color32 {
+        match self {
+            PcbLayer::BottomCopper =&gt; Color32::from_rgb(59, 142, 234),
+            PcbLayer::TopCopper =&gt; Color32::from_rgb(224, 82, 67),
+            PcbLayer::Silkscreen =&gt; Color32::from_rgb(240, 230, 140),
+            PcbLayer::Ratsnest =&gt; Color32::from_rgb(111, 247, 255),
+        }
+    }
+}</code></pre>
+<h2 id="2-dynamic-collections-vec-lt-t-gt-amp-shared-loop-borrowing">2. Dynamic Collections (<code>Vec&lt;T&gt;</code>) &amp; Shared Loop Borrowing</h2>
+<p>Next, we store our board's segments in a growable heap vector <a href="https://doc.rust-lang.org/book/ch08-01-vectors.html"><code>Vec&lt;TraceSegment&gt;</code></a> on <code>PcbReviewerApp</code>.<span class="sidenote-number"></span><span class="sidenote">Turns out, writing <code>for seg in self.traces</code> without an <code>&amp;</code> is a rite-of-passage error in Rust: iterating over a <code>Vec</code> by value <em>moves and consumes</em> the vector on Frame #1! Borrowing with <code>&amp;self.traces</code> (or <code>self.traces.iter()</code>) lets you read all segments 60 times a second while <code>self.traces</code> keeps ownership.</span></p>
+<pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TraceSegment {
+    pub start: Pos2,
+    pub end: Pos2,
+    pub width_mm: f32,
+    pub layer: PcbLayer,
+}
+
+impl PcbReviewerApp {
+    pub fn is_layer_visible(&amp;self, layer: PcbLayer) -&gt; bool {
+        match layer {
+            PcbLayer::BottomCopper =&gt; self.show_bottom_copper,
+            PcbLayer::TopCopper =&gt; self.show_top_copper,
+            PcbLayer::Silkscreen =&gt; self.show_silkscreen,
+            PcbLayer::Ratsnest =&gt; self.show_ratsnest,
+        }
+    }
+
+    pub fn visible_traces_in_z_order(&amp;self) -&gt; Vec&lt;TraceSegment&gt; {
+        let mut visible: Vec&lt;TraceSegment&gt; = self
+            .traces
+            .iter()
+            .copied()
+            .filter(|t| self.is_layer_visible(t.layer))
+            .collect();
+        visible.sort_by_key(|t| t.layer.z_rank());
+        visible
+    }
+}</code></pre>
+</div>
+
+<section class="full-width-panel" id="layer-zorder-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Compare Sorted <code>z_rank()</code> vs. Unsorted File Order</span>
+    <span class="panel-badge">PcbLayer • Vec&lt;TraceSegment&gt; • sort_by_key</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Uncheck <strong>Sort by <code>z_rank()</code></strong> below to see what happens when <code>BottomCopper</code> happens to sit at the end of <code>self.traces</code>: it paints right on top of <code>TopCopper</code> and <code>Silkscreen</code>! Re-enable <code>z_rank()</code> sorting to restore proper back-to-front CAD layer ordering.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Visibility &amp; Z-Sort Controls</h4>
+      <label class="egui-checkbox">
+        <input type="checkbox" data-z="bottom" checked>
+        <span style="color:#3b8eea;">■</span> BottomCopper (z=0)
+      </label>
+      <label class="egui-checkbox">
+        <input type="checkbox" data-z="top" checked>
+        <span style="color:#e05243;">■</span> TopCopper (z=1)
+      </label>
+      <label class="egui-checkbox">
+        <input type="checkbox" data-z="silk" checked>
+        <span style="color:#f0e68c;">■</span> Silkscreen (z=2)
+      </label>
+      <label class="egui-checkbox">
+        <input type="checkbox" data-z="rats" checked>
+        <span style="color:#6ff7ff;">---</span> Ratsnest (z=3)
+      </label>
+      <hr style="border:none; border-top:1px solid var(--border-subtle); margin:0.6rem 0;">
+      <label class="egui-checkbox" style="font-weight:600; color:var(--accent-pcb);">
+        <input type="checkbox" data-z="sort" checked>
+        Sort by <code>layer.z_rank()</code>
+      </label>
+    </div>
+
+    <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:220px;">
+      <svg viewBox="0 0 310 210" width="100%" height="210" aria-label="Z-Order Layer Overlap Comparison">
+        <rect x="20" y="16" width="270" height="178" rx="6" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
+        <g data-svg="z-layers"></g>
+      </svg>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Resulting Paint Sequence</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.78rem; padding:0.8rem;"><code class="language-rust" data-role="zorder-state"></code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 2: Filter &amp; Sort Visible Traces</span>
+    <span class="panel-badge">Skill Practice • Tight Feedback Loop</span>
+  </div>
+  <p>Fill in the three blanks below so that (1) <code>PcbLayer::Silkscreen</code> maps to <code>self.show_silkscreen</code>, (2) <code>visible_traces_in_z_order</code> filters by <code>self.is_layer_visible(t.layer)</code>, and (3) the collected vector is sorted by <code>t.layer.z_rank()</code>:</p>
+<pre class="keep-markup"><code class="language-rust">pub fn is_layer_visible(&amp;self, layer: PcbLayer) -&gt; bool {
+    match layer {
+        PcbLayer::BottomCopper =&gt; self.show_bottom_copper,
+        PcbLayer::TopCopper =&gt; self.show_top_copper,
+        <input id="ex-blank-1" class="code-challenge-input" style="width:190px;" placeholder="/* 1: silk variant */" autocomplete="off"> =&gt; self.show_silkscreen,
+        PcbLayer::Ratsnest =&gt; self.show_ratsnest,
+    }
+}
+
+pub fn visible_traces_in_z_order(&amp;self) -&gt; Vec&lt;TraceSegment&gt; {
+    let mut visible: Vec&lt;TraceSegment&gt; = self
+        .traces
+        .iter()
+        .copied()
+        .<input id="ex-blank-2" class="code-challenge-input" style="width:110px;" placeholder="/* 2: adapter */" autocomplete="off">(|t| self.is_layer_visible(t.layer))
+        .collect();
+    visible.sort_by_key(|t| <input id="ex-blank-3" class="code-challenge-input" style="width:160px;" placeholder="/* 3: rank key */" autocomplete="off">);
+    visible
+}</code></pre>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn-primary" id="btn-check-ex">Check Rust Code</button>
+    <button type="button" class="btn-secondary" id="btn-hint-ex">Show Hint</button>
+  </div>
+  <div id="ex-feedback" class="feedback-box"></div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 3: Eliminating Match-Arm Mutants</span>
+    <span class="panel-badge">cargo test + cargo mutants</span>
+  </div>
+  <p>One of <code>cargo-mutants</code>'s best tricks is <strong>match-arm mutation</strong>: it tries deleting or swapping individual <code>match</code> arms inside <code>z_rank()</code>, <code>color()</code>, and <code>is_layer_visible()</code>. By asserting each variant's exact rank, colour, and visibility toggle in isolation, our 9 unit tests catch all 20 viable mutants!</p>
+<pre><code class="language-rust">#[test]
+fn visible_traces_in_z_order_filters_hidden_layers_and_sorts_back_to_front() {
+    let mut app = PcbReviewerApp::default();
+    // Input traces are deliberately stored in reverse (front-to-back) order:
+    // Ratsnest (3) -&gt; Silkscreen (2) -&gt; TopCopper (1) -&gt; BottomCopper (0)
+    let default_visible = app.visible_traces_in_z_order();
+    let default_layers: Vec&lt;PcbLayer&gt; = default_visible.iter().map(|t| t.layer).collect();
+    assert_eq!(
+        default_layers,
+        vec![
+            PcbLayer::BottomCopper,
+            PcbLayer::TopCopper,
+            PcbLayer::Silkscreen
+        ]
+    );
+}</code></pre>
+  <div class="mutation-scoreboard">
+    <div class="mutation-stat tier">
+      <div class="stat-label">Verification Tier</div>
+      <div class="stat-value">Tier 2: Domain &amp; Z-Order Tests</div>
+    </div>
+    <div class="mutation-stat caught">
+      <div class="stat-label">Target Caught Mutants</div>
+      <div class="stat-value">20 Caught (7 Unviable)</div>
+    </div>
+    <div class="mutation-stat missed">
+      <div class="stat-label">Target Missed Mutants</div>
+      <div class="stat-value">0 Missed</div>
+    </div>
+  </div>
+      <ul class="step-checklist">
+        <li>
+          <input type="checkbox" id="verify-1">
+          <label for="verify-1">
+            <strong>1. Run <code>cargo test</code> in <code>apps/0005-modeling-layers-traces-and-footprints</code>:</strong> Confirm all 9 unit tests pass.
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-2">
+          <label for="verify-2">
+            <strong>2. Run <code>cargo mutants --in-place</code>:</strong> Verify that all 20 viable mutants (including every <code>match</code> arm in <code>z_rank</code>, <code>color</code>, and <code>is_layer_visible</code>) are <strong>Caught</strong> with <strong>0 Missed</strong>.
+          </label>
+        </li>
+      </ul>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Retrieval Practice: <code>enum</code>, <code>Vec&lt;T&gt;</code> &amp; Z-Ordering</span>
+    <span class="panel-badge">3 Questions • Equal-Length Options</span>
+  </div>
+  <div id="quiz-container"></div>
+</section>
+
+<div class="prose-col">
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
+<div class="callout">
+  <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/book/ch06-02-match.html">The Rust Programming Language — §6.2 &quot;The <code>match</code> Control Flow Construct&quot;</a>.
+Review how exhaustive pattern matching works on custom <code>enum</code> types.
+</div>
+<div class="teacher-prompt-box">
+  <strong>Next Step:</strong> Now that our board renders physical traces and pads in deterministic Z-order, let's complete Act I by adding interactive mouse hit-testing and net highlighting in <a href="./0006-hit-testing-and-net-cross-probing.html"><strong>Lesson 0006: Hit-Testing &amp; Net Cross-Probing (<code>Option&lt;NetId&gt;</code>)</strong></a>!
+</div>
+</div>
+    </article>
+  </main>
+
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
+
+  <script src="../assets/course.js"></script>
+  <script>
+    initCodeExercise({
+      checkBtnId: "btn-check-ex",
+      hintBtnId: "btn-hint-ex",
+      feedbackId: "ex-feedback",
+      blanks: [
+        {
+          inputId: "ex-blank-1",
+          accepted: ["PcbLayer::Silkscreen"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Match the <code>Silkscreen</code> variant of <code>PcbLayer</code>.",
+        },
+        {
+          inputId: "ex-blank-2",
+          accepted: ["filter"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Call the iterator adapter that keeps only elements matching a boolean predicate.",
+        },
+        {
+          inputId: "ex-blank-3",
+          accepted: ["t.layer.z_rank()"],
+          getErrorHint: (val) =>
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Return the numeric Z-rank of the segment's layer (<code>t.layer.z_rank()</code>).",
+        }
+      ],
+      hintMessage: "<strong>Hints:</strong> (1) <code>PcbLayer::Silkscreen</code>. (2) <code>filter</code>. (3) <code>t.layer.z_rank()</code>.",
+      successMessage: "<strong>All correct!</strong> Your exhaustive <code>match</code> checks <code>PcbLayer::Silkscreen</code>, <code>.filter(...)</code> removes hidden layers, and <code>sort_by_key(|t| t.layer.z_rank())</code> orders segments back-to-front.",
+    });
+
+    initQuiz("quiz-container", [
+      {
+            "question": "Why do we iterate over `&self.traces` (or `self.traces.iter()`) inside `update()` instead of `for seg in self.traces`?",
+            "options": [
+                  "Consuming Vec copies all segments into memory",
+                  "Borrowing Vec preserves data across all draws",
+                  "Consuming Vec corrupts a vertex buffer layout",
+                  "Consuming Vec blocks threads during panel run"
+            ],
+            "correctIndex": 1,
+            "explanation": "Iterating over `self.traces` by value moves and consumes the vector on the first frame; borrowing with `&` reads the segments while keeping `self.traces` intact for every future frame.",
+            "wrongHint": "Remember what happens to ownership of a `Vec<T>` if you pass it by value into a `for` loop."
+      },
+      {
+            "question": "Why does `visible_traces_in_z_order()` sort visible segments by `PcbLayer::z_rank()` before `Painter` draws them?",
+            "options": [
+                  "Painter drops segments when layers are mixed",
+                  "Sorting merges copper lines into one polygon",
+                  "Sorting prevents heap clones on every redraw",
+                  "Painter draws later shapes over earlier ones"
+            ],
+            "correctIndex": 3,
+            "explanation": "`egui::Painter` paints shapes in the exact sequence they are emitted (the painter's algorithm), so sorting back-to-front ensures `TopCopper` and `Silkscreen` draw above `BottomCopper`.",
+            "wrongHint": "Think about what happens in the 2D painter's algorithm when two shapes overlap at the same screen coordinate."
+      },
+      {
+            "question": "What happens when `cargo mutants` alters a single `match` arm inside `PcbLayer::z_rank()` or `is_layer_visible()`?",
+            "options": [
+                  "Testing every enum variant catches the fault",
+                  "Cargo skips any function with match branches",
+                  "Window loops ignore any deleted match branch",
+                  "Static lints block all enum match assertions"
+            ],
+            "correctIndex": 0,
+            "explanation": "Because our unit tests explicitly assert each `PcbLayer` variant's `z_rank()`, `color()`, and visibility flag, mutating any branch immediately fails a test assertion.",
+            "wrongHint": "Look at `pcb_layer_ranks_and_colors_are_distinct_and_ordered_back_to_front` and `is_layer_visible_reflects_each_individual_layer_flag`."
+      }
+]);
+
+    initLayerZOrderSimulator("layer-zorder-sim");
+  </script>
+</body>
+</html>

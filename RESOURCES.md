@@ -7,7 +7,7 @@
 - [Official API Docs: `eframe` on docs.rs](https://docs.rs/eframe/latest/eframe/)
   Official application framework wrapper that runs `egui` natively (via `winit`/`wgpu`/`glow`) and on the web (WebAssembly). Use for: setting up `eframe::App`, window configuration, and persistence.
 - [Official User Guide: `cargo-mutants` (`mutants.rs`)](https://mutants.rs/) and [`sourcefrog/cargo-mutants` on GitHub](https://github.com/sourcefrog/cargo-mutants)
-  Official documentation by Martin Pool for Rust mutation testing. Explains how `cargo mutants` injects deliberate logic faults into functions to verify whether `cargo test` catches them (`Caught` vs. `Missed` vs. `Unviable` mutants), and how to configure `.cargo/mutants.toml`. Use for: monitoring true assertion coverage in every lesson from `0000` through `0029`+.
+  Official documentation by Martin Pool for Rust mutation testing. Explains how `cargo mutants` injects deliberate logic faults into functions to verify whether `cargo test` catches them (`Caught` vs. `Missed` vs. `Unviable` mutants), and how to configure `.cargo/mutants.toml`. Use for: monitoring true assertion coverage in every lesson from `0001` through `0030`+.
 - [Official API Docs: `egui_kittest` on docs.rs](https://docs.rs/egui_kittest/latest/egui_kittest/)
   Official headless UI test runner and visual snapshot harness for `egui` (inspired by Testing Library). Supports querying widgets by label/role, simulating clicks and key presses, and rendering offscreen `wgpu` images. Use for: testing `eframe::App` panels, custom `egui::Widget`s, and visual snapshots without opening an OS window.
 - [Official Book & API Docs: `proptest` on docs.rs](https://docs.rs/proptest/latest/proptest/)
@@ -25,15 +25,15 @@
 - [Official API Docs: `libsql` / Turso Rust SDK on docs.rs](https://docs.rs/libsql/latest/libsql/) and [Turso Rust Reference](https://docs.turso.tech/sdk/rust/reference)
   Official Rust SDK for Turso's embedded SQLite-compatible database engine (`libsql` / `turso`) supporting local database files, parameterized SQL queries, and embedded cloud-synced replicas. Use for: storing review pins, comment threads, and DRC sign-off audit trails in Act VI.
 - [Official Rust SDK for Model Context Protocol: `rmcp` on docs.rs](https://docs.rs/rmcp/latest/rmcp/) and [`modelcontextprotocol/rust-sdk` on GitHub](https://github.com/modelcontextprotocol/rust-sdk)
-  Official Rust implementation of the Model Context Protocol (`rmcp` + `rmcp-macros`), providing `ServerHandler`, `#[tool_router]`, `#[tool]`, `#[tool_handler]`, `schemars` JSON Schema generation, `stdio` transport, and `tokio::io::duplex` in-memory client/server testing. Use for: building the Headless and Bridged MCP servers and the Mock MCP Client & Inspector Workbench in Act VII (`0026`–`0029`).
+  Official Rust implementation of the Model Context Protocol (`rmcp` + `rmcp-macros`), providing `ServerHandler`, `#[tool_router]`, `#[tool]`, `#[tool_handler]`, `schemars` JSON Schema generation, `stdio` transport, and `tokio::io::duplex` in-memory client/server testing. Use for: building the Headless and Bridged MCP servers and the Mock MCP Client & Inspector Workbench in Act VII (`0027`–`0030`).
 - [Local Skill: `egui-app-architecture`](./.agents/skills/egui-app-architecture/SKILL.md)
   Workspace guide on structuring larger engine-first `egui` applications with strict `L0`–`L7` crate layering. Use for: scaling the prototype into a production multi-crate CAD/review system once core `egui` skills are solid.
 - [Local Skill: `egui-app-runner`](./.agents/skills/egui-app-runner/SKILL.md)
-  Workspace guide on running the native desktop app, headless CLI, authenticated loopback TCP control channel (`--control`), Headless vs. Bridged MCP servers (`rmcp`), and WebAssembly builds. Use for: Act V (`0021`) and Act VII (`0026`–`0029`).
+  Workspace guide on running the native desktop app, headless CLI, authenticated loopback TCP control channel (`--control`), Headless vs. Bridged MCP servers (`rmcp`), and WebAssembly builds. Use for: Act V (`0022`) and Act VII (`0027`–`0030`).
 - [Local Skill: `egui-command-engine`](./.agents/skills/egui-command-engine/SKILL.md)
-  Workspace guide on the three-tier command taxonomy (`CommandSpec`, shell UI commands, and automation transports), schema-driven dialogs, and `panic_hunt` fuzzing. Use for: Act V (`0018`) command architecture.
+  Workspace guide on the three-tier command taxonomy (`CommandSpec`, shell UI commands, and automation transports), schema-driven dialogs, and `panic_hunt` fuzzing. Use for: Act V (`0019`) command architecture.
 - [Local Skill: `egui-cow-document-model`](./.agents/skills/egui-cow-document-model/SKILL.md)
-  Workspace guide on immutable copy-on-write (`Arc`) document trees, O(1) snapshot undo/redo history, and deterministic serialization. Use for: Act IV (`0017`) undo/redo engine.
+  Workspace guide on immutable copy-on-write (`Arc`) document trees, O(1) snapshot undo/redo history, and deterministic serialization. Use for: Act IV (`0018`) undo/redo engine.
 - [Local Skill: `egui-testing-infrastructure`](./.agents/skills/egui-testing-infrastructure/SKILL.md)
   Workspace guide on the 7-tier verification architecture (`nextest`, `gpu_lock`, real-file corpus oracles, `panic_hunt` command fuzzing, headless `egui_kittest` snapshots, performance budgets, and scorecards). Use for: scaling our per-lesson `cargo test` + `cargo mutants` workflow into production CI gates.
 

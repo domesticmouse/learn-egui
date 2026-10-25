@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Lesson 0022: Offscreen Snapshot Parity (gpu_lock), Scorecards &amp; WebAssembly (wasm32) — Learn Rust &amp; egui</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
+    <div>
+      <a href="../index.html">Index</a>
+      <a href="./0001-project-setup-and-eframe-boot.html">0001</a>
+      <a href="./0002-the-immediate-mode-loop.html">0002</a>
+      <a href="./0003-custom-2d-canvas-and-painter.html">0003</a>
+      <a href="./0004-world-to-screen-transforms-pan-and-zoom.html">0004</a>
+      <a href="./0005-modeling-layers-traces-and-footprints.html">0005</a>
+      <a href="./0006-hit-testing-and-net-cross-probing.html">0006</a>
+      <a href="./0007-schematic-symbols-and-text-rendering.html">0007</a>
+      <a href="./0008-split-viewports-and-egui-scene.html">0008</a>
+      <a href="./0009-searchable-netlist-and-bom-inspector.html">0009</a>
+      <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html">0010</a>
+      <a href="./0011-review-pins-and-sticky-note-callouts.html">0011</a>
+      <a href="./0012-review-status-workflow-and-popups.html">0012</a>
+      <a href="./0013-drc-violation-overlay-and-minimap.html">0013</a>
+      <a href="./0014-custom-layer-swatch-widget-and-design-tokens.html">0014</a>
+      <a href="./0015-multi-crate-workspace-doc-vs-ui-egui.html">0015</a>
+      <a href="./0016-loading-board-and-review-files-serde.html">0016</a>
+      <a href="./0017-copy-on-write-arc-document-snapshots.html">0017</a>
+      <a href="./0018-undo-redo-history-and-slider-coalescing.html">0018</a>
+      <a href="./0019-the-command-pattern-and-command-palette.html">0019</a>
+      <a href="./0020-viewport-culling-and-cached-tessellation.html">0020</a>
+      <a href="./0021-non-blocking-file-import-and-progress-ui.html">0021</a>
+      <a href="./0022-headless-snapshot-testing-and-wasm-build.html" class="active">0022</a>
+      <a href="./0023-sexpr-tokenizer-and-ast-with-nom.html">0023</a>
+      <a href="./0024-parsing-kicad-pcb-and-sch-into-domain-model.html">0024</a>
+      <a href="./0025-embedded-sql-review-store-with-turso.html">0025</a>
+      <a href="./0026-local-first-review-sync-and-audit-trail.html">0026</a>
+      <a href="./0027-llm-native-spatial-and-electrical-queries.html">0027</a>
+      <a href="./0028-headless-mcp-server-rmcp-and-mock-client.html">0028</a>
+      <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html">0029</a>
+      <a href="./0030-egui-mcp-inspector-workbench-and-agent-playbooks.html">0030</a>
+      <a href="../reference/glossary.html">Glossary</a>
+      <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Act V • Command Engine, Performance &amp; Polish</span>
+  </nav>
+  </header>
+
+  <main>
+    <article class="tufte-article">
+<div class="prose-col">
+<h1>0022. Offscreen Snapshot Parity (<code>gpu_lock</code>), Quality Scorecards &amp; WebAssembly (<code>wasm32</code>)</h1>
+<p class="subtitle">Serializing GPU and offscreen snapshot tests with a process-wide <code>OnceLock&lt;Mutex&lt;()&gt;&gt;</code> (<code>gpu_lock()</code>), computing deterministic 64-bit FNV-1a <code>FrameSnapshotDigest</code> baselines to catch visual regressions, gating <code>wasm32-unknown-unknown</code> target readiness, and generating a release <code>QualityScorecard</code>.</p>
+
+<h2 id="process-wide-gpu-serialization-gpu-lock-amp-visual-snapshot-digests">Process-Wide GPU Serialization (<code>gpu_lock</code>) &amp; Visual Snapshot Digests</h2>
+<p>When <code>cargo test</code> runs tests in parallel threads within a single OS process, spinning up multiple concurrent <code>wgpu</code> devices or offscreen snapshot renderers on Windows WARP, Mesa <code>llvmpipe</code>/RADV, or multi-ICD Vulkan drivers triggers driver-level access violations.<span class="sidenote-number"></span><span class="sidenote"><strong>Rule #1 of GPU &amp; Snapshot Testing (<code>egui-testing-infrastructure</code>):</strong> Every test that touches a GPU device or captures an offscreen visual snapshot must acquire <code>let _gpu = gpu_lock();</code> on its very first line. Using <code>unwrap_or_else(std::sync::PoisonError::into_inner)</code> keeps <code>gpu_lock()</code> 100% panic-free even if a prior test panicked while holding the guard.</span></p>
+<p>Alongside <code>gpu_lock()</code>, we introduce <strong><code>FrameSnapshotDigest</code></strong>: a deterministic 64-bit FNV-1a digest of the active frame's visible layer bitmask (<code>visible_layer_mask</code>), visible culled pad count, visible culled trace count, and active DRC violation count. If any mutation flips a layer visibility bit, alters viewport culling, or suppresses DRC clearance markers, the frame's <code>fnv1a_hash</code> diverges immediately from the golden baseline!</p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
+flowchart LR
+    Lock["let _gpu = gpu_lock();&lt;br/&gt;OnceLock&amp;lt;Mutex&amp;lt;()&amp;gt;&amp;gt;"] --&gt; Render["BoardModel::compute_snapshot_digest&lt;br/&gt;(viewport_mm, layer_mask, min_clearance)"]
+    Render --&gt; Digest["FrameSnapshotDigest&lt;br/&gt;fnv1a_hash: 0x..."]
+    Digest --&gt; Compare{"Matches Golden&lt;br/&gt;Baseline Digest?"}
+    Compare -- "Yes" --&gt; Pass["Tier 3 / Tier 6 Snapshot PASS"]
+    Compare -- "No" --&gt; Fail["Visual Regression Caught!"]
+    style Lock fill:#141a21,stroke:#3b8eea,color:#e6edf3
+    style Pass fill:#14231c,stroke:#3dd68c,color:#e6edf3
+    style Fail fill:#2a1418,stroke:#ff5555,color:#e6edf3
+  </pre>
+</figure>
+<h2 id="panic-free-gpu-lock-wasm32-target-gates-amp-qualityscorecard">Panic-Free <code>gpu_lock()</code>, <code>wasm32</code> Target Gates &amp; <code>QualityScorecard</code></h2>
+<p>Because <code>crates/pcb-doc</code> (<code>L1</code>) has zero native OS window dependencies, it compiles cleanly for both desktop targets and <code>wasm32-unknown-unknown</code> browser builds using <code>#[cfg(target_arch = &quot;wasm32&quot;)]</code>.</p>
+<figure>
+  <figcaption>Process-wide gpu_lock, FrameSnapshotDigest, and QualityScorecard in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">static GPU_TEST_LOCK: std::sync::OnceLock&lt;std::sync::Mutex&lt;()&gt;&gt; = std::sync::OnceLock::new();
+
+pub fn gpu_lock() -&gt; std::sync::MutexGuard&lt;'static, ()&gt; {
+    GPU_TEST_LOCK
+        .get_or_init(|| std::sync::Mutex::new(()))
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+pub fn runtime_target_label() -&gt; &amp;'static str {
+    #[cfg(target_arch = "wasm32")]
+    {
+        "wasm32-unknown-unknown"
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        "native-desktop"
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameSnapshotDigest {
+    pub visible_layer_mask: u8,
+    pub visible_pad_count: usize,
+    pub visible_trace_count: usize,
+    pub drc_count: usize,
+    pub fnv1a_hash: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QualityScorecard {
+    pub tests_passed: usize,
+    pub mutants_caught: usize,
+    pub mutants_missed: usize,
+    pub registered_commands: usize,
+}
+
+impl QualityScorecard {
+    pub fn is_release_ready(&amp;self) -&gt; bool {
+        self.tests_passed &gt; 0
+            &amp;&amp; self.mutants_caught &gt; 0
+            &amp;&amp; self.mutants_missed == 0
+            &amp;&amp; self.registered_commands &gt;= COMMAND_PARITY_FLOOR
+    }
+}</code></pre>
+</figure>
+</div>
+
+<section class="full-width-panel" id="snapshot-wasm-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Offscreen Snapshot Digest (<code>gpu_lock</code>) &amp; <code>wasm32</code> Gate</span>
+    <span class="panel-badge">gpu_lock() • FrameSnapshotDigest • cfg(target_arch = "wasm32")</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Toggle layers or DRC clearance below and compare the live 64-bit FNV-1a <code>FrameSnapshotDigest</code> against the pinned golden baseline. Any visual regression in visible layers, pad/trace counts, or DRC halos immediately flips the snapshot check to <code>MISMATCH</code>.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Offscreen Render Controls</h4>
+      <label class="egui-checkbox"><input type="checkbox" data-snap="top" checked> Top Copper (bit 0)</label>
+      <label class="egui-checkbox"><input type="checkbox" data-snap="bot" checked> Bottom Copper (bit 1)</label>
+      <label class="egui-checkbox"><input type="checkbox" data-snap="silk" checked> Silkscreen (bit 2)</label>
+      <label class="egui-checkbox"><input type="checkbox" data-snap="rats"> Ratsnest (bit 3)</label>
+      <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-top:0.55rem;">
+        <button type="button" class="egui-btn" data-snap-act="bless">Bless Current as Baseline</button>
+        <button type="button" class="egui-btn" data-snap-act="target">Toggle Target (<code>native</code> / <code>wasm32</code>)</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Snapshot Parity &amp; <code>gpu_lock()</code></h4>
+      <div data-role="snap-diff" style="font-family:var(--font-mono); font-size:0.76rem; line-height:1.5;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. <code>FrameSnapshotDigest</code> &amp; Scorecard</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="snap-state"></code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 2: Acquire <code>gpu_lock()</code> &amp; Verify Release Readiness in <code>QualityScorecard</code></span>
+    <span class="panel-badge">Skill Practice • gpu_lock &amp; QualityScorecard</span>
+  </div>
+  <p>Complete <code>gpu_lock</code>, <code>QualityScorecard::is_release_ready</code>, and the <code>PcbReviewerApp::capture_frame_digest</code> layer-mask bit packing.</p>
+<pre class="keep-markup"><code class="language-rust">pub fn gpu_lock() -&gt; std::sync::MutexGuard&lt;'static, ()&gt; {
+    GPU_TEST_LOCK
+        .get_or_init(|| std::sync::Mutex::new(()))
+        .lock()
+        .unwrap_or_else(std::sync::<input id="ex0022-blank-1" class="code-challenge-input" style="width:235px;" placeholder="PoisonError::into_inner" autocomplete="off">)
+}
+
+impl QualityScorecard {
+    pub fn is_release_ready(&amp;self) -&gt; bool {
+        self.tests_passed &gt; 0
+            &amp;&amp; self.mutants_caught &gt; 0
+            &amp;&amp; self.mutants_missed <input id="ex0022-blank-2" class="code-challenge-input" style="width:85px;" placeholder="== 0" autocomplete="off">
+            &amp;&amp; self.registered_commands &gt;= <input id="ex0022-blank-3" class="code-challenge-input" style="width:215px;" placeholder="COMMAND_PARITY_FLOOR" autocomplete="off">
+    }
+}</code></pre>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn-primary" id="btn-check-ex0022">Check Rust Code</button>
+    <button type="button" class="btn-secondary" id="btn-hint-ex0022">Show Hint</button>
+  </div>
+  <div id="ex0022-feedback" class="feedback-box"></div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Lab 3: Snapshot Digest (<code>gpu_lock</code>), Scorecard &amp; Mutation Gate (<code>0022</code>)</span>
+    <span class="panel-badge">cargo test --workspace + gpu_lock + cargo mutants</span>
+  </div>
+  <p>Run the full workspace test suite (including <code>snapshot_digest_gpu_lock_and_quality_scorecard_preserve_invariants</code>) and mutate the snapshot digest, layer mask, <code>gpu_lock</code>, and scorecard functions:</p>
+<figure>
+  <figcaption>Run snapshot digest tests and cargo-mutants on 0021</figcaption>
+  <pre><code class="language-bash">cargo test --manifest-path ./apps/0022-headless-snapshot-testing-and-wasm-build/Cargo.toml --workspace
+cargo mutants --manifest-path ./apps/0022-headless-snapshot-testing-and-wasm-build/Cargo.toml --workspace --in-place -F "gpu_lock|runtime_target_label|FrameSnapshotDigest|compute_snapshot_digest|QualityScorecard|visible_layer_mask|capture_frame_digest"</code></pre>
+</figure>
+  <div class="mutation-scoreboard">
+    <div class="mutation-stat tier">
+      <div class="stat-label">Verification Tier</div>
+      <div class="stat-value">Tier 1 (wasm32) + Tier 3/6 (gpu_lock) + Tier 7 (Scorecard)</div>
+    </div>
+    <div class="mutation-stat caught">
+      <div class="stat-label">Target Caught Mutants</div>
+      <div class="stat-value">304 / 304 (100%)</div>
+    </div>
+    <div class="mutation-stat missed">
+      <div class="stat-label">Target Missed Mutants</div>
+      <div class="stat-value">0 Missed</div>
+    </div>
+  </div>
+      <ul class="step-checklist">
+        <li>
+          <input type="checkbox" id="verify-0022-1">
+          <label for="verify-0022-1">
+            <code>cargo test --manifest-path ./apps/0022-headless-snapshot-testing-and-wasm-build/Cargo.toml --workspace</code> passes all <strong>21 tests</strong> (<strong>15</strong> in <code>pcb-doc</code> and <strong>6</strong> in <code>pcb-reviewer</code>).
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0022-2">
+          <label for="verify-0022-2">
+            <code>snapshot_digest_gpu_lock_and_quality_scorecard_preserve_invariants</code> acquires <code>let _gpu = gpu_lock();</code>, verifies deterministic 64-bit FNV-1a hash sensitivity across layer masks, pad/trace counts, and DRC counts, and asserts all four <code>QualityScorecard::is_release_ready</code> conditions.
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0022-3">
+          <label for="verify-0022-3">
+            <code>cargo mutants</code> catches all <strong>viable new snapshot digest &amp; scorecard mutants</strong> (<code>0 missed</code>), completing <strong>Act V</strong> with <strong>0 missed mutants</strong> across the workspace.
+          </label>
+        </li>
+      </ul>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Retrieval Practice</span>
+    <span class="panel-badge">3 Questions • Equal-Length Options</span>
+  </div>
+  <div id="quiz-0022"></div>
+</section>
+
+<div class="prose-col">
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
+<div class="callout">
+  <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/std/sync/struct.OnceLock.html"><code>std::sync::OnceLock</code> Official Rust Standard Library Docs</a> and <a href="https://doc.rust-lang.org/reference/conditional-compilation.html">The Rust Reference — &quot;Conditional Compilation (<code>#[cfg(...)]</code>)&quot;</a>.
+</div>
+<div class="teacher-prompt-box">
+  <strong>Act V Complete!</strong> You have hardened the Schematic &amp; PCB Design Reviewer with a unified <code>CommandSpec</code> registry, a searchable <code>Key::K</code> Command Palette, Tier 5 <code>panic_hunt</code> adversarial JSON fuzzing, <code>Rect::intersects</code> spatial viewport culling verified with <code>proptest</code>, non-blocking background file imports (<code>std::thread::spawn</code> + <code>mpsc::channel</code> + <code>egui::ProgressBar</code>), process-wide <code>gpu_lock()</code> snapshot digests, <code>wasm32</code> target readiness, and a self-auditing <code>QualityScorecard</code>—all with <strong>0 missed mutants</strong>. Ask any questions about Act V in chat, or let me know when you are ready for <strong>Act VI (<code>0023</code>–<code>0026</code>): Real-World KiCad Parsing (<code>nom</code>) &amp; Embedded SQL (<code>turso</code> / <code>libsql</code>)</strong>!
+</div>
+</div>
+    </article>
+  </main>
+
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
+
+  <script src="../assets/course.js"></script>
+  <script>
+    initCodeExercise({
+      checkBtnId: "btn-check-ex0022",
+      hintBtnId: "btn-hint-ex0022",
+      feedbackId: "ex0022-feedback",
+      blanks: [
+        {
+          inputId: "ex0022-blank-1",
+          accepted: ["PoisonError::into_inner"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Recover the inner MutexGuard without panicking via PoisonError::into_inner",
+        },
+        {
+          inputId: "ex0022-blank-2",
+          accepted: ["== 0"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Require zero missed mutants for release readiness",
+        },
+        {
+          inputId: "ex0022-blank-3",
+          accepted: ["COMMAND_PARITY_FLOOR"],
+          getErrorHint: (val) =>
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Require registered_commands &gt;= COMMAND_PARITY_FLOOR",
+        }
+      ],
+      hintMessage: "Recover poisoned mutex guards via <code>PoisonError::into_inner</code>, require <code>self.mutants_missed == 0</code>, and compare <code>self.registered_commands &gt;= COMMAND_PARITY_FLOOR</code>.",
+      successMessage: "Spot on! Every GPU/snapshot test is serialized via <code>gpu_lock()</code>, visual regressions are caught by <code>FrameSnapshotDigest</code>, and <code>QualityScorecard::is_release_ready</code> enforces zero missed mutants.",
+    });
+
+    initQuiz("quiz-0022", [
+      {
+            "question": "Why must every test creating a GPU context or snapshot harness acquire `let _gpu = gpu_lock();` first?",
+            "options": [
+                  "To serialize concurrent GPU tests and prevent driver access violations",
+                  "To disable all mutation checks inside the domain model crate",
+                  "To force the compiler to target WebAssembly browser runtimes exclusively",
+                  "To clear all copper pads from the active board snapshot"
+            ],
+            "correctIndex": 0,
+            "explanation": "Under `cargo test`, test functions execute concurrently on multiple threads inside one process; holding `gpu_lock()` prevents concurrent GPU device initialization crashes on Windows WARP, Mesa `llvmpipe`, and Vulkan drivers.",
+            "wrongHint": "Check Critical Rule #1 in our Testing & Mutation Coverage Cheat Sheet."
+      },
+      {
+            "question": "How does `gpu_lock()` recover safely without panicking if an earlier test thread panicked while holding the mutex?",
+            "options": [
+                  "By calling `std::process::abort` immediately when lock poisoning is detected",
+                  "By unwrapping poisoned lock errors via `PoisonError::into_inner` without panicking",
+                  "By allocating a brand new static mutex every frame",
+                  "By skipping all remaining snapshot assertions in the workspace"
+            ],
+            "correctIndex": 1,
+            "explanation": "Passing `std::sync::PoisonError::into_inner` to `.unwrap_or_else(...)` extracts the underlying `MutexGuard` without triggering a panic or violating `#![deny(clippy::unwrap_used)]`.",
+            "wrongHint": "Look at the implementation of `gpu_lock()` in `crates/pcb-doc/src/lib.rs`."
+      },
+      {
+            "question": "Which Rust attribute selects different code paths when compiling for the `wasm32-unknown-unknown` browser target?",
+            "options": [
+                  "The `derive` macro attribute attached to serialized session envelope structs",
+                  "The `allow` attribute suppressing clippy unwrap warnings inside test modules",
+                  "The `cfg` conditional compilation attribute checking `target_arch` for `wasm32` builds",
+                  "The `inline` hint attribute placed above hot viewport culling loops"
+            ],
+            "correctIndex": 2,
+            "explanation": "`#[cfg(target_arch = \"wasm32\")]` and `#[cfg(not(target_arch = \"wasm32\"))]` instruct `rustc` at compile time which platform-specific branch to include for WebAssembly vs. native desktop targets.",
+            "wrongHint": "Inspect `runtime_target_label()` in `crates/pcb-doc/src/lib.rs`."
+      }
+]);
+
+    initSnapshotWasmSimulator("snapshot-wasm-sim");
+  </script>
+</body>
+</html>

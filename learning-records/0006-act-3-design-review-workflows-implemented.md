@@ -1,4 +1,4 @@
-# Act III (`0010`–`0013`) Implemented: Design Review Workflows, Triage State Machines, DRC Overlays & Custom `egui::Widget`
+# Act III (`0011`–`0014`) Implemented: Design Review Workflows, Triage State Machines, DRC Overlays & Custom `egui::Widget`
 
 Implemented both the runnable Rust/`egui` companion applications (`apps/0010-*` through `apps/0013-*`) and interactive HTML lessons (`lessons/0010-*` through `lessons/0013-*`) for Act III, advancing [[MISSION.md]] and building upon [[0005-act-2-schematic-views-scene-bom-and-egui-kittest-implemented.md]].
 
@@ -9,4 +9,4 @@ Implemented both the runnable Rust/`egui` companion applications (`apps/0010-*` 
 - **`0013-custom-layer-swatch-widget-and-design-tokens`**: 24 unit + `egui_kittest` tests pass (including standalone widget testing via `Harness::new_ui_state`); `cargo mutants --in-place` catches `134 / 134 viable mutants (21 unviable, 0 missed)`.
 
 ## Implications
-- Ready to advance to Act IV (`0014`–`0017`: Scaling Up — Engine-First Architecture & Persistence), splitting pure PCB/review domain state (`pcb-doc`, Layer L1) from `egui` rendering (`pcb-ui`, Layer L6) in a Cargo workspace, adding `serde` JSON persistence, `Arc::make_mut` copy-on-write document snapshots, and `proptest!` undo/redo history verification.
+- Ready to advance to Act IV (`0015`–`0018`: Scaling Up — Engine-First Architecture & Persistence), splitting pure PCB/review domain state (`pcb-doc`, Layer L1) from `egui` rendering (`pcb-ui`, Layer L6) in a Cargo workspace, adding `serde` JSON persistence, `Arc::make_mut` copy-on-write document snapshots, and `proptest!` undo/redo history verification.

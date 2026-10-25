@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Lesson 0026: Local-First Replica Sync, Atomic SQL Transactions &amp; Tamper-Evident Audit Trails — Learn Rust &amp; egui</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
+    <div>
+      <a href="../index.html">Index</a>
+      <a href="./0001-project-setup-and-eframe-boot.html">0001</a>
+      <a href="./0002-the-immediate-mode-loop.html">0002</a>
+      <a href="./0003-custom-2d-canvas-and-painter.html">0003</a>
+      <a href="./0004-world-to-screen-transforms-pan-and-zoom.html">0004</a>
+      <a href="./0005-modeling-layers-traces-and-footprints.html">0005</a>
+      <a href="./0006-hit-testing-and-net-cross-probing.html">0006</a>
+      <a href="./0007-schematic-symbols-and-text-rendering.html">0007</a>
+      <a href="./0008-split-viewports-and-egui-scene.html">0008</a>
+      <a href="./0009-searchable-netlist-and-bom-inspector.html">0009</a>
+      <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html">0010</a>
+      <a href="./0011-review-pins-and-sticky-note-callouts.html">0011</a>
+      <a href="./0012-review-status-workflow-and-popups.html">0012</a>
+      <a href="./0013-drc-violation-overlay-and-minimap.html">0013</a>
+      <a href="./0014-custom-layer-swatch-widget-and-design-tokens.html">0014</a>
+      <a href="./0015-multi-crate-workspace-doc-vs-ui-egui.html">0015</a>
+      <a href="./0016-loading-board-and-review-files-serde.html">0016</a>
+      <a href="./0017-copy-on-write-arc-document-snapshots.html">0017</a>
+      <a href="./0018-undo-redo-history-and-slider-coalescing.html">0018</a>
+      <a href="./0019-the-command-pattern-and-command-palette.html">0019</a>
+      <a href="./0020-viewport-culling-and-cached-tessellation.html">0020</a>
+      <a href="./0021-non-blocking-file-import-and-progress-ui.html">0021</a>
+      <a href="./0022-headless-snapshot-testing-and-wasm-build.html">0022</a>
+      <a href="./0023-sexpr-tokenizer-and-ast-with-nom.html">0023</a>
+      <a href="./0024-parsing-kicad-pcb-and-sch-into-domain-model.html">0024</a>
+      <a href="./0025-embedded-sql-review-store-with-turso.html">0025</a>
+      <a href="./0026-local-first-review-sync-and-audit-trail.html" class="active">0026</a>
+      <a href="./0027-llm-native-spatial-and-electrical-queries.html">0027</a>
+      <a href="./0028-headless-mcp-server-rmcp-and-mock-client.html">0028</a>
+      <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html">0029</a>
+      <a href="./0030-egui-mcp-inspector-workbench-and-agent-playbooks.html">0030</a>
+      <a href="../reference/glossary.html">Glossary</a>
+      <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Act VI • Real-World KiCad Parsing &amp; Embedded SQL</span>
+  </nav>
+  </header>
+
+  <main>
+    <article class="tufte-article">
+<div class="prose-col">
+<h1>0026. Local-First Replica Sync, Atomic SQL Transactions &amp; Tamper-Evident Audit Trails</h1>
+<p class="subtitle">Executing all-or-nothing SQL sign-off batches (<code>BEGIN</code> / <code>COMMIT</code> / <code>ROLLBACK</code>), chaining tamper-evident 64-bit hashes across <code>AuditLogEntry</code> records (<code>verify_audit_chain</code>), merging remote engineer replicas (<code>sync_with_remote_replica</code>), and generating the Act VI <code>QualityScorecard</code>.</p>
+
+<h2 id="all-or-nothing-sign-off-transactions-amp-tamper-evident-audit-trails">All-or-Nothing Sign-Off Transactions &amp; Tamper-Evident Audit Trails</h2>
+<p>When a lead hardware engineer signs off a batch of resolved review pins before Gerber tape-out, partial updates are dangerous: if 2 of 3 pins transition cleanly (<code>Resolved -&gt; Verified</code>) but the 3rd pin is still <code>Open</code> (an illegal <code>Open -&gt; Verified</code> jump), the database must <strong>roll back</strong> the entire batch so the review store and its compliance audit log never diverge.<span class="sidenote-number"></span><span class="sidenote"><strong>Local-First Embedded Replicas &amp; Hash-Chained Audit Logs:</strong> Each <code>AuditLogEntry</code> commits <code>prev_hash: u64</code> into <code>compute_audit_entry_hash(seq, pin_id, from_status, to_status, prev_hash)</code>. Mutating or reordering any historical sign-off breaks <code>verify_audit_chain()</code> immediately.</span></p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
+flowchart LR
+    Begin["BEGIN TRANSACTION&lt;br/&gt;Snapshot rows + audit_log"] --&gt; Loop["Apply (PinId, NextStatus)&lt;br/&gt;transitions in batch"]
+    Loop -- "Invalid transition /&lt;br/&gt;Missing PinId" --&gt; Rollback["ROLLBACK&lt;br/&gt;Restore snapshot atomically"]
+    Loop -- "All valid" --&gt; Hash["Append AuditLogEntry&lt;br/&gt;entry_hash = F(seq, pin, prev_hash)"]
+    Hash --&gt; Commit["COMMIT&lt;br/&gt;Increment local_revision"]
+    Commit --&gt; Sync["sync_with_remote_replica()&lt;br/&gt;Merge remote rows where rev &gt; local_rev"]
+    style Commit fill:#14231c,stroke:#3dd68c,color:#e6edf3
+    style Sync fill:#14231c,stroke:#3dd68c,color:#e6edf3
+    style Rollback fill:#2a1418,stroke:#ff5555,color:#e6edf3
+  </pre>
+</figure>
+<h2 id="atomic-sign-off-batches-auditlogentry-hash-chains-amp-replica-sync">Atomic Sign-Off Batches, <code>AuditLogEntry</code> Hash Chains &amp; Replica Sync</h2>
+<figure>
+  <figcaption>Atomic transactions, hash-chained audit logs, and replica sync in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuditLogEntry {
+    pub seq: u64,
+    pub pin_id: PinId,
+    pub actor: String,
+    pub from_status: ReviewStatus,
+    pub to_status: ReviewStatus,
+    pub prev_hash: u64,
+    pub entry_hash: u64,
+}
+
+pub fn compute_audit_entry_hash(
+    seq: u64,
+    pin_id: PinId,
+    from_status: ReviewStatus,
+    to_status: ReviewStatus,
+    prev_hash: u64,
+) -&gt; u64 {
+    prev_hash
+        .wrapping_mul(1_000_003)
+        .wrapping_add(seq * 97)
+        .wrapping_add(u64::from(pin_id.0) * 31)
+        .wrapping_add(u64::from(from_status as u8 + 1) * 13)
+        .wrapping_add(u64::from(to_status as u8 + 1) * 7)
+}</code></pre>
+</figure>
+</div>
+
+<section class="full-width-panel" id="replica-sync-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Atomic SQL Transactions, Hash-Chained Audit Logs &amp; Replica Sync</span>
+    <span class="panel-badge">execute_atomic_signoff_batch • verify_audit_chain • sync_with_remote_replica</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Execute an atomic sign-off transaction batch, merge remote replica rows by monotonic revision, or simulate a rollback / hash-chain tamper below.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Transaction &amp; Replica Controls</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-rep-act="commit-valid">Commit Valid Sign-Off Batch</button>
+        <button type="button" class="egui-btn" data-rep-act="rollback">Test Invalid Batch (Atomic Rollback)</button>
+        <button type="button" class="egui-btn" data-rep-act="sync">Sync Remote Replica (<code>rev 5</code>)</button>
+        <button type="button" class="egui-btn" data-rep-act="tamper">Simulate Audit Log Tamper</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Hash-Chained <code>audit_log</code></h4>
+      <div data-role="rep-audit" style="font-family:var(--font-mono); font-size:0.75rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. Replica &amp; Audit Chain Telemetry</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="rep-state"></code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 2: Roll Back Failed Transactions &amp; Verify the Hash-Chained Audit Log</span>
+    <span class="panel-badge">Skill Practice • Transactions &amp; Audit Hash Chains</span>
+  </div>
+  <p>Complete <code>TursoReviewStore::verify_audit_chain</code> and <code>TursoReviewStore::sync_with_remote_replica</code> in <code>crates/pcb-doc/src/lib.rs</code>.</p>
+<pre class="keep-markup"><code class="language-rust">pub fn verify_audit_chain(&amp;self) -&gt; bool {
+    let mut expected_prev = 0_u64;
+    for (idx, entry) in self.audit_log.iter().enumerate() {
+        let expected_seq = (idx + 1) as u64;
+        let expected_hash = compute_audit_entry_hash(
+            expected_seq,
+            entry.pin_id,
+            entry.from_status,
+            entry.to_status,
+            expected_prev,
+        );
+        if entry.seq != expected_seq
+            || entry.prev_hash != <input id="ex0026-blank-1" class="code-challenge-input" style="width:145px;" placeholder="expected_prev" autocomplete="off">
+            || entry.entry_hash != <input id="ex0026-blank-2" class="code-challenge-input" style="width:145px;" placeholder="expected_hash" autocomplete="off">
+        {
+            return false;
+        }
+        expected_prev = entry.entry_hash;
+    }
+    true
+}
+
+pub async fn sync_with_remote_replica(
+    &amp;mut self,
+    remote_rows: &amp;[SqlReviewRecord],
+) -&gt; Result&lt;usize, SqlStoreError&gt; {
+    if !self.is_migrated() {
+        return Err(SqlStoreError::NotMigrated);
+    }
+    let mut merged = 0;
+    for remote in remote_rows {
+        let should_accept = match self.rows.get(&amp;remote.pin_id) {
+            Some(local) =&gt; remote.revision <input id="ex0026-blank-3" class="code-challenge-input" style="width:155px;" placeholder="&gt; local.revision" autocomplete="off">,
+            None =&gt; true,
+        };
+        if should_accept {
+            self.rows.insert(remote.pin_id, remote.clone());
+            merged += 1;
+        }
+    }
+    self.pending_local_writes = 0;
+    Ok(merged)
+}</code></pre>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn-primary" id="btn-check-ex0026">Check Rust Code</button>
+    <button type="button" class="btn-secondary" id="btn-hint-ex0026">Show Hint</button>
+  </div>
+  <div id="ex0026-feedback" class="feedback-box"></div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Lab 3: Atomic Transaction Rollback, Audit Hash-Chain &amp; Replica Sync Mutation Gate (<code>0026</code>)</span>
+    <span class="panel-badge">cargo test --workspace + tokio::test + cargo mutants</span>
+  </div>
+  <p>Run the complete workspace test suite (including <code>turso_transactions_audit_chain_and_replica_sync_preserve_invariants</code>) and mutate all transaction, audit-chain, and replica-sync methods:</p>
+<figure>
+  <figcaption>Run atomic SQL transaction, audit chain, and replica sync mutation gate on 0025</figcaption>
+  <pre><code class="language-bash">cargo test --manifest-path ./apps/0026-local-first-review-sync-and-audit-trail/Cargo.toml --workspace
+cargo mutants --manifest-path ./apps/0026-local-first-review-sync-and-audit-trail/Cargo.toml --workspace --in-place -F "compute_audit_entry_hash|verify_audit_chain|execute_atomic_signoff_batch|sync_with_remote_replica|replica_status_badge|commit_verified_signoff_batch|trigger_replica_sync"</code></pre>
+</figure>
+  <div class="mutation-scoreboard">
+    <div class="mutation-stat tier">
+      <div class="stat-label">Verification Tier</div>
+      <div class="stat-value">Tier 2 + Tier 4 + Tier 7 (Full Act VI Gate)</div>
+    </div>
+    <div class="mutation-stat caught">
+      <div class="stat-label">Target Caught Mutants</div>
+      <div class="stat-value">476 / 476 (100%)</div>
+    </div>
+    <div class="mutation-stat missed">
+      <div class="stat-label">Target Missed Mutants</div>
+      <div class="stat-value">0 Missed</div>
+    </div>
+  </div>
+      <ul class="step-checklist">
+        <li>
+          <input type="checkbox" id="verify-0026-1">
+          <label for="verify-0026-1">
+            <code>cargo test --manifest-path ./apps/0026-local-first-review-sync-and-audit-trail/Cargo.toml --workspace</code> passes all <strong>27 tests</strong> (<strong>3</strong> in <code>kicad-sexpr</code>, <strong>18</strong> in <code>pcb-doc</code>, and <strong>6</strong> in <code>pcb-reviewer</code>).
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0026-2">
+          <label for="verify-0026-2">
+            <code>turso_transactions_audit_chain_and_replica_sync_preserve_invariants</code> (<code>#[tokio::test]</code>) verifies atomic rollback on invalid transitions, <code>verify_audit_chain()</code> tamper detection when <code>prev_hash</code> or <code>entry_hash</code> is altered, and monotonic revision merging in <code>sync_with_remote_replica</code>.
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0026-3">
+          <label for="verify-0026-3">
+            <code>cargo mutants</code> catches <strong>100% of viable transaction, audit-log, and replica-sync mutants</strong> (<code>0 missed</code>), completing <strong>Act VI</strong> with <strong>0 missed mutants</strong> across all 3 workspace crates!
+          </label>
+        </li>
+      </ul>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Retrieval Practice</span>
+    <span class="panel-badge">3 Questions • Equal-Length Options</span>
+  </div>
+  <div id="quiz-0026"></div>
+</section>
+
+<div class="prose-col">
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
+<div class="callout">
+  <strong>Read (5 mins):</strong> <a href="https://www.sqlite.org/lang_transaction.html">SQLite / Turso Documentation — <code>BEGIN</code> / <code>COMMIT</code> / <code>ROLLBACK</code> Transactions</a> and <a href="https://docs.turso.tech/features/embedded-replicas/introduction">Turso Embedded Replicas Architecture Guide</a>.
+</div>
+<div class="teacher-prompt-box">
+  <strong>Act VI Complete!</strong> You have built a standalone <code>L0</code> <code>kicad-sexpr</code> parser crate with <code>nom</code>, lowered <code>.kicad_pcb</code> S-expressions into <code>BoardModel</code> verified by a Tier 4 pinned corpus oracle (<code>CORPUS_PASS_FLOOR</code> &amp; <code>CORPUS_ROUNDTRIP_FLOOR</code>), validated SQL DDL/DML ASTs with <code>turso_parser</code>, and implemented an async <code>TursoReviewStore</code> with atomic transactions, hash-chained audit logs, and local-first replica sync—all with <strong>0 missed mutants</strong>. Ask any questions about Act VI in chat, or let me know when you are ready for <strong>Act VII (<code>0027</code>–<code>0030</code>): Agentic Hardware Review &amp; Model Context Protocol (<code>rmcp</code>)</strong>!
+</div>
+</div>
+    </article>
+  </main>
+
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
+
+  <script src="../assets/course.js"></script>
+  <script>
+    initCodeExercise({
+      checkBtnId: "btn-check-ex0026",
+      hintBtnId: "btn-hint-ex0026",
+      feedbackId: "ex0026-feedback",
+      blanks: [
+        {
+          inputId: "ex0026-blank-1",
+          accepted: ["expected_prev"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Verify that entry.prev_hash matches expected_prev",
+        },
+        {
+          inputId: "ex0026-blank-2",
+          accepted: ["expected_hash"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Verify that entry.entry_hash matches expected_hash",
+        },
+        {
+          inputId: "ex0026-blank-3",
+          accepted: ["> local.revision"],
+          getErrorHint: (val) =>
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Accept remote row only when remote.revision &gt; local.revision",
+        }
+      ],
+      hintMessage: "Check <code>entry.prev_hash != expected_prev</code>, compare <code>entry.entry_hash != expected_hash</code>, and accept remote replica rows when <code>remote.revision &gt; local.revision</code>.",
+      successMessage: "Act VI complete! Your embedded SQL Review Store executes all-or-nothing transactions, verifies tamper-evident hash chains, and merges remote replica rows deterministically.",
+    });
+
+    initQuiz("quiz-0026", [
+      {
+            "question": "What happens when one status transition inside `execute_atomic_signoff_batch` fails validation?",
+            "options": [
+                  "The transaction rolls back and preserves the initial state",
+                  "The transaction commits partial edits and ignores invalid items",
+                  "The database deletes all registered boards from local storage",
+                  "The application panics and corrupts the audit log chain"
+            ],
+            "correctIndex": 0,
+            "explanation": "`execute_atomic_signoff_batch` validates `BEGIN`, `COMMIT`, and `ROLLBACK` through `turso_parser` and operates on a cloned transaction working copy, restoring the original rows and audit log if any item fails.",
+            "wrongHint": "Inspect `execute_atomic_signoff_batch` in `crates/pcb-doc/src/lib.rs`."
+      },
+      {
+            "question": "How does `verify_audit_chain` detect tampering or out-of-order modifications in the sign-off audit log?",
+            "options": [
+                  "By checking that every audit entry has zero hash",
+                  "By recomputing chained entry hashes from each previous hash",
+                  "By sorting audit entries alphabetically by engineer author name",
+                  "By truncating the audit log after every replica sync"
+            ],
+            "correctIndex": 1,
+            "explanation": "Each `AuditLogEntry` chains `prev_hash` into `compute_audit_entry_hash(...)`; `verify_audit_chain()` checks sequential `seq` numbers, `prev_hash` links, and recomputed `entry_hash` values across the entire log.",
+            "wrongHint": "Look at `verify_audit_chain` and `compute_audit_entry_hash` in `crates/pcb-doc/src/lib.rs`."
+      },
+      {
+            "question": "How does `sync_with_remote_replica` resolve conflicts when merging remote engineer review rows?",
+            "options": [
+                  "By discarding all remote rows that have higher revisions",
+                  "By overwriting newer local edits with older remote snapshots",
+                  "By accepting remote rows with strictly newer revision numbers",
+                  "By clearing the local review table before every sync"
+            ],
+            "correctIndex": 2,
+            "explanation": "Comparing `remote.revision > local.revision` ensures that newer remote updates are merged while stale remote snapshots never overwrite newer local edits.",
+            "wrongHint": "Check the `match self.rows.get(&remote.pin_id)` branch in `sync_with_remote_replica`."
+      }
+]);
+
+    initReplicaSyncSimulator("replica-sync-sim");
+  </script>
+</body>
+</html>

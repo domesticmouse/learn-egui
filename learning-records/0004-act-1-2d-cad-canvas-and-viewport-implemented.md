@@ -1,4 +1,4 @@
-# Act I (`0002`–`0005`) Implemented: 2D CAD Canvas, `TSTransform`, Z-Order & Net Cross-Probing
+# Act I (`0003`–`0006`) Implemented: 2D CAD Canvas, `TSTransform`, Z-Order & Net Cross-Probing
 
 Implemented both the runnable Rust/egui applications (`apps/0002-*` through `apps/0005-*`) and interactive HTML lessons (`lessons/0002-*` through `lessons/0005-*`) for Act I, advancing [[MISSION.md]] and following [[0003-continuous-testing-and-mutation-coverage.md]].
 
@@ -9,4 +9,4 @@ Implemented both the runnable Rust/egui applications (`apps/0002-*` through `app
 - **`0005-hit-testing-and-net-cross-probing`**: 11 unit tests pass; `cargo mutants --in-place` catches `25 / 25 viable mutants (10 unviable, 0 missed)`.
 
 ## Implications
-- Ready to advance to Act II (`0006`–`0009`), where Lesson `0006` introduces `egui_kittest::Harness` to test rendered UI widgets headlessly and remove `<impl eframe::App for PcbReviewerApp>::update` from `.cargo/mutants.toml` exclusions.
+- Ready to advance to Act II (`0007`–`0010`), where Lesson `0007` introduces `egui_kittest::Harness` to test rendered UI widgets headlessly and remove `<impl eframe::App for PcbReviewerApp>::update` from `.cargo/mutants.toml` exclusions.
