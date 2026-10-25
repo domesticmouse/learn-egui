@@ -1250,3 +1250,349 @@ active_tool: ${toolStr},
 
   render();
 }
+
+/**
+ * 12. Lesson 0010 Simulator: Review Pins, HashMap::entry & Floating Callout Window
+ */
+function initReviewPinsSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const state = {
+    selectedId: 1,
+    nextPinId: 3,
+    lastAction: "Selected PinId(1) -> opened egui::Window callout",
+    pins: [
+      { id: 1, x: 20.0, y: 27.0, author: "alice", comment: "Check U1 thermal relief" },
+      { id: 2, x: 68.0, y: 35.0, author: "bob", comment: "Verify J1 polarity mark" },
+    ],
+  };
+
+  function render() {
+    const listEl = root.querySelector("[data-role='pin-list']");
+    if (listEl) {
+      listEl.innerHTML = "";
+      state.pins.forEach((p) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "egui-btn";
+        btn.style.marginBottom = "0.35rem";
+        btn.style.borderColor = p.id === state.selectedId ? "#ffe664" : "#3c3c3c";
+        btn.textContent = `Pin #${p.id}: ${p.comment} (@${p.author})`;
+        btn.addEventListener("click", () => {
+          state.selectedId = p.id;
+          state.lastAction = `select_review_pin(PinId(${p.id})) -> true`;
+          render();
+        });
+        listEl.appendChild(btn);
+      });
+    }
+
+    const svgGroup = root.querySelector("[data-svg='pin-markers']");
+    if (svgGroup) {
+      svgGroup.innerHTML = "";
+      state.pins.forEach((p) => {
+        const sx = 24 + p.x * 2.8;
+        const sy = 18 + p.y * 2.4;
+        const isSel = p.id === state.selectedId;
+        const color = isSel ? "#ffe664" : "#ff8b6b";
+        svgGroup.innerHTML += `
+          <g data-pin-id="${p.id}" style="cursor:pointer;">
+            <circle cx="${sx}" cy="${sy}" r="${isSel ? 7 : 5.5}" fill="${color}" stroke="#0c0e11" stroke-width="1.5"/>
+            <text x="${sx + 9}" y="${sy + 3}" fill="${color}" font-family="monospace" font-size="10" font-weight="bold">#${p.id}</text>
+          </g>`;
+      });
+    }
+
+    const active = state.pins.find((p) => p.id === state.selectedId) || null;
+    const calloutBox = root.querySelector("[data-svg='callout-box']");
+    if (calloutBox) {
+      if (active) {
+        calloutBox.style.display = "block";
+        const titleEl = root.querySelector("[data-svg='callout-title']");
+        const coordEl = root.querySelector("[data-svg='callout-coord']");
+        if (titleEl) titleEl.textContent = `Pin #${active.id}: ${active.comment}`;
+        if (coordEl) coordEl.textContent = `Anchor: (${active.x.toFixed(1)}, ${active.y.toFixed(1)}) mm (@${active.author})`;
+      } else {
+        calloutBox.style.display = "none";
+      }
+    }
+
+    const stateEl = root.querySelector("[data-role='pins-state']");
+    if (stateEl) {
+      const selStr = active ? `Some(PinId(${active.id}))` : "None";
+      stateEl.textContent = `// ${state.lastAction}
+review_pins.len(): ${state.pins.length},
+next_pin_id: ${state.nextPinId},
+selected_pin: ${selStr},
+// Window::new("Review Callout")
+//   .id(Id::new(("review_pin_callout", ${active ? active.id : 0})))`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
+    }
+  }
+
+  const addBtn = root.querySelector("[data-action='add-pin-r12']");
+  if (addBtn) {
+    addBtn.addEventListener("click", () => {
+      if (state.pins.some((p) => p.id === 3)) {
+        state.selectedId = 3;
+        state.lastAction = "Entry::Occupied -> PinId(3) already exists (no overwrite!)";
+      } else {
+        state.pins.push({ id: 3, x: 52.0, y: 35.0, author: "carol", comment: "Check R12 value" });
+        state.selectedId = 3;
+        state.nextPinId = 4;
+        state.lastAction = "Entry::Vacant -> inserted PinId(3) at (52.0, 35.0) mm";
+      }
+      render();
+    });
+  }
+
+  const closeBtn = root.querySelector("[data-action='close-callout']");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", () => {
+      state.selectedId = null;
+      state.lastAction = "Close Callout -> selected_pin = None";
+      render();
+    });
+  }
+
+  render();
+}
+
+/**
+ * 13. Lesson 0011 Simulator: Review Status Triage State Machine & Multi-Criteria Filtering
+ */
+function initReviewTriageSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const state = {
+    minSeverity: "Info",
+    onlyOpen: false,
+    pin1Status: "Open",
+    lastTransition: "Ready: Pin #1 is Open (Critical)",
+  };
+
+  const ranks = { Info: 0, Warning: 1, Critical: 2 };
+  const canTransition = (cur, next) =>
+    (cur === "Open" && next === "Resolved") ||
+    (cur === "Resolved" && next === "Verified") ||
+    (cur === "Resolved" && next === "Open") ||
+    (cur === "Verified" && next === "Open");
+
+  function render() {
+    const pins = [
+      { id: 1, sev: "Critical", status: state.pin1Status, text: "Check U1 thermal relief (@alice)" },
+      { id: 2, sev: "Warning", status: "Resolved", text: "Verify J1 polarity mark (@bob)" },
+      { id: 3, sev: "Info", status: "Open", text: "Silkscreen font size note (@carol)" },
+    ];
+
+    const filtered = pins.filter(
+      (p) => ranks[p.sev] >= ranks[state.minSeverity] && (!state.onlyOpen || p.status === "Open")
+    );
+
+    const listEl = root.querySelector("[data-role='triage-list']");
+    if (listEl) {
+      listEl.innerHTML = filtered
+        .map(
+          (p) =>
+            `<div style="padding:0.4rem 0.55rem; margin-bottom:0.35rem; background:#141a21; border:1px solid #2d3846; border-radius:4px; font-family:var(--font-mono); font-size:0.78rem;">
+              <strong>Pin #${p.id}</strong> [${p.sev} | <span style="color:#3dd68c;">${p.status}</span>]: ${p.text}
+            </div>`
+        )
+        .join("");
+    }
+
+    const stateEl = root.querySelector("[data-role='triage-state']");
+    if (stateEl) {
+      stateEl.textContent = `// ${state.lastTransition}
+pin_1.status: ReviewStatus::${state.pin1Status},
+min_pin_severity: PinSeverity::${state.minSeverity},
+filter_only_open_pins: ${state.onlyOpen},
+visible_pins: ${filtered.length} / 3,`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-transition]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = btn.getAttribute("data-transition");
+      if (canTransition(state.pin1Status, target)) {
+        const prev = state.pin1Status;
+        state.pin1Status = target;
+        state.lastTransition = `can_transition_to(${prev} -> ${target}) == true`;
+      } else {
+        state.lastTransition = `REJECTED: ${state.pin1Status} -> ${target} (must Resolve before Verify!)`;
+      }
+      render();
+    });
+  });
+
+  const sevSelect = root.querySelector("[data-param='minSev']");
+  if (sevSelect) {
+    sevSelect.addEventListener("change", () => {
+      state.minSeverity = sevSelect.value;
+      render();
+    });
+  }
+
+  const openCheck = root.querySelector("[data-param='onlyOpen']");
+  if (openCheck) {
+    openCheck.addEventListener("change", () => {
+      state.onlyOpen = openCheck.checked;
+      render();
+    });
+  }
+
+  render();
+}
+
+/**
+ * 14. Lesson 0012 Simulator: DRC Clearance Halos & Clamped Bird's-Eye Minimap
+ */
+function initDrcMinimapSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const state = {
+    minClearance: 8.0,
+    camX: 0.0,
+    camY: 12.0,
+  };
+
+  function render() {
+    const gap = 7.6;
+    const violated = gap < state.minClearance;
+
+    const halo = root.querySelector("[data-svg='drc-halo']");
+    if (halo) {
+      halo.style.display = violated ? "block" : "none";
+    }
+
+    const clampedMinX = Math.max(0, Math.min(100, state.camX));
+    const clampedMinY = Math.max(0, Math.min(70, state.camY));
+    const clampedMaxX = Math.max(clampedMinX, Math.min(100, state.camX + 40));
+    const clampedMaxY = Math.max(clampedMinY, Math.min(70, state.camY + 30));
+
+    const camRect = root.querySelector("[data-svg='minimap-cam']");
+    if (camRect) {
+      camRect.setAttribute("x", 24 + clampedMinX * 2.5);
+      camRect.setAttribute("y", 20 + clampedMinY * 2.2);
+      camRect.setAttribute("width", (clampedMaxX - clampedMinX) * 2.5);
+      camRect.setAttribute("height", (clampedMaxY - clampedMinY) * 2.2);
+    }
+
+    const stateEl = root.querySelector("[data-role='drc-state']");
+    if (stateEl) {
+      stateEl.textContent = `// pad_edge_gap_mm(U1.VCC, U1.SPI_CLK) = 7.6 mm
+min_clearance_mm: ${state.minClearance.toFixed(1)},
+drc_violations: ${violated ? "1 (7.6 mm < " + state.minClearance.toFixed(1) + " mm)" : "0 (PASS)"},
+// Clamped to board_bounds (0, 0)..(100, 70):
+minimap_rect: (${clampedMinX.toFixed(0)}, ${clampedMinY.toFixed(0)})..(${clampedMaxX.toFixed(0)}, ${clampedMaxY.toFixed(0)}) mm`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
+    }
+  }
+
+  const clearInput = root.querySelector("[data-param='clearance']");
+  if (clearInput) {
+    clearInput.addEventListener("input", () => {
+      state.minClearance = parseFloat(clearInput.value);
+      render();
+    });
+  }
+
+  const camXInput = root.querySelector("[data-param='camX']");
+  if (camXInput) {
+    camXInput.addEventListener("input", () => {
+      state.camX = parseFloat(camXInput.value);
+      render();
+    });
+  }
+
+  render();
+}
+
+/**
+ * 15. Lesson 0013 Simulator: Custom LayerSwatch<'a> Widget & Per-Layer Alpha Blending
+ */
+function initLayerSwatchSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const state = {
+    topVisible: true,
+    topOpacity: 0.75,
+    bottomVisible: true,
+    bottomOpacity: 1.0,
+  };
+
+  function render() {
+    const topGroup = root.querySelector("[data-svg='swatch-top']");
+    if (topGroup) {
+      topGroup.style.display = state.topVisible ? "block" : "none";
+      topGroup.style.opacity = state.topOpacity;
+    }
+
+    const botGroup = root.querySelector("[data-svg='swatch-bottom']");
+    if (botGroup) {
+      botGroup.style.display = state.bottomVisible ? "block" : "none";
+      botGroup.style.opacity = state.bottomOpacity;
+    }
+
+    const alphaTop = Math.round(Math.max(0.1, Math.min(1.0, state.topOpacity)) * 255);
+    const badgeTop = `${Math.round(state.topOpacity * 100)}%`;
+
+    const stateEl = root.querySelector("[data-role='swatch-state']");
+    if (stateEl) {
+      stateEl.textContent = `// ui.add(LayerSwatch::new(&mut show_top, &mut top_opacity, ...))
+show_top_copper: ${state.topVisible},
+top_copper_opacity: ${state.topOpacity.toFixed(2)}, // badge: "${badgeTop}"
+// PcbLayer::TopCopper.color_with_opacity(${state.topOpacity.toFixed(2)}):
+Color32::from_rgba_unmultiplied(224, 82, 67, ${alphaTop})`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
+    }
+  }
+
+  const topCheck = root.querySelector("[data-param='topVis']");
+  if (topCheck) {
+    topCheck.addEventListener("change", () => {
+      state.topVisible = topCheck.checked;
+      render();
+    });
+  }
+
+  const topSlider = root.querySelector("[data-param='topAlpha']");
+  if (topSlider) {
+    topSlider.addEventListener("input", () => {
+      state.topOpacity = parseFloat(topSlider.value);
+      render();
+    });
+  }
+
+  const botCheck = root.querySelector("[data-param='botVis']");
+  if (botCheck) {
+    botCheck.addEventListener("change", () => {
+      state.bottomVisible = botCheck.checked;
+      render();
+    });
+  }
+
+  const botSlider = root.querySelector("[data-param='botAlpha']");
+  if (botSlider) {
+    botSlider.addEventListener("input", () => {
+      state.bottomOpacity = parseFloat(botSlider.value);
+      render();
+    });
+  }
+
+  render();
+}
+

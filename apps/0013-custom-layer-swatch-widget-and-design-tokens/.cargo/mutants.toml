@@ -1,0 +1,16 @@
+# .cargo/mutants.toml
+# Reuse the target directory across scratch builds so mutation runs finish quickly.
+copy_target = true
+
+# `update`, `handle_hotkeys`, `render_schematic_bar`, `render_side_panel`,
+# `render_active_pin_callout`, `LayerSwatch`, `opacity_badge`, `color_with_opacity`,
+# `layer_opacity`, and `effective_layer_color` are all mutated & verified!
+exclude_re = [
+    "replace main",
+    "PcbReviewerApp::render_canvas",
+    "PcbReviewerApp::paint_board",
+    "sample_traces",
+    "sample_pads",
+    "sample_components",
+    "sample_review_pins",
+]

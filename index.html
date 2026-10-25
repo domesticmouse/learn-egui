@@ -22,6 +22,10 @@
       <a href="./lessons/0007-split-viewports-and-egui-scene.html">0007</a>
       <a href="./lessons/0008-searchable-netlist-and-bom-inspector.html">0008</a>
       <a href="./lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html">0009</a>
+      <a href="./lessons/0010-review-pins-and-sticky-note-callouts.html">0010</a>
+      <a href="./lessons/0011-review-status-workflow-and-popups.html">0011</a>
+      <a href="./lessons/0012-drc-violation-overlay-and-minimap.html">0012</a>
+      <a href="./lessons/0013-custom-layer-swatch-widget-and-design-tokens.html">0013</a>
       <a href="./reference/glossary.html">Glossary</a>
       <a href="./reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="./reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
@@ -49,7 +53,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Five-Act Curriculum Progression: Every lesson builds toward a production Schematic &amp; PCB Design Review System verified with unit tests and mutation coverage.</em></p>
-<h2>Published Interactive Lessons (<code>0000</code>–<code>0009</code>)</h2>
+<h2>Published Interactive Lessons (<code>0000</code>–<code>0013</code>)</h2>
 <p>Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a> to set up your Cargo project and mutation-testing harness, or jump straight into any completed module below:</p>
 </div>
 
@@ -211,6 +215,70 @@ flowchart LR
       <span><strong><code>egui</code> Skill:</strong> </span>
       <span><strong>Rust Concept:</strong> </span>
       <span><strong>Runnable App:</strong> <code>apps/0009-keyboard-shortcuts-and-point-to-point-ruler</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0010</span>
+        <span class="lesson-card-mutants">72 / 72 Caught</span>
+      </div>
+      <h3><a href="./lessons/0010-review-pins-and-sticky-note-callouts.html">Review Pins, <code>HashMap</code> Entry API &amp; Callouts</a></h3>
+      <p>Drop engineering review pins anchored to <code>(x, y)</code> board coordinates (mm), guard against duplicate IDs with <code>HashMap::entry</code>, and inspect notes in floating <code>egui::Window</code> callouts.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> <code>egui::Window</code>, <code>egui::Id::new</code> &amp; <code>Key::P</code> tool</span>
+      <span><strong>Rust Concept:</strong> <code>HashMap&lt;PinId, ReviewNote&gt;</code>, <code>Hash</code> + <code>Eq</code> &amp; <code>Entry</code> API</span>
+      <span><strong>Runnable App:</strong> <code>apps/0010-review-pins-and-sticky-note-callouts</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0011</span>
+        <span class="lesson-card-mutants">88 / 88 Caught</span>
+      </div>
+      <h3><a href="./lessons/0011-review-status-workflow-and-popups.html">Review Status Triage &amp; Severity Filtering</a></h3>
+      <p>Triage engineering review pins through an <code>Open</code> → <code>Resolved</code> → <code>Verified</code> state machine, filter by severity using static enum slices, and verify all transition and boolean filter branches.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> <code>ui.selectable_value</code> &amp; interactive callout triage</span>
+      <span><strong>Rust Concept:</strong> <code>&amp;'static [Self]</code> enum constants &amp; transition guards</span>
+      <span><strong>Runnable App:</strong> <code>apps/0011-review-status-workflow-and-popups</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0012</span>
+        <span class="lesson-card-mutants">125 / 125 Caught</span>
+      </div>
+      <h3><a href="./lessons/0012-drc-violation-overlay-and-minimap.html">DRC Violation Halos &amp; Minimap Clamping</a></h3>
+      <p>Compute Euclidean edge-to-edge copper pad clearance, highlight Design Rule Check (DRC) violations on the canvas, and clamp bird's-eye minimap camera bounds.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> <code>painter.circle_stroke</code> DRC halos &amp; camera jump</span>
+      <span><strong>Rust Concept:</strong> <code>Iterator::reduce(Rect::union)</code> &amp; <code>f32::clamp</code></span>
+      <span><strong>Runnable App:</strong> <code>apps/0012-drc-violation-overlay-and-minimap</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0013</span>
+        <span class="lesson-card-mutants">134 / 134 Caught</span>
+      </div>
+      <h3><a href="./lessons/0013-custom-layer-swatch-widget-and-design-tokens.html">Custom <code>egui::Widget</code> Layer Swatches &amp; Lifetimes</a></h3>
+      <p>Build a reusable <code>LayerSwatch&lt;'a&gt;</code> implementing <code>egui::Widget</code> (colour swatch + visibility toggle + opacity slider) and test it standalone with <code>Harness::new_ui_state</code>.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> <code>impl&lt;'a&gt; egui::Widget for LayerSwatch&lt;'a&gt;</code> &amp; <code>ui.add(...)</code></span>
+      <span><strong>Rust Concept:</strong> Struct lifetimes (<code>'a</code>) &amp; implementing foreign traits</span>
+      <span><strong>Runnable App:</strong> <code>apps/0013-custom-layer-swatch-widget-and-design-tokens</code></span>
     </div>
   </article>
 </section>

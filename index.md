@@ -18,7 +18,7 @@ flowchart LR
 ```
 _Five-Act Curriculum Progression: Every lesson builds toward a production Schematic & PCB Design Review System verified with unit tests and mutation coverage._
 
-## Published Interactive Lessons (`0000`–`0009`)
+## Published Interactive Lessons (`0000`–`0013`)
 
 Start with [Lesson 0000](./lessons/0000-project-setup-and-eframe-boot.html) to set up your Cargo project and mutation-testing harness, or jump straight into any completed module below:
 

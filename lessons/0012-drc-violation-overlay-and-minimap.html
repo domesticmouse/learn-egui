@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Lesson 0012: DRC Clearance Violation Halos, Bounding-Box Reduction &amp; Minimap Clamping</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
+    <div>
+      <a href="../index.html">Index</a>
+      <a href="./0000-project-setup-and-eframe-boot.html">0000</a>
+      <a href="./0001-the-immediate-mode-loop.html">0001</a>
+      <a href="./0002-custom-2d-canvas-and-painter.html">0002</a>
+      <a href="./0003-world-to-screen-transforms-pan-and-zoom.html">0003</a>
+      <a href="./0004-modeling-layers-traces-and-footprints.html">0004</a>
+      <a href="./0005-hit-testing-and-net-cross-probing.html">0005</a>
+      <a href="./0006-schematic-symbols-and-text-rendering.html">0006</a>
+      <a href="./0007-split-viewports-and-egui-scene.html">0007</a>
+      <a href="./0008-searchable-netlist-and-bom-inspector.html">0008</a>
+      <a href="./0009-keyboard-shortcuts-and-point-to-point-ruler.html">0009</a>
+      <a href="./0010-review-pins-and-sticky-note-callouts.html">0010</a>
+      <a href="./0011-review-status-workflow-and-popups.html">0011</a>
+      <a href="./0012-drc-violation-overlay-and-minimap.html" class="active">0012</a>
+      <a href="./0013-custom-layer-swatch-widget-and-design-tokens.html">0013</a>
+      <a href="../reference/glossary.html">Glossary</a>
+      <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
+  </nav>
+  </header>
+
+  <main>
+    <article class="tufte-article">
+<div class="prose-col">
+<h1>Lesson 0012: DRC Clearance Violation Halos, Bounding-Box Reduction &amp; Minimap Clamping</h1>
+<p class="subtitle">Detecting copper-to-copper pad clearance violations, reducing pad bounds with <code>Iterator::reduce</code>, and clamping minimap camera rectangles with <code>f32::clamp</code></p>
+
+<p>Even experienced PCB designers occasionally nudge a high-voltage pad or trace a fraction of a millimetre too close to an adjacent net. A <strong>Design Rule Check (DRC)</strong> overlay flags every pair of same-layer, different-net copper primitives whose edge-to-edge gap falls below <code>min_clearance_mm</code>—and lets you click any violation in the inspector to jump the camera straight to the offending copper.</p>
+<p>In <a href="./0011-review-status-workflow-and-popups.html">Lesson 0011</a>, we added review status triage and severity filtering. Now, let's build an automated pad-to-pad DRC clearance detector (<code>pad_edge_gap_mm</code> and <code>detect_pad_clearance_violations</code>), compute the board's pad bounding box with <code>Iterator::reduce(Rect::union)</code>, and clamp the active camera rectangle (<code>clamped_minimap_camera_rect</code>) so a bird's-eye minimap indicator never spills outside the physical board edges.</p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
+flowchart LR
+    Pads["board.pads: Vec&amp;lt;SmdPad&amp;gt;"] --&gt; Pair["Same PcbLayer &amp;amp;&amp;amp; a.net != b.net"]
+    Pair --&gt; Gap["pad_edge_gap_mm(a, b)&lt;br/&gt;dx.max(0.0).hypot(dy.max(0.0))"]
+    Gap --&gt;|"gap &amp;lt; min_clearance_mm"| Viol["DrcViolation { center_mm, measured_gap_mm, ... }"]
+    Viol --&gt; Halo["Canvas: painter.circle_stroke(center_px, 14.0, red)&lt;br/&gt;SidePanel: Click violation -&gt; center camera"]
+  </pre>
+</figure>
+<p><em>Figure 12.1: Same-layer pads on distinct nets are checked against <code>min_clearance_mm</code>, emitting <code>DrcViolation</code> markers rendered as red halos on the canvas and clickable jump buttons in the <code>SidePanel</code>.</em></p>
+<h2>1. Just-in-Time Rust: Bounding-Box Reduction (<code>Iterator::reduce</code>) &amp; <code>f32::clamp</code></h2>
+<p>To compute the edge-to-edge Euclidean distance between two axis-aligned rectangular pads <code>a</code> and <code>b</code>, we subtract their half-widths <code>(a.size_mm.x + b.size_mm.x) * 0.5</code> from the centre-to-centre distance <code>(a.center_mm.x - b.center_mm.x).abs()</code> along each axis, clamp negative values (which represent axis overlap) to <code>0.0</code> via <code>.max(0.0)</code>, and take the hypotenuse with <code>.hypot(...)</code>:<span class="sidenote-number"></span><span class="sidenote">Notice how <code>pads_bounding_box_mm</code> uses <code>.map(SmdPad::bounds_mm).reduce(Rect::union)</code>: <code>Iterator::reduce</code> folds the iterator using the first pad's <code>Rect</code> as the initial accumulator and returns <code>None</code> if the board has zero pads.</span></p>
+<pre><code class="language-rust">pub fn pad_edge_gap_mm(a: &amp;SmdPad, b: &amp;SmdPad) -&gt; f32 {
+    let dx = (a.center_mm.x - b.center_mm.x).abs() - (a.size_mm.x + b.size_mm.x) * 0.5;
+    let dy = (a.center_mm.y - b.center_mm.y).abs() - (a.size_mm.y + b.size_mm.y) * 0.5;
+    dx.max(0.0).hypot(dy.max(0.0))
+}
+
+impl BoardModel {
+    pub fn pads_bounding_box_mm(&amp;self) -&gt; Option&lt;Rect&gt; {
+        self.pads
+            .iter()
+            .map(SmdPad::bounds_mm)
+            .reduce(Rect::union)
+    }
+}</code></pre>
+<h2>2. Detecting DRC Clearance Violations &amp; Clamping the Minimap Camera</h2>
+<p>When iterating over pad pairs in <code>detect_pad_clearance_violations</code>, we maintain a <code>seen: Vec&lt;&amp;SmdPad&gt;</code> slice of previously visited pads. That way, each unordered pair <code>(a, b)</code> is tested once without index arithmetic (<code>idx + 1</code>), and whenever <code>a.layer == b.layer &amp;&amp; a.net != b.net</code> with <code>gap &lt; min_clearance_mm</code>, we record a <code>DrcViolation</code> at the midpoint between the two pads.</p>
+<p>Meanwhile, when the engineer pans the <code>egui::Scene</code> camera near or beyond the board edge <code>(0, 0)..(100, 70) mm</code>, <code>ViewState::clamped_minimap_camera_rect</code> uses <a href="https://doc.rust-lang.org/std/primitive.f32.html#method.clamp"><code>f32::clamp</code></a> to keep the minimap's camera box inside <code>board_bounds_mm</code>:</p>
+<pre><code class="language-rust">pub fn clamped_minimap_camera_rect(&amp;self, board_bounds_mm: Rect) -&gt; Rect {
+    let min_x = self
+        .pcb_scene_rect
+        .min
+        .x
+        .clamp(board_bounds_mm.min.x, board_bounds_mm.max.x);
+    let min_y = self
+        .pcb_scene_rect
+        .min
+        .y
+        .clamp(board_bounds_mm.min.y, board_bounds_mm.max.y);
+    let max_x = self
+        .pcb_scene_rect
+        .max
+        .x
+        .clamp(min_x, board_bounds_mm.max.x);
+    let max_y = self
+        .pcb_scene_rect
+        .max
+        .y
+        .clamp(min_y, board_bounds_mm.max.y);
+    Rect::from_min_max(pos2(min_x, min_y), pos2(max_x, max_y))
+}</code></pre>
+</div>
+
+<section class="full-width-panel" id="drc-minimap-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: DRC Clearance Thresholds &amp; Minimap Camera Clamping</span>
+    <span class="panel-badge">pad_edge_gap_mm • Iterator::reduce • f32::clamp</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Slide <code>min_clearance_mm</code> across the exact <code>7.6 mm</code> pad gap boundary to see when the red DRC halo triggers, and pan the camera X coordinate past the board edge to observe <code>clamped_minimap_camera_rect</code> clamping at <code>0..100 mm</code>.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Clearance &amp; Camera Controls</h4>
+      <label style="display:block; font-size:0.82rem; margin-bottom:0.65rem;">
+        Required Clearance (<code>min_clearance_mm</code>):
+        <input type="range" data-param="clearance" min="6.0" max="10.0" step="0.2" value="8.0" style="width:100%;">
+      </label>
+      <label style="display:block; font-size:0.82rem; margin-bottom:0.65rem;">
+        Unclamped Camera Min X (<code>-30..+90 mm</code>):
+        <input type="range" data-param="camX" min="-30" max="90" step="5" value="0" style="width:100%;">
+      </label>
+    </div>
+
+    <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px;">
+      <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="DRC Clearance and Minimap Viewport">
+        <rect x="24" y="20" width="250" height="154" rx="4" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
+        <rect x="68" y="64" width="20" height="12" rx="2" fill="#e05243"/>
+        <rect x="68" y="88" width="20" height="12" rx="2" fill="#e05243"/>
+        <g data-svg="drc-halo">
+          <circle cx="78" cy="82" r="18" fill="rgba(255,85,85,0.18)" stroke="#ff5555" stroke-width="2" stroke-dasharray="4 2"/>
+          <text x="104" y="86" fill="#ff6b6b" font-family="monospace" font-size="9.5" font-weight="bold">DRC: gap 7.6mm</text>
+        </g>
+        <rect data-svg="minimap-cam" x="24" y="46" width="100" height="66" fill="rgba(61,214,140,0.08)" stroke="#3dd68c" stroke-width="2"/>
+      </svg>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. DRC &amp; Clamped Minimap State</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.75rem; padding:0.75rem;"><code class="language-rust" data-role="drc-state"></code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 2: Complete the Pad Edge Gap, Bounding-Box Reduce &amp; Minimap Clamp</span>
+    <span class="panel-badge">hypot • Iterator::reduce • f32::clamp</span>
+  </div>
+  <p>Fill in the three blanks below to (1) clamp negative axis overlaps to <code>0.0</code> before calling <code>.hypot(...)</code>, (2) fold pad rectangles with <code>Iterator::reduce(Rect::union)</code>, and (3) clamp <code>min_x</code> within <code>board_bounds_mm</code>:</p>
+<pre class="keep-markup"><code class="language-rust">pub fn pad_edge_gap_mm(a: &amp;SmdPad, b: &amp;SmdPad) -&gt; f32 {
+    let dx = (a.center_mm.x - b.center_mm.x).abs() - (a.size_mm.x + b.size_mm.x) * 0.5;
+    let dy = (a.center_mm.y - b.center_mm.y).abs() - (a.size_mm.y + b.size_mm.y) * 0.5;
+    dx.<input id="ex-0012-blank-1" class="code-challenge-input" style="width:105px;" placeholder="/* 1: max(0.0) */" autocomplete="off">.hypot(dy.max(0.0))
+}
+
+impl BoardModel {
+    pub fn pads_bounding_box_mm(&amp;self) -&gt; Option&lt;Rect&gt; {
+        self.pads
+            .iter()
+            .map(SmdPad::bounds_mm)
+            .<input id="ex-0012-blank-2" class="code-challenge-input" style="width:165px;" placeholder="/* 2: reduce */" autocomplete="off">
+    }
+}
+
+// Inside ViewState::clamped_minimap_camera_rect():
+let min_x = self
+    .pcb_scene_rect
+    .min
+    .x
+    .<input id="ex-0012-blank-3" class="code-challenge-input" style="width:95px;" placeholder="/* 3: clamp */" autocomplete="off">(board_bounds_mm.min.x, board_bounds_mm.max.x);</code></pre>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn-primary" id="btn-check-ex-0012">Check Rust Code</button>
+    <button type="button" class="btn-secondary" id="btn-hint-ex-0012">Show Hint</button>
+  </div>
+  <div id="ex-0012-feedback" class="feedback-box"></div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 3: Catching <code>&lt;</code> vs. <code>&lt;=</code> DRC Boundary Mutants</span>
+    <span class="panel-badge">cargo test + cargo mutants</span>
+  </div>
+  <p>If a test only checks <code>detect_pad_clearance_violations(8.0)</code> when the actual gap is <code>7.6 mm</code>, <code>cargo mutants</code> can mutate <code>if gap &lt; min_clearance_mm</code> into <code>if gap &lt;= min_clearance_mm</code> and the test will still pass! Asserting <code>board.detect_pad_clearance_violations(7.6).is_empty()</code> at the exact boundary kills the <code>&lt;</code> $\to$ <code>&lt;=</code> mutant immediately:</p>
+<pre><code class="language-rust">#[test]
+fn drc_clearance_bounding_box_and_minimap_clamping_are_exact() {
+    let mut board = BoardModel::default();
+    assert_eq!(
+        board.pads_bounding_box_mm(),
+        Some(Rect::from_min_max(pos2(18.0, 20.8), pos2(22.0, 49.2)))
+    );
+
+    // Exact boundary check (gap == 7.6 mm): catches `&lt;` mutated to `&lt;=`!
+    assert!(board.detect_pad_clearance_violations(7.6).is_empty());
+
+    let violations = board.detect_pad_clearance_violations(8.0);
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].center_mm, pos2(20.0, 27.0));
+}</code></pre>
+  <div class="mutation-scoreboard">
+    <div class="mutation-stat tier">
+      <div class="stat-label">Verification Tier</div>
+      <div class="stat-value">Tier 2 + 6: DRC Geometry &amp; Minimap</div>
+    </div>
+    <div class="mutation-stat caught">
+      <div class="stat-label">Target Caught Mutants</div>
+      <div class="stat-value">125 Caught (20 Unviable)</div>
+    </div>
+    <div class="mutation-stat missed">
+      <div class="stat-label">Target Missed Mutants</div>
+      <div class="stat-value">0 Missed</div>
+    </div>
+  </div>
+      <ul class="step-checklist">
+        <li>
+          <input type="checkbox" id="verify-0012-1">
+          <label for="verify-0012-1">
+            <strong>1. Run <code>cargo test</code> in <code>apps/0012-drc-violation-overlay-and-minimap</code>:</strong> Confirm all 23 unit + headless <code>egui_kittest</code> tests pass.
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0012-2">
+          <label for="verify-0012-2">
+            <strong>2. Run <code>cargo mutants --in-place</code>:</strong> Verify that all viable mutants across <code>pad_edge_gap_mm</code>, <code>detect_pad_clearance_violations</code>, <code>pads_bounding_box_mm</code>, and <code>clamped_minimap_camera_rect</code> are <strong>Caught</strong> with <strong>0 Missed</strong>.
+          </label>
+        </li>
+      </ul>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Retrieval Practice: DRC Clearance Math, <code>Iterator::reduce</code> &amp; <code>f32::clamp</code></span>
+    <span class="panel-badge">3 Questions • Equal-Length Options</span>
+  </div>
+  <div id="quiz-0012"></div>
+</section>
+
+<div class="prose-col">
+<h2>Recommended Primary Source</h2>
+<div class="callout">
+  <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.reduce"><code>std::iter::Iterator::reduce</code> Official Docs</a> and <a href="https://docs.rs/egui/latest/egui/struct.Rect.html#method.union"><code>egui::Rect::union</code> API Docs</a>.
+</div>
+<div class="teacher-prompt-box">
+  <strong>Next Up (<a href="./0013-custom-layer-swatch-widget-and-design-tokens.html">Lesson 0013: Custom <code>egui::Widget</code> Layer Swatches, Struct Lifetimes (<code>'a</code>) &amp; <code>Harness::new_ui_state</code></a>):</strong> To wrap up <strong>Act III</strong>, we will extract our first reusable custom <code>egui::Widget</code>—a PCB <code>LayerSwatch&lt;'a&gt;</code> combining a colour swatch, visibility checkbox, and opacity slider—and test it in isolation with <code>egui_kittest::Harness::new_ui_state</code>!
+</div>
+</div>
+    </article>
+  </main>
+
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
+
+  <script src="../assets/course.js"></script>
+  <script>
+    initCodeExercise({
+      checkBtnId: "btn-check-ex-0012",
+      hintBtnId: "btn-hint-ex-0012",
+      feedbackId: "ex-0012-feedback",
+      blanks: [
+        {
+          inputId: "ex-0012-blank-1",
+          accepted: ["max(0.0)"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Clamp negative <code>dx</code> overlap to <code>0.0</code> using <code>max(0.0)</code>.",
+        },
+        {
+          inputId: "ex-0012-blank-2",
+          accepted: ["reduce(Rect::union)"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Fold the iterator of <code>Rect</code>s into <code>Option&lt;Rect&gt;</code> using <code>reduce(Rect::union)</code>.",
+        },
+        {
+          inputId: "ex-0012-blank-3",
+          accepted: ["clamp"],
+          getErrorHint: (val) =>
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Use <code>clamp</code> to bound <code>min.x</code> between <code>board_bounds_mm.min.x</code> and <code>board_bounds_mm.max.x</code>.",
+        }
+      ],
+      hintMessage: "<strong>Hints:</strong> (1) <code>max(0.0)</code>. (2) <code>reduce(Rect::union)</code>. (3) <code>clamp</code>.",
+      successMessage: "<strong>Great work!</strong> Your DRC geometry engine computes exact edge-to-edge pad gaps, unions pad bounding boxes, and clamps minimap camera coordinates.",
+    });
+
+    initQuiz("quiz-0012", [
+      {
+            "question": "Why does `pad_edge_gap_mm` clamp `dx` and `dy` with `.max(0.0)` before calling `.hypot(...)`?",
+            "options": [
+                  "Negative axis overlap means zero gap",
+                  "Hypotenuse panics on positive float inputs",
+                  "Copper layers ignore vertical pad spacing",
+                  "Screen transforms invert negative world coordinates"
+            ],
+            "correctIndex": 0,
+            "explanation": "When two pads overlap along the X axis (`dx < 0`), their horizontal separation is `0.0 mm` and the edge gap is purely vertical (`dy`).",
+            "wrongHint": "Think about two pads aligned vertically at `x = 20.0 mm`: what is `|20 - 20| - 4.0`?"
+      },
+      {
+            "question": "How does `pads_bounding_box_mm` compute the union `Rect` across all pads on the board?",
+            "options": [
+                  "Sorting pad coordinates by layer rank",
+                  "Reducing pad rectangles with Rect union",
+                  "Multiplying viewport scale by board width",
+                  "Filtering hidden silkscreen labels each frame"
+            ],
+            "correctIndex": 1,
+            "explanation": "`.map(SmdPad::bounds_mm).reduce(Rect::union)` folds every pad's `Rect` into a single bounding rectangle (or `None` if `pads` is empty).",
+            "wrongHint": "Look at the iterator method chained after `.map(SmdPad::bounds_mm)`."
+      },
+      {
+            "question": "Why should a DRC test assert `detect_pad_clearance_violations(7.6).is_empty()` at the exact `7.6 mm` measured pad gap?",
+            "options": [
+                  "Skipping floating point math during tests",
+                  "Forcing headless harnesses to open windows",
+                  "Catching strict inequality boundary operator mutants",
+                  "Clearing review pins from hash maps"
+            ],
+            "correctIndex": 2,
+            "explanation": "Testing `min_clearance_mm == 7.6` ensures that mutating `gap < min_clearance_mm` into `gap <= min_clearance_mm` causes the test to fail.",
+            "wrongHint": "What happens at `gap == 7.6` if `<` is mutated into `<=`?"
+      }
+]);
+
+    initDrcMinimapSimulator("drc-minimap-sim");
+  </script>
+</body>
+</html>

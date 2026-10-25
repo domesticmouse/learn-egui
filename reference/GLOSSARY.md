@@ -98,6 +98,18 @@ _Avoid_: equating "100% line coverage" with verified behaviour (line coverage on
 The official testing library for `egui` that drives an app or widget closure without opening an OS window, supporting semantic AccessKit widget queries (`get_by_label`), simulated clicks/key presses, and offscreen visual snapshots ([docs.rs/egui_kittest](https://docs.rs/egui_kittest/latest/egui_kittest/)).
 _Avoid_: skipping `eframe::App::update` forever once headless UI testing is available in Act II+.
 
+**Hash Map & `Entry` API (`HashMap<K, V>`)**:
+A hash-table collection mapping unique keys `K: Eq + Hash` to values `V`, whose `.entry(key)` method returns `Entry::Vacant` or `Entry::Occupied` for in-place inspection or insertion without double lookups or silent overwrites ([std::collections::HashMap](https://doc.rust-lang.org/std/collections/struct.HashMap.html)).
+_Avoid_: relying on `HashMap` iteration order in immediate-mode UIs (sort keys first so widget order is deterministic).
+
+**Floating Window & Widget Identity (`egui::Window`, `egui::Id`)**:
+`egui::Window` renders a floating, draggable overlay layer above panels, keyed by a deterministic `egui::Id::new(...)` hash so `egui` remembers window state without collisions ([docs.rs/egui](https://docs.rs/egui/latest/egui/containers/struct.Window.html)).
+_Avoid_: creating multiple windows or grids with identical titles and no disambiguating `.id(...)`.
+
+**Struct Lifetime (`'a`) & `egui::Widget`**:
+A generic lifetime annotation `<'a>` on a builder struct (such as `LayerSwatch<'a>`) proving that the struct cannot outlive the `&'a mut` state fields it borrows while `impl<'a> egui::Widget for LayerSwatch<'a>` consumes `self` inside `ui.add(...)` ([Rust Book §10.3](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html)).
+_Avoid_: thinking lifetimes change runtime performance (`'a` is purely a compile-time borrow check erased before code generation).
+
 ---
 
 ## Quick Lookup: Key `eframe` & `egui` APIs by Lesson
@@ -114,3 +126,7 @@ _Avoid_: skipping `eframe::App::update` forever once headless UI testing is avai
 | `TopBottomPanel` & `egui::Scene` | Splits the window into a schematic bar and an infinite pan/zoom PCB scene with camera cross-probing. | [Lesson 0007](../lessons/0007-split-viewports-and-egui-scene.html) |
 | `TextEdit::singleline` & `ScrollArea::show_rows` | Filters the Bill of Materials live and virtualises scrolling so only visible rows are laid out. | [Lesson 0008](../lessons/0008-searchable-netlist-and-bom-inspector.html) |
 | `InputState::consume_key` & `ActiveTool` | Consumes single-key CAD hotkeys (`F`, `M`, `Esc`) and drives a point-to-point distance ruler state machine. | [Lesson 0009](../lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html) |
+| `HashMap::entry`, `egui::Window` & `Id::new` | Stores anchored review pins without silent overwrites and renders floating callout overlays. | [Lesson 0010](../lessons/0010-review-pins-and-sticky-note-callouts.html) |
+| `ui.selectable_value` & `ReviewStatus` | Enforces `Open` → `Resolved` → `Verified` sign-off transitions and filters pins by severity. | [Lesson 0011](../lessons/0011-review-status-workflow-and-popups.html) |
+| `Iterator::reduce(Rect::union)` & `f32::clamp` | Detects copper pad-to-pad DRC clearance violations and clamps minimap camera bounds. | [Lesson 0012](../lessons/0012-drc-violation-overlay-and-minimap.html) |
+| `impl<'a> egui::Widget` & `Harness::new_ui_state` | Packages a colour swatch, visibility toggle, and opacity slider into a custom widget tested in isolation. | [Lesson 0013](../lessons/0013-custom-layer-swatch-widget-and-design-tokens.html) |

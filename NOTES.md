@@ -24,7 +24,7 @@
 
 ## Curriculum Arc (`0000`–`0025`) with Continuous Verification & Mutation Testing
 
-### Completed Lessons (`0000`–`0009`: Foundation + Act I + Act II)
+### Completed Lessons (`0000`–`0013`: Foundation + Act I + Act II + Act III)
 - `0000-project-setup-and-eframe-boot.html` (App: `apps/0000-project-setup-and-eframe-boot`)
   - **`egui` Skill & PCB Feature**: Creating the Cargo crate (`Cargo.toml`, `eframe = "0.33"`, dev-profile optimization) and booting the native window with `eframe::run_native`.
   - **Just-in-Time Rust**: `impl Default` delegating to `reset_layers(&mut self)`, `ViewportBuilder` method chaining, `Box::new`, and `#[cfg(test)]` / `#[test]` / `assert!`.
@@ -72,24 +72,24 @@
   - **Just-in-Time Rust**: State machines with data-carrying enums (`enum ActiveTool { Select, Measure { start_mm: Option<Pos2>, end_mm: Option<Pos2> } }`).
   - **Cargo Verification & Mutation Coverage**: 19 unit + `egui_kittest` tests simulating key presses (`Key::M`, `Key::Escape`, `Key::F`) and verifying Euclidean $\Delta x / \Delta y$ / hypotenuse math (`59 / 59 viable mutants caught, 14 unviable, 0 missed`).
 
-### Act III: Design Review Workflows (`0010`–`0013`)
+### Act III: Design Review Workflows (`0010`–`0013`) — *Completed*
 *Goal: Turn the viewer into an engineering review tool with annotations, DRC markers, and custom widgets, testing multi-step UI workflows and custom `egui::Widget` traits.*
-- `0010-review-pins-and-sticky-note-callouts.html`
-  - **`egui` Skill & PCB Feature**: Drop review comments anchored to `(x, y)` board coordinates and render interactive floating overlays (`egui::Area`, `egui::Window`, `Id::new`).
-  - **Just-in-Time Rust**: `HashMap<PinId, ReviewNote>`, unique IDs, and the Entry API.
-  - **Cargo Verification & Mutation Coverage**: Test pin insertion, coordinate lookup, and duplicate-ID rejection in `HashMap`; run `cargo mutants` on pin-store methods to ensure no silent overwrites or dropped notes survive.
-- `0011-review-status-workflow-and-popups.html`
-  - **`egui` Skill & PCB Feature**: Triage review items (`Open` → `Resolved` / `Verified`), filter by author/severity, and build context menus (`Response::context_menu`, `ComboBox`).
-  - **Just-in-Time Rust**: Custom traits, `#[derive(PartialEq, Eq, Clone, Copy)]`, and methods returning static slices.
-  - **Cargo Verification & Mutation Coverage**: Test valid vs. invalid review status transitions and multi-criteria filtering (severity × status); run `cargo mutants` to verify boolean `&&` vs. `||` filter combinator mutations are caught.
-- `0012-drc-violation-overlay-and-minimap.html`
-  - **`egui` Skill & PCB Feature**: Render Design Rule Check error markers (clearance/unrouted net halos) and a corner bird's-eye minimap showing the active camera rectangle.
-  - **Just-in-Time Rust**: Bounding-box math, `Iterator::fold`, and coordinate clamping (`f32::clamp`).
-  - **Cargo Verification & Mutation Coverage**: Test minimum copper-to-copper clearance detection and minimap coordinate clamping at board edges; use `cargo mutants` to catch off-by-epsilon clearance threshold mutations (`<` vs. `<=`).
-- `0013-custom-layer-swatch-widget-and-design-tokens.html`
-  - **`egui` Skill & PCB Feature**: Extract a reusable PCB layer row widget (color swatch + visibility eye + opacity slider) implementing `egui::Widget`, styled with dark-mode CAD tokens.
-  - **Just-in-Time Rust**: Implementing a foreign trait (`impl egui::Widget for ...`) and lifetimes (`'a`) in UI builders.
-  - **Cargo Verification & Mutation Coverage**: Mount the standalone `LayerSwatch<'a>` widget directly inside `egui_kittest::Harness::new_ui`, simulate toggling visibility and dragging opacity, and run `cargo mutants` on the widget module.
+- `0010-review-pins-and-sticky-note-callouts.html` (App: `apps/0010-review-pins-and-sticky-note-callouts`)
+  - **`egui` Skill & PCB Feature**: Drop review comments anchored to `(x, y)` board coordinates and render interactive floating overlays (`egui::Window`, `Id::new`).
+  - **Just-in-Time Rust**: `HashMap<PinId, ReviewNote>`, unique IDs, and the `Entry` API (`Entry::Vacant` vs. `Entry::Occupied`).
+  - **Cargo Verification & Mutation Coverage**: 21 unit + `egui_kittest` tests verifying pin insertion, duplicate-ID rejection in `HashMap`, deterministic sorting, and floating callout window lifecycle (`72 / 72 viable mutants caught, 16 unviable, 0 missed`).
+- `0011-review-status-workflow-and-popups.html` (App: `apps/0011-review-status-workflow-and-popups`)
+  - **`egui` Skill & PCB Feature**: Triage review items (`Open` → `Resolved` → `Verified`), filter by severity (`PinSeverity::ALL`), and build interactive triage controls (`ui.selectable_value`).
+  - **Just-in-Time Rust**: Custom methods on enums, `#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]`, and methods returning static slices (`&'static [Self]`).
+  - **Cargo Verification & Mutation Coverage**: 22 unit + `egui_kittest` tests verifying all $3 \times 3$ review status transitions and multi-criteria filtering (`severity × status`), catching all boolean combinator mutations (`88 / 88 viable mutants caught, 17 unviable, 0 missed`).
+- `0012-drc-violation-overlay-and-minimap.html` (App: `apps/0012-drc-violation-overlay-and-minimap`)
+  - **`egui` Skill & PCB Feature**: Render Design Rule Check error markers (copper pad clearance halos) and clamp a bird's-eye minimap camera rectangle.
+  - **Just-in-Time Rust**: Bounding-box reduction (`Iterator::reduce(Rect::union)`) and coordinate clamping (`f32::clamp`).
+  - **Cargo Verification & Mutation Coverage**: 23 unit + `egui_kittest` tests verifying minimum copper-to-copper clearance detection (including exact `7.6 mm` boundary assertions catching `<` vs. `<=`) and minimap coordinate clamping (`125 / 125 viable mutants caught, 20 unviable, 0 missed`).
+- `0013-custom-layer-swatch-widget-and-design-tokens.html` (App: `apps/0013-custom-layer-swatch-widget-and-design-tokens`)
+  - **`egui` Skill & PCB Feature**: Extract a reusable PCB layer row widget (`LayerSwatch<'a>`: color swatch + visibility checkbox + opacity slider) implementing `egui::Widget`.
+  - **Just-in-Time Rust**: Implementing a foreign trait (`impl<'a> egui::Widget for LayerSwatch<'a>`) and struct lifetimes (`'a`).
+  - **Cargo Verification & Mutation Coverage**: 24 unit + `egui_kittest` tests mounting `LayerSwatch<'a>` in isolation via `egui_kittest::Harness::new_ui_state` and inside the full `PcbReviewerApp` (`134 / 134 viable mutants caught, 21 unviable, 0 missed`).
 
 ### Act IV: Scaling Up — Engine-First Architecture & Persistence (`0014`–`0017`)
 *Goal: Refactor the growing prototype into a clean multi-crate architecture (`egui-app-architecture` & `egui-cow-document-model`) with static lint gates, `proptest` property suites, and per-crate `cargo mutants -p <crate>`.*

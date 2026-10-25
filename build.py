@@ -1019,6 +1019,187 @@ def widget_hotkey_ruler_sim(scripts_out: list[str]) -> str:
 </section>"""
 
 
+def widget_review_pins_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initReviewPinsSimulator("review-pins-sim");')
+    return """<section class="full-width-panel" id="review-pins-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Anchored Review Pins, <code>HashMap::entry</code> &amp; Callout Window</span>
+    <span class="panel-badge">HashMap&lt;PinId, ReviewNote&gt; • Entry::Vacant • egui::Window</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Click any review pin in the list below or test <code>insert_review_pin</code> at <code>R12 (52, 35) mm</code>. Try clicking the insert button twice to see how <code>Entry::Occupied</code> protects existing notes from silent overwrites!
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Sorted Review Pins (<code>SidePanel</code>)</h4>
+      <div data-role="pin-list" style="display:flex; flex-direction:column; margin-bottom:0.6rem;"></div>
+      <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+        <button type="button" class="egui-btn" data-action="add-pin-r12">+ Insert Pin #3 at R12</button>
+        <button type="button" class="egui-btn" data-action="close-callout">Close Callout</button>
+      </div>
+    </div>
+
+    <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px;">
+      <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="Review Pin Callouts on PCB Canvas">
+        <rect x="18" y="14" width="284" height="182" rx="6" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
+        <path d="M 80 82 L 170 102 L 214 102" fill="none" stroke="#e05243" stroke-width="4" stroke-linecap="round"/>
+        <g data-svg="pin-markers"></g>
+        <g data-svg="callout-box">
+          <rect x="44" y="128" width="232" height="54" rx="5" fill="#182029" stroke="#ffe664" stroke-width="1.5"/>
+          <text data-svg="callout-title" x="54" y="147" fill="#ffe664" font-family="monospace" font-size="10.5" font-weight="bold">Pin #1: Check U1 thermal relief</text>
+          <text data-svg="callout-coord" x="54" y="166" fill="#e8e6df" font-family="monospace" font-size="9.5">Anchor: (20.0, 27.0) mm (@alice)</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. <code>HashMap</code> &amp; Window ID State</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.75rem; padding:0.75rem;"><code class="language-rust" data-role="pins-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_review_triage_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initReviewTriageSimulator("review-triage-sim");')
+    return """<section class="full-width-panel" id="review-triage-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Review Sign-Off State Machine &amp; Multi-Criteria Filter</span>
+    <span class="panel-badge">ReviewStatus • PinSeverity::ALL • can_transition_to</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Try clicking <strong>Mark Verified</strong> while Pin #1 is still <code>Open</code>—notice how <code>can_transition_to</code> rejects skipping <code>Resolved</code>! Then adjust the minimum severity and open-only filter controls.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Triage Controls &amp; Filters</h4>
+      <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.75rem;">
+        <button type="button" class="egui-btn" data-transition="Resolved">Mark Resolved</button>
+        <button type="button" class="egui-btn" data-transition="Verified">Mark Verified</button>
+        <button type="button" class="egui-btn" data-transition="Open">Reopen Pin</button>
+      </div>
+      <label style="display:block; font-size:0.82rem; margin-bottom:0.5rem;">
+        Min Severity (<code>PinSeverity::ALL</code>):
+        <select data-param="minSev" style="width:100%; margin-top:0.25rem; padding:0.35rem; background:var(--bg-code); color:var(--text-main); border:1px solid var(--border-strong); border-radius:4px;">
+          <option value="Info">Info (rank &gt;= 0)</option>
+          <option value="Warning">Warning (rank &gt;= 1)</option>
+          <option value="Critical">Critical (rank &gt;= 2)</option>
+        </select>
+      </label>
+      <label class="egui-checkbox">
+        <input type="checkbox" data-param="onlyOpen">
+        <span>Open Pins Only (<code>filter_only_open_pins</code>)</span>
+      </label>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Filtered Review List</h4>
+      <div data-role="triage-list"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. Workflow &amp; Filter State</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.75rem; padding:0.75rem;"><code class="language-rust" data-role="triage-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_drc_minimap_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initDrcMinimapSimulator("drc-minimap-sim");')
+    return """<section class="full-width-panel" id="drc-minimap-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: DRC Clearance Thresholds &amp; Minimap Camera Clamping</span>
+    <span class="panel-badge">pad_edge_gap_mm • Iterator::reduce • f32::clamp</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Slide <code>min_clearance_mm</code> across the exact <code>7.6 mm</code> pad gap boundary to see when the red DRC halo triggers, and pan the camera X coordinate past the board edge to observe <code>clamped_minimap_camera_rect</code> clamping at <code>0..100 mm</code>.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Clearance &amp; Camera Controls</h4>
+      <label style="display:block; font-size:0.82rem; margin-bottom:0.65rem;">
+        Required Clearance (<code>min_clearance_mm</code>):
+        <input type="range" data-param="clearance" min="6.0" max="10.0" step="0.2" value="8.0" style="width:100%;">
+      </label>
+      <label style="display:block; font-size:0.82rem; margin-bottom:0.65rem;">
+        Unclamped Camera Min X (<code>-30..+90 mm</code>):
+        <input type="range" data-param="camX" min="-30" max="90" step="5" value="0" style="width:100%;">
+      </label>
+    </div>
+
+    <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px;">
+      <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="DRC Clearance and Minimap Viewport">
+        <rect x="24" y="20" width="250" height="154" rx="4" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
+        <rect x="68" y="64" width="20" height="12" rx="2" fill="#e05243"/>
+        <rect x="68" y="88" width="20" height="12" rx="2" fill="#e05243"/>
+        <g data-svg="drc-halo">
+          <circle cx="78" cy="82" r="18" fill="rgba(255,85,85,0.18)" stroke="#ff5555" stroke-width="2" stroke-dasharray="4 2"/>
+          <text x="104" y="86" fill="#ff6b6b" font-family="monospace" font-size="9.5" font-weight="bold">DRC: gap 7.6mm</text>
+        </g>
+        <rect data-svg="minimap-cam" x="24" y="46" width="100" height="66" fill="rgba(61,214,140,0.08)" stroke="#3dd68c" stroke-width="2"/>
+      </svg>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. DRC &amp; Clamped Minimap State</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.75rem; padding:0.75rem;"><code class="language-rust" data-role="drc-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_layer_swatch_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initLayerSwatchSimulator("layer-swatch-sim");')
+    return """<section class="full-width-panel" id="layer-swatch-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Custom <code>LayerSwatch&lt;'a&gt;</code> Widget &amp; Alpha Blending</span>
+    <span class="panel-badge">impl&lt;'a&gt; egui::Widget • color_with_opacity • Harness::new_ui_state</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Toggle visibility or drag the opacity sliders in the simulated <code>LayerSwatch&lt;'a&gt;</code> rows below. Watch how each widget borrows <code>&amp;'a mut bool</code> and <code>&amp;'a mut f32</code> for the duration of the frame to blend copper layers on the canvas.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. <code>LayerSwatch&lt;'a&gt;</code> Rows</h4>
+      <label class="egui-checkbox" style="margin-bottom:0.35rem;">
+        <input type="checkbox" data-param="topVis" checked>
+        <span style="color:#e05243;">■</span> Top Copper (F.Cu)
+      </label>
+      <input type="range" data-param="topAlpha" min="0.1" max="1.0" step="0.05" value="0.75" style="width:100%; margin-bottom:0.75rem;">
+
+      <label class="egui-checkbox" style="margin-bottom:0.35rem;">
+        <input type="checkbox" data-param="botVis" checked>
+        <span style="color:#3b8eea;">■</span> Bottom Copper (B.Cu)
+      </label>
+      <input type="range" data-param="botAlpha" min="0.1" max="1.0" step="0.05" value="1.0" style="width:100%;">
+    </div>
+
+    <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px;">
+      <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="Alpha Blended PCB Layers">
+        <rect x="20" y="16" width="280" height="178" rx="6" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
+        <g data-svg="swatch-bottom">
+          <path d="M 60 110 L 260 110" stroke="#3b8eea" stroke-width="20" stroke-linecap="round"/>
+        </g>
+        <g data-svg="swatch-top" style="opacity:0.75;">
+          <path d="M 160 40 L 160 175" stroke="#e05243" stroke-width="20" stroke-linecap="round"/>
+          <rect x="142" y="92" width="36" height="36" rx="4" fill="#e05243"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Borrowed Widget &amp; Alpha State</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.75rem; padding:0.75rem;"><code class="language-rust" data-role="swatch-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
 def render_lesson_cards(lessons: list[dict[str, Any]]) -> str:
     """Render `.lesson-grid` cards for `index.html` from lesson frontmatter."""
     cards: list[str] = []
@@ -1249,6 +1430,10 @@ def compile_markdown_body(
         "{{widget:dual-scene-sim}}": lambda: widget_dual_scene_sim(scripts_out),
         "{{widget:bom-scroll-sim}}": lambda: widget_bom_scroll_sim(scripts_out),
         "{{widget:hotkey-ruler-sim}}": lambda: widget_hotkey_ruler_sim(scripts_out),
+        "{{widget:review-pins-sim}}": lambda: widget_review_pins_sim(scripts_out),
+        "{{widget:review-triage-sim}}": lambda: widget_review_triage_sim(scripts_out),
+        "{{widget:drc-minimap-sim}}": lambda: widget_drc_minimap_sim(scripts_out),
+        "{{widget:layer-swatch-sim}}": lambda: widget_layer_swatch_sim(scripts_out),
     }
     for shortcode, factory in fullwidth_widgets.items():
         if shortcode in text:

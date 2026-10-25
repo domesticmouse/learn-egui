@@ -16,6 +16,10 @@ Interactive engineering course for learning **Rust** and **[`egui`](https://docs
   - [Lesson 0007: Split Viewports (`egui::Scene`) & Schematic-to-PCB Cross-Probing](https://domesticmouse.github.io/learn-egui/lessons/0007-split-viewports-and-egui-scene.html) (`apps/0007-split-viewports-and-egui-scene`)
   - [Lesson 0008: Searchable Netlist & Virtualised BOM Inspector](https://domesticmouse.github.io/learn-egui/lessons/0008-searchable-netlist-and-bom-inspector.html) (`apps/0008-searchable-netlist-and-bom-inspector`)
   - [Lesson 0009: Keyboard Shortcuts (`F`, `M`, `Esc`) & Point-to-Point CAD Ruler](https://domesticmouse.github.io/learn-egui/lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html) (`apps/0009-keyboard-shortcuts-and-point-to-point-ruler`)
+  - [Lesson 0010: Review Pins, `HashMap` Entry API & Floating Callout Windows](https://domesticmouse.github.io/learn-egui/lessons/0010-review-pins-and-sticky-note-callouts.html) (`apps/0010-review-pins-and-sticky-note-callouts`)
+  - [Lesson 0011: Review Status Triage, Severity Filtering & Sign-Off Rules](https://domesticmouse.github.io/learn-egui/lessons/0011-review-status-workflow-and-popups.html) (`apps/0011-review-status-workflow-and-popups`)
+  - [Lesson 0012: DRC Clearance Violation Halos, Bounding-Box Reduction & Minimap Clamping](https://domesticmouse.github.io/learn-egui/lessons/0012-drc-violation-overlay-and-minimap.html) (`apps/0012-drc-violation-overlay-and-minimap`)
+  - [Lesson 0013: Custom `egui::Widget` Layer Swatches, Struct Lifetimes (`'a`) & `Harness::new_ui_state`](https://domesticmouse.github.io/learn-egui/lessons/0013-custom-layer-swatch-widget-and-design-tokens.html) (`apps/0013-custom-layer-swatch-widget-and-design-tokens`)
 - **Reference & Cheat Sheets:**
   - [Glossary of Rust & `egui` Terms](https://domesticmouse.github.io/learn-egui/reference/glossary.html)
   - [Immediate-Mode GUI Cheat Sheet](https://domesticmouse.github.io/learn-egui/reference/immediate-mode-cheatsheet.html)

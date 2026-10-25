@@ -22,6 +22,10 @@
       <a href="../lessons/0007-split-viewports-and-egui-scene.html">0007</a>
       <a href="../lessons/0008-searchable-netlist-and-bom-inspector.html">0008</a>
       <a href="../lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html">0009</a>
+      <a href="../lessons/0010-review-pins-and-sticky-note-callouts.html">0010</a>
+      <a href="../lessons/0011-review-status-workflow-and-popups.html">0011</a>
+      <a href="../lessons/0012-drc-violation-overlay-and-minimap.html">0012</a>
+      <a href="../lessons/0013-custom-layer-swatch-widget-and-design-tokens.html">0013</a>
       <a href="./glossary.html" class="active">Glossary</a>
       <a href="./immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="./testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
@@ -160,6 +164,21 @@
       <td><strong>Headless UI Harness (<code>egui_kittest</code>)</strong></td>
       <td>The official testing library for <code>egui</code> that drives an app or widget closure without opening an OS window, supporting semantic AccessKit widget queries (<code>get_by_label</code>), simulated clicks/key presses, and offscreen visual snapshots (<a href="https://docs.rs/egui_kittest/latest/egui_kittest/">docs.rs/egui_kittest</a>).</td>
       <td><em>Avoid:</em> skipping <code>eframe::App::update</code> forever once headless UI testing is available in Act II+.</td>
+    </tr>
+    <tr>
+      <td><strong>Hash Map &amp; <code>Entry</code> API (<code>HashMap&lt;K, V&gt;</code>)</strong></td>
+      <td>A hash-table collection mapping unique keys <code>K: Eq + Hash</code> to values <code>V</code>, whose <code>.entry(key)</code> method returns <code>Entry::Vacant</code> or <code>Entry::Occupied</code> for in-place inspection or insertion without double lookups or silent overwrites (<a href="https://doc.rust-lang.org/std/collections/struct.HashMap.html">std::collections::HashMap</a>).</td>
+      <td><em>Avoid:</em> relying on <code>HashMap</code> iteration order in immediate-mode UIs (sort keys first so widget order is deterministic).</td>
+    </tr>
+    <tr>
+      <td><strong>Floating Window &amp; Widget Identity (<code>egui::Window</code>, <code>egui::Id</code>)</strong></td>
+      <td><code>egui::Window</code> renders a floating, draggable overlay layer above panels, keyed by a deterministic <code>egui::Id::new(...)</code> hash so <code>egui</code> remembers window state without collisions (<a href="https://docs.rs/egui/latest/egui/containers/struct.Window.html">docs.rs/egui</a>).</td>
+      <td><em>Avoid:</em> creating multiple windows or grids with identical titles and no disambiguating <code>.id(...)</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Struct Lifetime (<code>'a</code>) &amp; <code>egui::Widget</code></strong></td>
+      <td>A generic lifetime annotation <code>&lt;'a&gt;</code> on a builder struct (such as <code>LayerSwatch&lt;'a&gt;</code>) proving that the struct cannot outlive the <code>&amp;'a mut</code> state fields it borrows while <code>impl&lt;'a&gt; egui::Widget for LayerSwatch&lt;'a&gt;</code> consumes <code>self</code> inside <code>ui.add(...)</code> (<a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html">Rust Book §10.3</a>).</td>
+      <td><em>Avoid:</em> thinking lifetimes change runtime performance (<code>'a</code> is purely a compile-time borrow check erased before code generation).</td>
     </tr>
   </tbody>
 </table>
