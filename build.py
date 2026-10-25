@@ -1524,7 +1524,76 @@ def widget_layer_swatch_sim(scripts_out: list[str]) -> str:
 </section>"""
 
 
-def render_lesson_cards(lessons: list[dict[str, Any]]) -> str:
+def filter_lessons(
+    lessons: list[dict[str, Any]],
+    *,
+    act: str | None = None,
+    range_spec: str | None = None,
+) -> list[dict[str, Any]]:
+    """Filter lesson records by Act or numeric range."""
+    filtered = lessons
+    if range_spec:
+        parts = range_spec.split("..")
+        if len(parts) == 2:
+            try:
+                start_n, end_n = int(parts[0].strip()), int(parts[1].strip())
+                filtered = [
+                    item
+                    for item in filtered
+                    if start_n <= int(item["nav_id"]) <= end_n
+                ]
+            except ValueError:
+                pass
+
+    if act:
+        act_str = act.strip().lower()
+        act_ranges = {
+            "0": (0, 1),
+            "foundation": (0, 1),
+            "mission": (0, 1),
+            "1": (2, 5),
+            "i": (2, 5),
+            "act-1": (2, 5),
+            "act-i": (2, 5),
+            "2": (6, 9),
+            "ii": (6, 9),
+            "act-2": (6, 9),
+            "act-ii": (6, 9),
+            "3": (10, 13),
+            "iii": (10, 13),
+            "act-3": (10, 13),
+            "act-iii": (10, 13),
+            "4": (14, 17),
+            "iv": (14, 17),
+            "act-4": (14, 17),
+            "act-iv": (14, 17),
+            "5": (18, 21),
+            "v": (18, 21),
+            "act-5": (18, 21),
+            "act-v": (18, 21),
+        }
+        if act_str in act_ranges:
+            start_n, end_n = act_ranges[act_str]
+            filtered = [
+                item
+                for item in filtered
+                if start_n <= int(item["nav_id"]) <= end_n
+            ]
+        else:
+            filtered = [
+                item
+                for item in filtered
+                if act_str in str(item["meta"].get("act_badge", "")).lower()
+            ]
+
+    return filtered
+
+
+def render_lesson_cards(
+    lessons: list[dict[str, Any]],
+    *,
+    label: str | None = None,
+) -> str:
     """Render `.lesson-grid` cards for `index.html` from lesson frontmatter."""
     cards: list[str] = []
     for item in lessons:
@@ -1556,8 +1625,9 @@ def render_lesson_cards(lessons: list[dict[str, Any]]) -> str:
             f"    </div>\n"
             f"  </article>"
         )
+    aria_label = html.escape(label or "Published lessons", quote=True)
     return (
-        '<section class="lesson-grid" aria-label="Published lessons">\n'
+        f'<section class="lesson-grid" aria-label="{aria_label}">\n'
         + "\n\n".join(cards)
         + "\n</section>"
     )
@@ -1601,6 +1671,31 @@ def enhance_tables(rendered_html: str) -> str:
     )
     out = out.replace("<table>", '<table class="ref-table">')
     return out
+
+
+def enhance_headings(rendered_html: str) -> str:
+    """Add id attributes and support {#custom-id} on h2-h4 headings."""
+
+    def _sub(m: re.Match[str]) -> str:
+        level, attrs, inner = m.group(1), m.group(2) or "", m.group(3)
+        id_match = re.search(r"\s*\{#([a-zA-Z0-9_-]+)\}\s*$", inner)
+        if id_match:
+            slug = id_match.group(1)
+            inner = inner[: id_match.start()] + inner[id_match.end() :]
+            return f'<h{level} id="{slug}"{attrs}>{inner.strip()}</h{level}>'
+        if "id=" not in attrs:
+            plain = re.sub(r"<[^>]+>", "", inner)
+            slug = re.sub(r"[^a-zA-Z0-9]+", "-", plain.lower()).strip("-")
+            if slug:
+                return f'<h{level} id="{slug}"{attrs}>{inner}</h{level}>'
+        return f'<h{level}{attrs}>{inner}</h{level}>'
+
+    return re.sub(
+        r"<h([2-4])(\s+[^>]*)?>(.*?)</h\1>",
+        _sub,
+        rendered_html,
+        flags=re.DOTALL,
+    )
 
 
 def render_glossary_body(md_body: str) -> str:
@@ -1749,8 +1844,24 @@ def compile_markdown_body(
     )
 
     # 6. Extract `{{widget:...}}` shortcodes
+    def _replace_lesson_cards(match: re.Match[str]) -> str:
+        attr_str = match.group(1) or ""
+        attrs = parse_kv_attrs(attr_str)
+        matched = filter_lessons(
+            lessons,
+            act=attrs.get("act"),
+            range_spec=attrs.get("range"),
+        )
+        label = attrs.get("label")
+        return _stash_fullwidth(render_lesson_cards(matched, label=label))
+
+    text = re.sub(
+        r"\{\{widget:lesson-cards(?:[ \t]+([^\}\n]+))?\}\}",
+        _replace_lesson_cards,
+        text,
+    )
+
     fullwidth_widgets = {
-        "{{widget:lesson-cards}}": lambda: render_lesson_cards(lessons),
         "{{widget:pcb-layer-sim}}": lambda: widget_pcb_layer_sim(scripts_out),
         "{{widget:painter-canvas-sim}}": lambda: widget_painter_canvas_sim(scripts_out),
         "{{widget:viewport-transform-sim}}": lambda: widget_viewport_transform_sim(scripts_out),
@@ -1786,6 +1897,7 @@ def compile_markdown_body(
     # 7. Expand Tufte `{{sidenote:...}}` tokens and render standard Markdown
     text = expand_sidenotes(text)
     rendered = MD.render(text)
+    rendered = enhance_headings(rendered)
     rendered = enhance_tables(rendered)
     rendered = rewrite_md_links(rendered)
 

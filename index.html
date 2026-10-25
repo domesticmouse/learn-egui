@@ -63,8 +63,21 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Multi-Act Curriculum Progression: Every lesson builds toward an engine-first, AI-controllable Schematic &amp; PCB Design Review System verified with unit tests and mutation coverage.</em></p>
-<h2>Published Interactive Lessons (<code>0000</code>–<code>0021</code>)</h2>
-<p>Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a> to set up your Cargo project and mutation-testing harness, or jump straight into any completed module below:</p>
+<h2 id="published-interactive-lessons-0000-0021">Published Interactive Lessons (<code>0000</code>–<code>0021</code>)</h2>
+<p>Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a> to set up your Cargo project and mutation-testing harness, or jump directly to any section using the curriculum table of contents below:</p>
+<nav class="act-toc" aria-label="Course curriculum table of contents">
+  <div class="act-toc-title">Curriculum Table of Contents</div>
+  <ol>
+    <li><a href="#foundation">Foundation: Project Setup &amp; Immediate-Mode Core</a> <span class="act-toc-badge">Lessons 0000–0001</span></li>
+    <li><a href="#act-1">Act I: The 2D CAD Canvas &amp; Viewport</a> <span class="act-toc-badge">Lessons 0002–0005</span></li>
+    <li><a href="#act-2">Act II: Schematic Views, Layout &amp; egui_kittest</a> <span class="act-toc-badge">Lessons 0006–0009</span></li>
+    <li><a href="#act-3">Act III: Design Review Workflows</a> <span class="act-toc-badge">Lessons 0010–0013</span></li>
+    <li><a href="#act-4">Act IV: Engine-First Architecture &amp; Persistence</a> <span class="act-toc-badge">Lessons 0014–0017</span></li>
+    <li><a href="#act-5">Act V: Command Engine, Performance &amp; Polish</a> <span class="act-toc-badge">Lessons 0018–0021</span></li>
+  </ol>
+</nav>
+<h3 id="foundation">Foundation: Project Setup &amp; Immediate-Mode Core (<code>0000</code>–<code>0001</code>)</h3>
+<p>Every hardware review tool starts with a reliable application shell and a clear understanding of how immediate-mode GUIs manage state. In this foundational module, we configure a high-performance Cargo project with dev-profile optimizations, boot a native desktop window with <code>eframe::run_native</code>, and explore Emil Ernerfeldt’s single-frame immediate-mode loop (<code>eframe::App::update</code>) by building an interactive PCB layer visibility inspector backed by mutation testing.</p>
 </div>
 
 <section class="lesson-grid" aria-label="Published lessons">
@@ -99,7 +112,14 @@ flowchart LR
       <span><strong>Runnable App:</strong> <code>apps/0001-the-immediate-mode-loop</code></span>
     </div>
   </article>
+</section>
 
+<div class="prose-col">
+<h3 id="act-1">Act I: The 2D CAD Canvas &amp; Viewport (<code>0002</code>–<code>0005</code>)</h3>
+<p>With a native window running, Act I transforms an empty <code>CentralPanel</code> into a responsive 2D CAD canvas. We reserve custom drawing space with <code>ui.allocate_painter</code>, master world-to-screen camera math for drag-panning and cursor-centered zoom, build deterministic multi-layer PCB models (substrate, copper traces, SMD pads, and vias), and implement spatial hit-testing for cross-probing interconnected nets under the mouse cursor.</p>
+</div>
+
+<section class="lesson-grid" aria-label="Published lessons">
   <article class="lesson-card">
     <div>
       <div class="lesson-card-header">
@@ -163,7 +183,14 @@ flowchart LR
       <span><strong>Runnable App:</strong> <code>apps/0005-hit-testing-and-net-cross-probing</code></span>
     </div>
   </article>
+</section>
 
+<div class="prose-col">
+<h3 id="act-2">Act II: Schematic Views, Layout &amp; <code>egui_kittest</code> (<code>0006</code>–<code>0009</code>)</h3>
+<p>Act II bridges PCB layouts with schematic diagrams and inspector tooling. We render vector schematic symbols and reference designators, coordinate side-by-side viewports with shared <code>egui::Scene</code> navigation, build a virtualized Bill of Materials (BOM) table that scales to thousands of components, implement keyboard shortcuts and an interactive point-to-point CAD ruler, and verify headless UI widgets using <code>egui_kittest</code>.</p>
+</div>
+
+<section class="lesson-grid" aria-label="Published lessons">
   <article class="lesson-card">
     <div>
       <div class="lesson-card-header">
@@ -227,7 +254,14 @@ flowchart LR
       <span><strong>Runnable App:</strong> <code>apps/0009-keyboard-shortcuts-and-point-to-point-ruler</code></span>
     </div>
   </article>
+</section>
 
+<div class="prose-col">
+<h3 id="act-3">Act III: Design Review Workflows (<code>0010</code>–<code>0013</code>)</h3>
+<p>Hardware design reviews require contextual annotations and clearance rule checks. Act III builds production review workflows: pinning interactive callout comments directly onto board coordinates, orchestrating a triage state machine with right-click context menus and severity filters, rendering Design Rule Check (DRC) violation halos with an interactive minimap, and packaging custom reusable <code>egui::Widget</code> layer swatches.</p>
+</div>
+
+<section class="lesson-grid" aria-label="Published lessons">
   <article class="lesson-card">
     <div>
       <div class="lesson-card-header">
@@ -291,7 +325,14 @@ flowchart LR
       <span><strong>Runnable App:</strong> <code>apps/0013-custom-layer-swatch-widget-and-design-tokens</code></span>
     </div>
   </article>
+</section>
 
+<div class="prose-col">
+<h3 id="act-4">Act IV: Engine-First Architecture &amp; Persistence (<code>0014</code>–<code>0017</code>)</h3>
+<p>As applications grow, UI code must separate from pure domain logic. Act IV refactors our single-file app into a strict multi-crate workspace (<code>pcb-doc</code> L1 vs. <code>pcb-reviewer</code> L6), introduces robust JSON serialization and file format upgrades with <code>serde</code> and <code>thiserror</code>, adopts copy-on-write <code>Arc</code> document snapshots for $O(1)$ zero-cost branching, and implements a multi-level undo/redo history stack with slider drag coalescing.</p>
+</div>
+
+<section class="lesson-grid" aria-label="Published lessons">
   <article class="lesson-card">
     <div>
       <div class="lesson-card-header">
@@ -355,7 +396,14 @@ flowchart LR
       <span><strong>Runnable App:</strong> <code>apps/0017-undo-redo-history-and-slider-coalescing</code></span>
     </div>
   </article>
+</section>
 
+<div class="prose-col">
+<h3 id="act-5">Act V: Command Engine, Performance &amp; Polish (<code>0018</code>–<code>0021</code>)</h3>
+<p>Act V brings commercial CAD performance and reliability to the review system. We route all state mutations through a static <code>CommandSpec</code> registry with a searchable <code>Key::K</code> command palette and adversarial fuzz testing (<code>panic_hunt</code>), implement viewport bounding-box culling with cached tessellation for 60 FPS budgets, offload heavy file parsing to worker threads with non-blocking progress UI, and establish headless snapshot testing (<code>gpu_lock</code>) with WebAssembly (<code>wasm32</code>) deployment targets.</p>
+</div>
+
+<section class="lesson-grid" aria-label="Published lessons">
   <article class="lesson-card">
     <div>
       <div class="lesson-card-header">
@@ -422,7 +470,7 @@ flowchart LR
 </section>
 
 <div class="prose-col">
-<h2>Reference Sheets &amp; Printable Cheat Sheets</h2>
+<h2 id="reference-sheets-amp-printable-cheat-sheets">Reference Sheets &amp; Printable Cheat Sheets</h2>
 <p>Turns out, having a one-page cheat sheet next to your editor saves a lot of tab-switching. These reference documents compress the core Rust, immediate-mode GUI, and mutation-testing mechanics into quick-lookup tables designed for both screen review and clean paper printing:</p>
 <table class="ref-table">
 <thead>
@@ -446,7 +494,7 @@ flowchart LR
 </tr>
 </tbody>
 </table>
-<h2>Running the Companion Rust Apps Locally</h2>
+<h2 id="running-the-companion-rust-apps-locally">Running the Companion Rust Apps Locally</h2>
 <p>Every lesson is backed by a standalone, runnable Cargo package or workspace under <code>./apps/&lt;NNNN-lesson-slug&gt;/</code> that compiles with zero warnings and passes both <code>cargo test</code> and <code>cargo mutants</code>:</p>
 <pre><code class="language-bash"># Launch Lesson 0021's interactive multi-crate PCB Reviewer desktop window
 cargo run --manifest-path ./apps/0021-headless-snapshot-testing-and-wasm-build/Cargo.toml

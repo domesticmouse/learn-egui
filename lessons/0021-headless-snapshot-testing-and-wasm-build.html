@@ -48,7 +48,7 @@
 <h1>0021. Offscreen Snapshot Parity (<code>gpu_lock</code>), Quality Scorecards &amp; WebAssembly (<code>wasm32</code>)</h1>
 <p class="subtitle">Serializing GPU and offscreen snapshot tests with a process-wide <code>OnceLock&lt;Mutex&lt;()&gt;&gt;</code> (<code>gpu_lock()</code>), computing deterministic 64-bit FNV-1a <code>FrameSnapshotDigest</code> baselines to catch visual regressions, gating <code>wasm32-unknown-unknown</code> target readiness, and generating a release <code>QualityScorecard</code>.</p>
 
-<h2>Process-Wide GPU Serialization (<code>gpu_lock</code>) &amp; Visual Snapshot Digests</h2>
+<h2 id="process-wide-gpu-serialization-gpu-lock-amp-visual-snapshot-digests">Process-Wide GPU Serialization (<code>gpu_lock</code>) &amp; Visual Snapshot Digests</h2>
 <p>When <code>cargo test</code> runs tests in parallel threads within a single OS process, spinning up multiple concurrent <code>wgpu</code> devices or offscreen snapshot renderers on Windows WARP, Mesa <code>llvmpipe</code>/RADV, or multi-ICD Vulkan drivers triggers driver-level access violations.<span class="sidenote-number"></span><span class="sidenote"><strong>Rule #1 of GPU &amp; Snapshot Testing (<code>egui-testing-infrastructure</code>):</strong> Every test that touches a GPU device or captures an offscreen visual snapshot must acquire <code>let _gpu = gpu_lock();</code> on its very first line. Using <code>unwrap_or_else(std::sync::PoisonError::into_inner)</code> keeps <code>gpu_lock()</code> 100% panic-free even if a prior test panicked while holding the guard.</span></p>
 <p>Alongside <code>gpu_lock()</code>, we introduce <strong><code>FrameSnapshotDigest</code></strong>: a deterministic 64-bit FNV-1a digest of the active frame's visible layer bitmask (<code>visible_layer_mask</code>), visible culled pad count, visible culled trace count, and active DRC violation count. If any mutation flips a layer visibility bit, alters viewport culling, or suppresses DRC clearance markers, the frame's <code>fnv1a_hash</code> diverges immediately from the golden baseline!</p>
 <figure class="mermaid-figure">
@@ -64,7 +64,7 @@ flowchart LR
     style Fail fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2>Panic-Free <code>gpu_lock()</code>, <code>wasm32</code> Target Gates &amp; <code>QualityScorecard</code></h2>
+<h2 id="panic-free-gpu-lock-wasm32-target-gates-amp-qualityscorecard">Panic-Free <code>gpu_lock()</code>, <code>wasm32</code> Target Gates &amp; <code>QualityScorecard</code></h2>
 <p>Because <code>crates/pcb-doc</code> (<code>L1</code>) has zero native OS window dependencies, it compiles cleanly for both desktop targets and <code>wasm32-unknown-unknown</code> browser builds using <code>#[cfg(target_arch = &quot;wasm32&quot;)]</code>.</p>
 <figure>
   <figcaption>Process-wide gpu_lock, FrameSnapshotDigest, and QualityScorecard in crates/pcb-doc/src/lib.rs</figcaption>
@@ -234,7 +234,7 @@ cargo mutants --manifest-path ./apps/0021-headless-snapshot-testing-and-wasm-bui
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/std/sync/struct.OnceLock.html"><code>std::sync::OnceLock</code> Official Rust Standard Library Docs</a> and <a href="https://doc.rust-lang.org/reference/conditional-compilation.html">The Rust Reference — &quot;Conditional Compilation (<code>#[cfg(...)]</code>)&quot;</a>.
 </div>

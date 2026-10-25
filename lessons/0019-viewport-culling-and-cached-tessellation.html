@@ -48,7 +48,7 @@
 <h1>0019. Spatial Viewport Culling (<code>Rect::intersects</code>), Batched Geometry &amp; Frame Budgets</h1>
 <p class="subtitle">Skipping off-screen PCB pads and copper traces before <code>Painter</code> tessellation using axis-aligned bounding-box intersection (<code>Rect::intersects</code>), pre-allocating visible batches with <code>Vec::with_capacity</code>, and proving spatial-query equivalence with <code>proptest</code>.</p>
 
-<h2>Why Immediate-Mode CAD Canvases Need Viewport Frustum Culling</h2>
+<h2 id="why-immediate-mode-cad-canvases-need-viewport-frustum-culling">Why Immediate-Mode CAD Canvases Need Viewport Frustum Culling</h2>
 <p>On a dense multi-layer PCB with 50,000+ SMD pads and trace segments, zoomed in on a single microcontroller (<code>U1</code>), 95% of the board geometry lies outside the visible camera rectangle (<code>self.view.pcb_scene_rect</code>). If <code>paint_board</code> blindly submits every trace and pad to <code>egui::Painter</code> on every frame, <code>egui</code> still has to transform coordinates and tessellate thousands of off-screen primitives into vertex/index meshes before the GPU clips them.<span class="sidenote-number"></span><span class="sidenote"><strong>Axis-Aligned Bounding Box (AABB) Culling:</strong> Testing <code>primitive.bounds_mm().intersects(viewport_mm)</code> costs only four float comparisons (<code>self.min.x &lt;= other.max.x &amp;&amp; other.min.x &lt;= self.max.x &amp;&amp; ...</code>), which is orders of magnitude cheaper than tessellating stroke geometry.</span></p>
 <p>In <code>crates/pcb-doc</code> (<code>L1</code>), we give both <code>SmdPad</code> and <code>TraceSegment</code> exact millimetre bounding boxes:</p>
 <ol>
@@ -69,7 +69,7 @@ flowchart LR
     style Budget fill:#1c1c24,stroke:#f0e68c,color:#e6edf3
   </pre>
 </figure>
-<h2>Pre-Allocating Visible Batches &amp; <code>proptest</code> Equivalence</h2>
+<h2 id="pre-allocating-visible-batches-amp-proptest-equivalence">Pre-Allocating Visible Batches &amp; <code>proptest</code> Equivalence</h2>
 <p>To avoid repeated heap reallocations during per-frame culling, <code>culled_pads_in_rect</code> and <code>culled_traces_in_rect</code> pre-allocate with <code>Vec::with_capacity</code> and collect only primitives whose <code>bounds_mm().intersects(viewport_mm)</code> is <code>true</code>.</p>
 <figure>
   <figcaption>Stroke-expanded TraceSegment::bounds_mm and viewport culling in crates/pcb-doc/src/lib.rs</figcaption>
@@ -261,7 +261,7 @@ cargo mutants --manifest-path ./apps/0019-viewport-culling-and-cached-tessellati
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/emath/latest/emath/struct.Rect.html#method.intersects"><code>emath::Rect::intersects</code> &amp; <code>Rect::expand</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.with_capacity"><code>std::vec::Vec::with_capacity</code> Standard Library Docs</a>.
 </div>

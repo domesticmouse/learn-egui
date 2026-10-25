@@ -61,7 +61,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 7.1: Splitting immutable domain data (<code>BoardModel</code>) from mutable camera state (<code>ViewState</code>) allows simultaneous shared + mutable borrows across split viewports.</em></p>
-<h2>1. Just-in-Time Rust: Disjoint Field Borrowing (<code>&amp;BoardModel</code> vs. <code>&amp;mut ViewState</code>)</h2>
+<h2 id="1-just-in-time-rust-disjoint-field-borrowing-amp-boardmodel-vs-amp-mut-viewstate">1. Just-in-Time Rust: Disjoint Field Borrowing (<code>&amp;BoardModel</code> vs. <code>&amp;mut ViewState</code>)</h2>
 <p>Suppose you iterate over <code>self.components</code> to draw a row of schematic symbol buttons, and inside that loop you call a <code>&amp;mut self</code> method to recentre the camera:<span class="sidenote-number"></span><span class="sidenote">Which leads to a nice architectural bonus: separating read-only domain data from mutable UI/camera state prepares our code for Act IV (Lesson 0014), where <code>BoardModel</code> moves into its own standalone <code>pcb-doc</code> crate!</span></p>
 <pre><code class="language-rust">// ❌ COMPILER ERROR: cannot borrow `*self` as mutable because `self.components` is borrowed as immutable!
 for comp in &amp;self.components {
@@ -98,7 +98,7 @@ impl ViewState {
         }
     }
 }</code></pre>
-<h2>2. Multi-Panel Layouts with <code>TopBottomPanel</code> &amp; <code>egui::Scene</code></h2>
+<h2 id="2-multi-panel-layouts-with-topbottompanel-amp-egui-scene">2. Multi-Panel Layouts with <code>TopBottomPanel</code> &amp; <code>egui::Scene</code></h2>
 <p>Alongside our custom <code>TSTransform</code> canvas from Lesson 0003, <code>egui</code> also ships a built-in pan-and-zoom container called <a href="https://docs.rs/egui/latest/egui/containers/scene/struct.Scene.html"><code>egui::Scene</code></a>. You pass <code>&amp;mut self.view.pcb_scene_rect</code> into <code>Scene::new().show(...)</code>, and <code>Scene</code> automatically updates that <code>Rect</code> whenever the user drags or scrolls—or whenever our schematic cross-probe overwrites <code>pcb_scene_rect</code> to jump the camera straight to a component:</p>
 <pre><code class="language-rust">egui::TopBottomPanel::top("schematic_cross_probe_bar").show(ctx, |ui| {
     ui.horizontal(|ui| {
@@ -261,7 +261,7 @@ fn clicking_schematic_probe_button_updates_pcb_camera_rect_and_net() {
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/containers/scene/struct.Scene.html"><code>egui::Scene</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/nomicon/borrow-splitting.html">The Rustonomicon — &quot;Splitting Borrows&quot;</a>.
 </div>

@@ -22,9 +22,55 @@ _Multi-Act Curriculum Progression: Every lesson builds toward an engine-first, A
 
 ## Published Interactive Lessons (`0000`–`0021`)
 
-Start with [Lesson 0000](./lessons/0000-project-setup-and-eframe-boot.html) to set up your Cargo project and mutation-testing harness, or jump straight into any completed module below:
+Start with [Lesson 0000](./lessons/0000-project-setup-and-eframe-boot.html) to set up your Cargo project and mutation-testing harness, or jump directly to any section using the curriculum table of contents below:
 
-{{widget:lesson-cards}}
+<nav class="act-toc" aria-label="Course curriculum table of contents">
+  <div class="act-toc-title">Curriculum Table of Contents</div>
+  <ol>
+    <li><a href="#foundation">Foundation: Project Setup &amp; Immediate-Mode Core</a> <span class="act-toc-badge">Lessons 0000–0001</span></li>
+    <li><a href="#act-1">Act I: The 2D CAD Canvas &amp; Viewport</a> <span class="act-toc-badge">Lessons 0002–0005</span></li>
+    <li><a href="#act-2">Act II: Schematic Views, Layout &amp; egui_kittest</a> <span class="act-toc-badge">Lessons 0006–0009</span></li>
+    <li><a href="#act-3">Act III: Design Review Workflows</a> <span class="act-toc-badge">Lessons 0010–0013</span></li>
+    <li><a href="#act-4">Act IV: Engine-First Architecture &amp; Persistence</a> <span class="act-toc-badge">Lessons 0014–0017</span></li>
+    <li><a href="#act-5">Act V: Command Engine, Performance &amp; Polish</a> <span class="act-toc-badge">Lessons 0018–0021</span></li>
+  </ol>
+</nav>
+
+### Foundation: Project Setup & Immediate-Mode Core (`0000`–`0001`) {#foundation}
+
+Every hardware review tool starts with a reliable application shell and a clear understanding of how immediate-mode GUIs manage state. In this foundational module, we configure a high-performance Cargo project with dev-profile optimizations, boot a native desktop window with `eframe::run_native`, and explore Emil Ernerfeldt’s single-frame immediate-mode loop (`eframe::App::update`) by building an interactive PCB layer visibility inspector backed by mutation testing.
+
+{{widget:lesson-cards act="foundation"}}
+
+### Act I: The 2D CAD Canvas & Viewport (`0002`–`0005`) {#act-1}
+
+With a native window running, Act I transforms an empty `CentralPanel` into a responsive 2D CAD canvas. We reserve custom drawing space with `ui.allocate_painter`, master world-to-screen camera math for drag-panning and cursor-centered zoom, build deterministic multi-layer PCB models (substrate, copper traces, SMD pads, and vias), and implement spatial hit-testing for cross-probing interconnected nets under the mouse cursor.
+
+{{widget:lesson-cards act="1"}}
+
+### Act II: Schematic Views, Layout & `egui_kittest` (`0006`–`0009`) {#act-2}
+
+Act II bridges PCB layouts with schematic diagrams and inspector tooling. We render vector schematic symbols and reference designators, coordinate side-by-side viewports with shared `egui::Scene` navigation, build a virtualized Bill of Materials (BOM) table that scales to thousands of components, implement keyboard shortcuts and an interactive point-to-point CAD ruler, and verify headless UI widgets using `egui_kittest`.
+
+{{widget:lesson-cards act="2"}}
+
+### Act III: Design Review Workflows (`0010`–`0013`) {#act-3}
+
+Hardware design reviews require contextual annotations and clearance rule checks. Act III builds production review workflows: pinning interactive callout comments directly onto board coordinates, orchestrating a triage state machine with right-click context menus and severity filters, rendering Design Rule Check (DRC) violation halos with an interactive minimap, and packaging custom reusable `egui::Widget` layer swatches.
+
+{{widget:lesson-cards act="3"}}
+
+### Act IV: Engine-First Architecture & Persistence (`0014`–`0017`) {#act-4}
+
+As applications grow, UI code must separate from pure domain logic. Act IV refactors our single-file app into a strict multi-crate workspace (`pcb-doc` L1 vs. `pcb-reviewer` L6), introduces robust JSON serialization and file format upgrades with `serde` and `thiserror`, adopts copy-on-write `Arc` document snapshots for $O(1)$ zero-cost branching, and implements a multi-level undo/redo history stack with slider drag coalescing.
+
+{{widget:lesson-cards act="4"}}
+
+### Act V: Command Engine, Performance & Polish (`0018`–`0021`) {#act-5}
+
+Act V brings commercial CAD performance and reliability to the review system. We route all state mutations through a static `CommandSpec` registry with a searchable `Key::K` command palette and adversarial fuzz testing (`panic_hunt`), implement viewport bounding-box culling with cached tessellation for 60 FPS budgets, offload heavy file parsing to worker threads with non-blocking progress UI, and establish headless snapshot testing (`gpu_lock`) with WebAssembly (`wasm32`) deployment targets.
+
+{{widget:lesson-cards act="5"}}
 
 ## Reference Sheets & Printable Cheat Sheets
 
