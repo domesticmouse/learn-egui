@@ -48,7 +48,7 @@
 <h1>0018. The Command Pattern, <code>CommandSpec</code> Registry &amp; <code>panic_hunt</code> Fuzzer</h1>
 <p class="subtitle">Routing UI buttons, hotkeys, and a searchable <code>Key::K</code> Command Palette through a static <code>COMMAND_SPECS</code> registry in <code>pcb-doc</code>, enforcing <code>EnabledFn</code> preconditions, and fuzzing every registered command against adversarial JSON inputs (<code>panic_hunt</code>).</p>
 
-<h2>Why Engine-First <code>egui</code> Apps Route Actions Through <code>CommandSpec</code></h2>
+<h2 id="why-engine-first-egui-apps-route-actions-through-commandspec">Why Engine-First <code>egui</code> Apps Route Actions Through <code>CommandSpec</code></h2>
 <p>As an <code>egui</code> CAD application grows, scattering state mutations across dozens of <code>if ui.button(...).clicked()</code> closures makes it hard to keep menu items, keyboard shortcuts, command palettes, and CLI/automation scripts in sync.<span class="sidenote-number"></span><span class="sidenote"><strong>The Three-Tier Command Taxonomy (<code>egui-command-engine</code>):</strong> In an engine-first architecture, state-mutating operations and read-only queries live in a static <code>CommandSpec</code> table (<code>COMMAND_SPECS</code>), while shell/view toggles (<code>Key::K</code> palette modal, viewport pan/zoom) delegate to <code>BoardModel::execute_command</code>.</span></p>
 <p>By defining a static <code>COMMAND_SPECS: &amp;[CommandSpec]</code> registry inside <code>crates/pcb-doc</code> (<code>L1</code>), every command declares:</p>
 <ol>
@@ -73,7 +73,7 @@ flowchart LR
     style BadParams fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2>Tier 5 <code>panic_hunt</code> Fuzzing &amp; <code>COMMAND_PARITY_FLOOR</code></h2>
+<h2 id="tier-5-panic-hunt-fuzzing-amp-command-parity-floor">Tier 5 <code>panic_hunt</code> Fuzzing &amp; <code>COMMAND_PARITY_FLOOR</code></h2>
 <p>Because <code>CommandSpec::run</code> accepts dynamic <code>&amp;serde_json::Value</code> payloads (which can originate from a UI dialog, a CLI flag, or an MCP automation client), it must <strong>never</strong> panic when handed <code>null</code>, negative coordinates, out-of-bounds numbers, or whitespace-only strings.<span class="sidenote-number"></span><span class="sidenote"><strong>Ratchets Only Move Up (<code>COMMAND_PARITY_FLOOR</code>):</strong> Asserting <code>COMMAND_SPECS.len() &gt;= COMMAND_PARITY_FLOOR</code> ensures that refactoring command modules never silently drops a registered command from the palette.</span></p>
 <figure>
   <figcaption>CommandSpec registry and execute_command dispatcher in crates/pcb-doc/src/lib.rs</figcaption>
@@ -233,7 +233,7 @@ cargo mutants --manifest-path ./apps/0018-the-command-pattern-and-command-palett
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/book/ch19-05-advanced-functions-and-closures.html">The Rust Programming Language — §19.4 &quot;Advanced Functions and Closures (<code>fn</code> Function Pointers)&quot;</a> and <a href="https://docs.rs/serde_json/latest/serde_json/enum.Value.html"><code>serde_json::Value</code> Official API Docs</a>.
 </div>

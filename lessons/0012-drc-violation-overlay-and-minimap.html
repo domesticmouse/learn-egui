@@ -60,7 +60,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 12.1: Same-layer pads on distinct nets are checked against <code>min_clearance_mm</code>, emitting <code>DrcViolation</code> markers rendered as red halos on the canvas and clickable jump buttons in the <code>SidePanel</code>.</em></p>
-<h2>1. Just-in-Time Rust: Bounding-Box Reduction (<code>Iterator::reduce</code>) &amp; <code>f32::clamp</code></h2>
+<h2 id="1-just-in-time-rust-bounding-box-reduction-iterator-reduce-amp-f32-clamp">1. Just-in-Time Rust: Bounding-Box Reduction (<code>Iterator::reduce</code>) &amp; <code>f32::clamp</code></h2>
 <p>To compute the edge-to-edge Euclidean distance between two axis-aligned rectangular pads <code>a</code> and <code>b</code>, we subtract their half-widths <code>(a.size_mm.x + b.size_mm.x) * 0.5</code> from the centre-to-centre distance <code>(a.center_mm.x - b.center_mm.x).abs()</code> along each axis, clamp negative values (which represent axis overlap) to <code>0.0</code> via <code>.max(0.0)</code>, and take the hypotenuse with <code>.hypot(...)</code>:<span class="sidenote-number"></span><span class="sidenote">Notice how <code>pads_bounding_box_mm</code> uses <code>.map(SmdPad::bounds_mm).reduce(Rect::union)</code>: <code>Iterator::reduce</code> folds the iterator using the first pad's <code>Rect</code> as the initial accumulator and returns <code>None</code> if the board has zero pads.</span></p>
 <pre><code class="language-rust">pub fn pad_edge_gap_mm(a: &amp;SmdPad, b: &amp;SmdPad) -&gt; f32 {
     let dx = (a.center_mm.x - b.center_mm.x).abs() - (a.size_mm.x + b.size_mm.x) * 0.5;
@@ -76,7 +76,7 @@ impl BoardModel {
             .reduce(Rect::union)
     }
 }</code></pre>
-<h2>2. Detecting DRC Clearance Violations &amp; Clamping the Minimap Camera</h2>
+<h2 id="2-detecting-drc-clearance-violations-amp-clamping-the-minimap-camera">2. Detecting DRC Clearance Violations &amp; Clamping the Minimap Camera</h2>
 <p>When iterating over pad pairs in <code>detect_pad_clearance_violations</code>, we maintain a <code>seen: Vec&lt;&amp;SmdPad&gt;</code> slice of previously visited pads. That way, each unordered pair <code>(a, b)</code> is tested once without index arithmetic (<code>idx + 1</code>), and whenever <code>a.layer == b.layer &amp;&amp; a.net != b.net</code> with <code>gap &lt; min_clearance_mm</code>, we record a <code>DrcViolation</code> at the midpoint between the two pads.</p>
 <p>Meanwhile, when the engineer pans the <code>egui::Scene</code> camera near or beyond the board edge <code>(0, 0)..(100, 70) mm</code>, <code>ViewState::clamped_minimap_camera_rect</code> uses <a href="https://doc.rust-lang.org/std/primitive.f32.html#method.clamp"><code>f32::clamp</code></a> to keep the minimap's camera box inside <code>board_bounds_mm</code>:</p>
 <pre><code class="language-rust">pub fn clamped_minimap_camera_rect(&amp;self, board_bounds_mm: Rect) -&gt; Rect {
@@ -240,7 +240,7 @@ fn drc_clearance_bounding_box_and_minimap_clamping_are_exact() {
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.reduce"><code>std::iter::Iterator::reduce</code> Official Docs</a> and <a href="https://docs.rs/egui/latest/egui/struct.Rect.html#method.union"><code>egui::Rect::union</code> API Docs</a>.
 </div>

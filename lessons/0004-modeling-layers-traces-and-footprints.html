@@ -60,7 +60,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 4.1: Filtering visible segments and sorting by <code>PcbLayer::z_rank()</code> guarantees deterministic back-to-front CAD rendering every frame.</em></p>
-<h2>1. Exhaustive Layer Modelling with <code>enum PcbLayer</code></h2>
+<h2 id="1-exhaustive-layer-modelling-with-enum-pcblayer">1. Exhaustive Layer Modelling with <code>enum PcbLayer</code></h2>
 <p>So, instead of scattering four separate boolean <code>if</code> blocks across our renderer, let's model a PCB layer as a proper Rust <a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"><code>enum</code></a> and attach pure methods using exhaustive <a href="https://doc.rust-lang.org/book/ch06-02-match.html"><code>match</code></a> expressions:<span class="sidenote-number"></span><span class="sidenote">Because Rust's <code>match</code> is exhaustive at compile time, if you add an inner copper layer like <code>PcbLayer::In1Cu</code> later, <code>rustc</code> immediately flags every <code>match</code> block (<code>z_rank</code>, <code>color</code>, <code>is_layer_visible</code>) that needs updating.</span></p>
 <pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PcbLayer {
@@ -90,7 +90,7 @@ impl PcbLayer {
         }
     }
 }</code></pre>
-<h2>2. Dynamic Collections (<code>Vec&lt;T&gt;</code>) &amp; Shared Loop Borrowing</h2>
+<h2 id="2-dynamic-collections-vec-lt-t-gt-amp-shared-loop-borrowing">2. Dynamic Collections (<code>Vec&lt;T&gt;</code>) &amp; Shared Loop Borrowing</h2>
 <p>Next, we store our board's segments in a growable heap vector <a href="https://doc.rust-lang.org/book/ch08-01-vectors.html"><code>Vec&lt;TraceSegment&gt;</code></a> on <code>PcbReviewerApp</code>.<span class="sidenote-number"></span><span class="sidenote">Turns out, writing <code>for seg in self.traces</code> without an <code>&amp;</code> is a rite-of-passage error in Rust: iterating over a <code>Vec</code> by value <em>moves and consumes</em> the vector on Frame #1! Borrowing with <code>&amp;self.traces</code> (or <code>self.traces.iter()</code>) lets you read all segments 60 times a second while <code>self.traces</code> keeps ownership.</span></p>
 <pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TraceSegment {
@@ -265,7 +265,7 @@ fn visible_traces_in_z_order_filters_hidden_layers_and_sorts_back_to_front() {
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/book/ch06-02-match.html">The Rust Programming Language — §6.2 &quot;The <code>match</code> Control Flow Construct&quot;</a>.
 Review how exhaustive pattern matching works on custom <code>enum</code> types.

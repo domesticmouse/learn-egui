@@ -60,7 +60,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 13.1: <code>LayerSwatch&lt;'a&gt;</code> temporarily borrows <code>visible: &amp;'a mut bool</code> and <code>opacity: &amp;'a mut f32</code> for the duration of the <code>ui.add(...)</code> call, consumes itself in <code>Widget::ui(self, ui)</code>, and returns the combined <code>egui::Response</code>.</em></p>
-<h2>1. Just-in-Time Rust: Struct Lifetimes (<code>'a</code>) &amp; Implementing <code>egui::Widget</code></h2>
+<h2 id="1-just-in-time-rust-struct-lifetimes-a-amp-implementing-egui-widget">1. Just-in-Time Rust: Struct Lifetimes (<code>'a</code>) &amp; Implementing <code>egui::Widget</code></h2>
 <p>Look at how <code>egui</code>'s built-in widgets work when you write <code>ui.add(egui::Slider::new(&amp;mut self.opacity, 0.1..=1.0))</code>: <code>Slider::new</code> constructs a lightweight builder struct that holds a mutable reference <code>&amp;'a mut f32</code> into your state, and <code>ui.add(...)</code> immediately consumes that struct by calling <code>egui::Widget::ui(self, ui)</code>.</p>
 <p>Whenever a Rust <code>struct</code> stores references (<code>&amp;'a mut bool</code>, <code>&amp;'a mut f32</code>, <code>&amp;'a str</code>), its declaration must name a generic <strong>lifetime parameter</strong> <code>&lt;'a&gt;</code> (<a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html">Rust Book §10.3</a>). That <code>'a</code> tells the compiler a simple safety rule: a <code>LayerSwatch&lt;'a&gt;</code> instance can never outlive the <code>ViewState</code> fields it borrows:<span class="sidenote-number"></span><span class="sidenote">Because <code>LayerSwatch&lt;'a&gt;</code> is created inline inside <code>ui.add(LayerSwatch::new(...))</code> and consumed before the statement even ends, the borrow <code>'a</code> lasts for just a few microseconds during the current frame!</span></p>
 <pre><code class="language-rust">pub struct LayerSwatch&lt;'a&gt; {
@@ -104,7 +104,7 @@ impl&lt;'a&gt; egui::Widget for LayerSwatch&lt;'a&gt; {
         .inner
     }
 }</code></pre>
-<h2>2. Per-Layer Alpha Blending &amp; Standalone Widget Harnesses (<code>Harness::new_ui_state</code>)</h2>
+<h2 id="2-per-layer-alpha-blending-amp-standalone-widget-harnesses-harness-new-ui-state">2. Per-Layer Alpha Blending &amp; Standalone Widget Harnesses (<code>Harness::new_ui_state</code>)</h2>
 <p>To apply each layer's opacity slider to the 2D canvas, <code>PcbLayer::color_with_opacity(self, opacity: f32)</code> clamps <code>opacity</code> to <code>0.1..=1.0</code>, scales <code>255.0</code> to compute the 8-bit alpha channel, and constructs <code>Color32::from_rgba_unmultiplied(r, g, b, alpha)</code>.</p>
 <p>Even better, because <code>LayerSwatch&lt;'a&gt;</code> implements <code>egui::Widget</code>, we don't have to boot the entire <code>PcbReviewerApp</code> just to unit-test it! We can mount <code>LayerSwatch</code> directly inside <a href="https://docs.rs/egui_kittest/latest/egui_kittest/struct.Harness.html#method.new_ui_state"><code>egui_kittest::Harness::new_ui_state</code></a> against a tiny two-field test fixture.</p>
 </div>
@@ -259,7 +259,7 @@ fn standalone_layer_swatch_widget_toggles_visibility_in_harness_new_ui() {
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/trait.Widget.html"><code>egui::Widget</code> Trait Official API Docs</a> and <a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html">The Rust Programming Language — §10.3 &quot;Validating References with Lifetimes&quot;</a>.
 </div>

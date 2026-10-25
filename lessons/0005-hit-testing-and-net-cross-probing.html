@@ -61,7 +61,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 5.1: Pointer screen coordinates are inverted into physical millimetres, hit-tested against visible pads in Z-order, and stored as <code>Option&lt;NetId&gt;</code></em></p>
-<h2>1. Modelling Optional Selection with <code>Option&lt;NetId&gt;</code></h2>
+<h2 id="1-modelling-optional-selection-with-option-lt-netid-gt">1. Modelling Optional Selection with <code>Option&lt;NetId&gt;</code></h2>
 <p>Most of the time, your mouse cursor is sitting over empty FR4 fibreglass—meaning <em>no electrical net is hovered</em>. Languages with <code>null</code> pointers usually reach for <code>null</code> or a magic number like <code>-1</code>. Rust eliminates null-pointer bugs at compile time using the standard library enum <a href="https://doc.rust-lang.org/std/option/enum.Option.html"><code>Option&lt;T&gt;</code></a>:<span class="sidenote-number"></span><span class="sidenote">Notice how <code>pub struct NetId(pub u32);</code> is a <strong>tuple struct</strong> (<a href="https://doc.rust-lang.org/book/ch05-01-defining-structs.html#using-tuple-structs-without-named-fields-to-create-different-types">Rust Book §5.1</a>)—a zero-cost wrapper around <code>u32</code> so you can never accidentally pass a pin count or layer rank where a <code>NetId</code> is expected!</span></p>
 <pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NetId(pub u32);
@@ -76,7 +76,7 @@ pub struct PcbReviewerApp {
 pub fn active_net(&amp;self) -&gt; Option&lt;NetId&gt; {
     self.selected_net.or(self.hovered_net)
 }</code></pre>
-<h2>2. World-Space Hit-Testing Respecting Visibility &amp; Z-Order</h2>
+<h2 id="2-world-space-hit-testing-respecting-visibility-amp-z-order">2. World-Space Hit-Testing Respecting Visibility &amp; Z-Order</h2>
 <p>Each SMD pad on the board knows its physical centre (<code>center_mm</code>), dimensions (<code>size_mm</code>), layer (<code>PcbLayer</code>), and electrical net (<code>NetId</code>). Look at how <code>hit_test_net_at_mm</code> combines three rules:<span class="sidenote-number"></span><span class="sidenote">The reason we check <code>self.is_layer_visible(p.layer)</code> during hit-testing is easy to overlook until it bites you: if you hide <code>TopCopper</code> to inspect <code>BottomCopper</code> routing underneath an IC, clicking where a hidden <code>TopCopper</code> pad used to be must <em>not</em> select the hidden layer!</span></p>
 <ol>
 <li>Only pads on <strong>currently visible layers</strong> (<code>self.is_layer_visible(p.layer)</code>) can be hit.</li>
@@ -105,7 +105,7 @@ impl PcbReviewerApp {
         matching_pads.last().map(|p| p.net)
     }
 }</code></pre>
-<h2>3. Unpacking <code>Option&lt;NetId&gt;</code> with <code>if let Some(...)</code></h2>
+<h2 id="3-unpacking-option-lt-netid-gt-with-if-let-some">3. Unpacking <code>Option&lt;NetId&gt;</code> with <code>if let Some(...)</code></h2>
 <p>So, inside the left <code>SidePanel</code>, we use <a href="https://doc.rust-lang.org/book/ch06-03-if-let.html"><code>if let Some(net) = self.active_net()</code></a> to display the active net's name and a <strong>&quot;Clear Selection&quot;</strong> button only when a net is actually hovered or selected:</p>
 <pre><code class="language-rust">ui.heading("Net Inspector");
 if let Some(net) = self.active_net() {
@@ -246,7 +246,7 @@ fn hit_test_net_at_mm_respects_pad_bounds_layer_visibility_and_z_order() {
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantages-over-null-values">The Rust Programming Language — §6.1 &quot;The <code>Option</code> Enum&quot;</a> and <a href="https://docs.rs/egui/latest/egui/struct.Sense.html"><code>egui::Sense</code> API Docs</a>.
 </div>

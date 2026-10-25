@@ -48,7 +48,7 @@
 <h1>0017. Undo/Redo History (<code>VecDeque</code>) &amp; Continuous Slider Drag Coalescing</h1>
 <p class="subtitle">Building a bounded <code>BoardHistory</code> ring buffer (<code>VecDeque&lt;HistoryEntry&gt;</code>) on top of <code>O(1)</code> <code>Arc</code> snapshots, coalescing 60-FPS <code>egui::Slider</code> drags into a single undo entry via <code>coalesce_key</code> and <code>Response::drag_stopped()</code>, and verifying randomized edit/undo/redo sequences with <code>proptest</code>.</p>
 
-<h2>Why Immediate-Mode Sliders Flood Naive Undo Stacks</h2>
+<h2 id="why-immediate-mode-sliders-flood-naive-undo-stacks">Why Immediate-Mode Sliders Flood Naive Undo Stacks</h2>
 <p>Because <code>BoardModel::clone()</code> is now an <code>O(1)</code> copy of four <code>Arc</code> pointers (Lesson <code>0016</code>), we can store complete document snapshots inside a bounded <code>BoardHistory</code> (<code>undo_stack: VecDeque&lt;HistoryEntry&gt;</code>, <code>redo_stack: Vec&lt;HistoryEntry&gt;</code>).<span class="sidenote-number"></span><span class="sidenote"><strong>Why <code>VecDeque&lt;HistoryEntry&gt;</code>?</strong> When <code>undo_stack.len() &gt;= max_entries</code> (e.g., 32 steps), a <code>VecDeque</code> ring buffer evicts the oldest snapshot from the front via <code>pop_front()</code> in <code>O(1)</code> time without shifting all remaining elements.</span></p>
 <p>However, immediate-mode UIs introduce a classic UX trap: when a user drags an <code>egui::Slider</code> (such as adjusting a review pin's X coordinate from <code>20.0 mm</code> to <code>45.0 mm</code>), <code>slider_resp.changed()</code> fires on <strong>every 60-FPS frame</strong> while the pointer is moving. If every frame pushed a new <code>HistoryEntry</code>, a half-second drag would push 30 intermediate snapshots onto <code>undo_stack</code>—forcing the user to press <code>Z</code> 30 times just to undo one drag!</p>
 <p>We solve this with <strong><code>coalesce_key: Option&lt;&amp;str&gt;</code></strong>:</p>
@@ -80,7 +80,7 @@ sequenceDiagram
     Note over Hist: Restores x=20.0 mm in a single step!
   </pre>
 </figure>
-<h2><code>O(1)</code> Undo/Redo Swaps with <code>std::mem::replace</code></h2>
+<h2 id="o-1-undo-redo-swaps-with-std-mem-replace"><code>O(1)</code> Undo/Redo Swaps with <code>std::mem::replace</code></h2>
 <p>When the user clicks <strong>Undo (Z)</strong> or presses <code>Key::Z</code>, <code>BoardHistory::undo(&amp;mut self, current: &amp;mut BoardModel)</code> pops the most recent <code>HistoryEntry</code> from the back of <code>undo_stack</code>, swaps <code>entry.doc</code> into <code>*current</code> using <code>std::mem::replace(current, entry.doc)</code>, and pushes the replaced state onto <code>redo_stack</code>.<span class="sidenote-number"></span><span class="sidenote"><strong>Zero-Clone State Swap:</strong> <code>std::mem::replace(current, entry.doc)</code> moves the saved <code>BoardModel</code> into <code>*current</code> and returns the outgoing <code>BoardModel</code> for <code>redo_stack</code> without even incrementing <code>Arc</code> reference counts!</span></p>
 <figure>
   <figcaption>BoardHistory record_edit, commit_coalesce, and undo in crates/pcb-doc/src/lib.rs</figcaption>
@@ -265,7 +265,7 @@ cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescin
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/struct.Response.html#method.drag_stopped"><code>egui::Response::drag_stopped</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/std/collections/struct.VecDeque.html"><code>std::collections::VecDeque</code> Rust Standard Library Docs</a>.
 </div>

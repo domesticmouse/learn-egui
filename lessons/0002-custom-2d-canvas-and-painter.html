@@ -50,7 +50,7 @@
 
 <p>Printing <code>&quot;Rendering Top Copper...&quot;</code> as a text label in <a href="./0001-the-immediate-mode-loop.html">Lesson 0001</a> proved our checkboxes were wired up, but it is a pretty underwhelming way to inspect a circuit board.</p>
 <p>So, welcome to <strong>Act I: The 2D CAD Canvas &amp; Viewport</strong>. We are going to replace those text placeholders with a real 2D vector canvas that draws an FR4 PCB substrate, Top and Bottom Copper traces, rectangular SMD pads, plated through-hole vias, Silkscreen courtyards, and unrouted Ratsnest airwires.</p>
-<h2>1. Reserving Canvas Space with <code>ui.allocate_painter</code></h2>
+<h2 id="1-reserving-canvas-space-with-ui-allocate-painter">1. Reserving Canvas Space with <code>ui.allocate_painter</code></h2>
 <p>Unlike standard widgets (<code>ui.checkbox</code>, <code>ui.button</code>) that know their own size, a 2D CAD viewport needs you to explicitly tell <code>egui</code> how much rectangular space to claim and what mouse interactions to listen for.<span class="sidenote-number"></span><span class="sidenote">See <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.allocate_painter"><code>Ui::allocate_painter</code></a> in the official <code>egui</code> docs: it returns a two-element Rust tuple <code>(Response, Painter)</code> clipped to the allocated rectangle.</span></p>
 <pre><code class="language-rust">egui::CentralPanel::default().show(ctx, |ui| {
     let (response, painter) =
@@ -74,7 +74,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 2.1: <code>ui.allocate_painter</code> reserves a screen-space <code>Rect</code> and returns a clipped <code>Painter</code> for drawing PCB layers.</em></p>
-<h2>2. Screen-Space Primitives &amp; Rust's <code>Copy</code> Trait</h2>
+<h2 id="2-screen-space-primitives-amp-rust-s-copy-trait">2. Screen-Space Primitives &amp; Rust's <code>Copy</code> Trait</h2>
 <p>In <code>egui</code>, screen coordinates are measured in logical points from the top-left corner of the window (<code>(0.0, 0.0)</code>), where <code>+x</code> points right and <code>+y</code> points down. Five lightweight types power all of our 2D CAD drawing:<span class="sidenote-number"></span><span class="sidenote">In Rust (<a href="https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy">Rust Book §4.1</a>), small stack-only types like <code>Pos2</code> (8 bytes), <code>Vec2</code> (8 bytes), <code>Rect</code> (16 bytes), <code>Color32</code> (4 bytes), and <code>Stroke</code> (8 bytes) implement the <code>Copy</code> trait. Passing <code>f_cu_stroke</code> into three <code>painter.line_segment(...)</code> calls copies 8 bytes on the stack each time—ownership never moves!</span></p>
 <ol>
 <li><strong>Position (<code>Pos2</code> / <code>pos2(x, y)</code>):</strong> A specific 2D coordinate point (e.g. a via centre or pad centre). Adding a displacement vector to a point yields a new point: <code>origin + vec2(80.0, 90.0)</code>.</li>
@@ -82,7 +82,7 @@ flowchart LR
 <li><strong>Bounding Box (<code>Rect</code>):</strong> Defined by its top-left <code>min: Pos2</code> and bottom-right <code>max: Pos2</code> corners.</li>
 <li><strong>Colour &amp; Outline (<code>Color32</code> &amp; <code>Stroke</code>):</strong> <code>Color32::from_rgb(r, g, b)</code> specifies an RGB colour, and <code>Stroke::new(width_f32, color)</code> bundles line thickness and colour for traces and component outlines.</li>
 </ol>
-<h2>3. Extracting Pure Geometry Functions for <code>cargo mutants</code></h2>
+<h2 id="3-extracting-pure-geometry-functions-for-cargo-mutants">3. Extracting Pure Geometry Functions for <code>cargo mutants</code></h2>
 <p>Now, if you bury all of your coordinate maths directly inside <code>paint_static_board</code>, you cannot unit-test your pad or board bounds without spinning up a full UI frame.</p>
 <p>Instead, let's extract pure geometry helpers that take <code>Copy</code> inputs (<code>Rect</code>, <code>Pos2</code>, <code>Vec2</code>) and return a <code>Rect</code>:<span class="sidenote-number"></span><span class="sidenote">Turns out, writing <code>Stroke::new(5.0_f32, ...)</code> with an explicit <code>_f32</code> suffix saves you a compiler warning: <code>Stroke::new</code> accepts generic <code>impl Into&lt;f32&gt;</code>, and Rust 1.97+ warns if an untyped float literal falls back to <code>f32</code> through a generic trait bound.</span></p>
 <pre><code class="language-rust">/// Computes the inset FR4 board outline `Rect` inside the allocated `canvas_rect`
@@ -242,7 +242,7 @@ fn smd_pad_rect_computes_symmetric_bounds_around_center() {
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/struct.Painter.html"><code>egui::Painter</code> Official Documentation</a> and <a href="https://github.com/emilk/egui/blob/master/crates/egui_demo_lib/src/demo/painting.rs"><code>egui_demo_lib</code> Painting Example</a>.
 Compare how <code>allocate_painter</code> reserves a <code>Rect</code> and clips all shapes drawn within that region.

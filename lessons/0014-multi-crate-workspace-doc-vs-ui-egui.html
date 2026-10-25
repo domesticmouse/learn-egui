@@ -48,7 +48,7 @@
 <h1>0014. Multi-Crate Workspace: Separating <code>pcb-doc</code> (<code>L1</code>) from <code>pcb-reviewer</code> (<code>L6</code>)</h1>
 <p class="subtitle">Splitting domain geometry, DRC math, and review pin invariants into a pure, headless <code>pcb-doc</code> library crate (<code>L1</code> depending only on <code>emath</code>) so <code>cargo test -p pcb-doc</code> and <code>cargo mutants -p pcb-doc</code> execute in milliseconds without linking <code>egui</code> or <code>eframe</code>.</p>
 
-<h2>Why Engine-First <code>egui</code> Apps Split Domain State into <code>L1</code> Crates</h2>
+<h2 id="why-engine-first-egui-apps-split-domain-state-into-l1-crates">Why Engine-First <code>egui</code> Apps Split Domain State into <code>L1</code> Crates</h2>
 <p>In Lessons <code>0000</code> through <code>0013</code>, our <code>BoardModel</code> (<code>traces</code>, <code>pads</code>, <code>components</code>, <code>review_pins</code>, and DRC clearance math) lived in the same <code>src/main.rs</code> binary crate as <code>ViewState</code> and <code>PcbReviewerApp</code>. That kept early lessons compact, but every single edit to a pure domain function—like <code>pad_edge_gap_mm</code> or <code>ReviewStatus::can_transition_to</code>—forced <code>rustc</code> and <code>cargo-mutants</code> to re-link the entire <code>eframe</code> + <code>egui</code> + windowing stack.<span class="sidenote-number"></span><span class="sidenote"><strong>Strict L0–L7 Layering:</strong> Production <code>egui</code> CAD and graphics workspaces organize crates into a strict directed acyclic graph (DAG): <code>L0</code> foundational math (<code>emath</code>), <code>L1</code> pure document model (<code>pcb-doc</code>), <code>L2</code>–<code>L5</code> file formats and command engines, <code>L6</code> reusable <code>egui</code> widgets/panels, and <code>L7</code> native/Wasm shell binaries.</span></p>
 <p>By refactoring <code>./apps/0014-multi-crate-workspace-doc-vs-ui-egui</code> into a Cargo <code>[workspace]</code> with two crates:</p>
 <ol>
@@ -65,7 +65,7 @@ flowchart TD
     style L0 fill:#1c1c24,stroke:#f0e68c,color:#e6edf3
   </pre>
 </figure>
-<h2>Enforcing Layer Boundaries and Panic-Free Domain Code</h2>
+<h2 id="enforcing-layer-boundaries-and-panic-free-domain-code">Enforcing Layer Boundaries and Panic-Free Domain Code</h2>
 <p>A multi-crate workspace only stays clean if upward dependency leaks are caught automatically.<span class="sidenote-number"></span><span class="sidenote"><strong>Tier 1 Static &amp; Manifest Gates:</strong> Checking <code>include_str!(&quot;../Cargo.toml&quot;)</code> inside a unit test—or running an <code>xtask</code> workspace auditor—prevents an accidental <code>cargo add egui</code> inside <code>crates/pcb-doc</code> from silently coupling domain logic to UI rendering.</span> In <code>crates/pcb-doc/src/lib.rs</code>, we enforce two compile-time and Tier 1 invariants:</p>
 <ul>
 <li><strong>Panic-Free / Unsafe-Free Lints</strong>: <code>#![forbid(unsafe_code)]</code> and <code>#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]</code> at the top of <code>lib.rs</code> and <code>main.rs</code> guarantee that domain queries never crash the host process. Test modules opt in explicitly with <code>#[cfg(test)] #[allow(clippy::unwrap_used, ...)]</code>.</li>
@@ -236,7 +236,7 @@ cargo mutants --manifest-path ./apps/0014-multi-crate-workspace-doc-vs-ui-egui/C
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/cargo/reference/workspaces.html">The Cargo Book — §3.3 &quot;Workspaces&quot;</a> and <a href="https://docs.rs/emath/latest/emath/"><code>emath</code> Official Crate Docs (<code>Pos2</code>, <code>Vec2</code>, <code>Rect</code>, <code>TSTransform</code>)</a>.
 </div>
