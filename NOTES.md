@@ -25,7 +25,7 @@
 
 ## Curriculum Arc (`0000`–`0029`+) with Continuous Verification & Mutation Testing
 
-### Completed Lessons (`0000`–`0025`: Foundation + Act I + Act II + Act III + Act IV + Act V + Act VI)
+### Completed Lessons (`0000`–`0029`: Foundation + Act I + Act II + Act III + Act IV + Act V + Act VI + Act VII)
 - `0000-project-setup-and-eframe-boot.html` (App: `apps/0000-project-setup-and-eframe-boot`)
   - **`egui` Skill & PCB Feature**: Creating the Cargo crate (`Cargo.toml`, `eframe = "0.33"`, dev-profile optimization) and booting the native window with `eframe::run_native`.
   - **Just-in-Time Rust**: `impl Default` delegating to `reset_layers(&mut self)`, `ViewportBuilder` method chaining, `Box::new`, and `#[cfg(test)]` / `#[test]` / `assert!`.
@@ -149,24 +149,24 @@
   - **Just-in-Time Rust**: Staged transactional rollback snapshots (`execute_atomic_signoff_batch`), hash-chained audit logs (`compute_audit_entry_hash`), and monotonic revision replica merging (`remote.revision > local.revision`).
   - **Cargo Verification & Mutation Coverage**: 27 workspace tests (`3` in `kicad-sexpr`, `18` in `pcb-doc`, `6` in `pcb-reviewer`); `cargo mutants` catches `51 / 51` viable transaction, audit-chain, and replica-sync mutants (`476 / 476 viable workspace mutants caught, 0 missed`).
 
-### Act VII: Agentic Hardware Review & Model Context Protocol (`rmcp`) (`0026`–`0029`)
+### Act VII: Agentic Hardware Review & Model Context Protocol (`rmcp`) (`0026`–`0029`) — *Completed*
 *Goal: Turn the PCB Reviewer into an AI-controllable engineering co-pilot via the official `rmcp` SDK (`egui-app-runner` & `egui-command-engine`), adding LLM-native spatial/topological queries, Headless and Bridged live-GUI MCP servers, and a companion **Mock MCP Client & Inspector Workbench** app to test and drive multi-step agent playbooks.*
-- `0026-llm-native-spatial-and-electrical-queries.html`
-  - **`egui` Skill & PCB Feature**: Equip the engine (`L2`/`L5`) with high-leverage queries that LLMs struggle to compute from raw S-expressions: spatial neighborhood radius lookups (`pcb.query_spatial_neighborhood` returning nearby pads/components and edge-to-edge copper gaps around a target pin like `U1.VDD`), net-topology summaries (`pcb.query_net_topology`), and parameterized custom DRC/decoupling checks (`pcb.run_custom_drc`), exposed in an interactive **Query Preview** inspector tab.
-  - **Just-in-Time Rust**: `schemars::JsonSchema` derive macros, structured JSON Schema 2020-12 introspection, and trait-based query dispatch.
-  - **Cargo Verification & Mutation Coverage**: Unit + `proptest!` suites on radius/topology queries and strict JSON Schema parameter validation; `100%` caught mutants in `pcb-doc` / `pcb-engine` via `cargo mutants`.
-- `0027-headless-mcp-server-rmcp-and-mock-client.html`
-  - **`egui` Skill & PCB Feature**: Implement `PcbMcpServer` in `crates/pcb-automation` (`L6`) using `rmcp` (`#[tool_router]`, `#[tool]`, `#[tool_handler]`), exposing `CommandSpec` execution, read-only `kicad://board/summary`, `kicad://net/{name}`, and `kicad://bom` MCP **Resources**, and engineering review **Prompts** (`review_power_integrity`, `triage_open_drc`), paired with a programmatic **Mock MCP Client** driving a headless in-process `Session`.
-  - **Just-in-Time Rust**: Async trait implementations (`rmcp::ServerHandler`), `Arc<Mutex<Session>>`, `Parameters<T>`, and bidirectional in-memory `tokio::io::duplex` streams.
-  - **Cargo Verification & Mutation Coverage**: Deterministic client$\leftrightarrow$server round-trip integration tests over `tokio::io::duplex` verifying `list_tools`, `read_resource`, `get_prompt`, `call_tool`, and structured MCP error codes under `cargo mutants -p pcb-automation`.
-- `0028-bridged-mcp-control-channel-and-live-gui-snapshots.html`
-  - **`egui` Skill & PCB Feature**: Add an authenticated loopback TCP control channel (`127.0.0.1` + bearer token file) to the `egui` desktop app so `PcbMcpServer` in `--bridge` mode can pan/zoom the live 2D CAD camera (`ui.focus_region`), toggle layers, drop review pins, and capture cropped board region PNG snapshots returned as MCP `Content::image` payloads for multimodal inspection.
-  - **Just-in-Time Rust**: Non-blocking TCP command polling on the `egui` immediate-mode frame loop (`try_recv` + `ctx.request_repaint()`), constant-time bearer token verification, and capability-scoped filesystem paths.
-  - **Cargo Verification & Mutation Coverage**: End-to-end bridged tests verifying unauthorized token rejection, live `egui` camera rect updates, and cropped PNG snapshot payload generation with `0 missed mutants`.
-- `0029-egui-mcp-inspector-workbench-and-agent-playbooks.html`
-  - **`egui` Skill & PCB Feature**: Build the companion **Mock MCP Client & Inspector Workbench** (`egui` app / dual-pane console) that connects to either the **Headless** or **Bridged Live-GUI** MCP server, featuring a live `tools/list` schema explorer, raw JSON-RPC frame inspector (`Request` $\leftrightarrow$ `Response` with latency telemetry), inline `Content::image` snapshot viewer, and one-click **Multi-Step Agent Playbooks** (e.g., *"Audit `U1` decoupling caps $\to$ Run custom DRC $\to$ Drop `Critical` pins $\to$ Focus GUI viewport"*).
-  - **Just-in-Time Rust**: Async-to-GUI command/event bridges (`tokio::sync::mpsc`), state-machine playbook runners, and dual-process/in-memory transport switching.
-  - **Cargo Verification & Mutation Coverage**: Tier 6 `agent_tasks` acceptance suite executing full multi-step playbooks across both Headless and Bridged backends, verified with `egui_kittest` and `cargo mutants`.
+- `0026-llm-native-spatial-and-electrical-queries.html` (App: `apps/0026-llm-native-spatial-and-electrical-queries`)
+  - **`egui` Skill & PCB Feature**: Equip the engine with high-leverage LLM-native queries: `query_spatial_neighborhood` (`SpatialQueryParams` -> `SpatialNeighborhoodReport`), `query_net_topology` (`NetTopologyReport`), and parameterized `run_custom_drc` (`CustomDrcParams` -> `CustomDrcReport`), exposed in `SidePanel::right` (`"Query U1 Radius"`, `"Query VDD Net"`, `"Run Custom DRC"`).
+  - **Just-in-Time Rust**: `schemars::JsonSchema` derive macros, `schemars::schema_for!()` JSON Schema 2020-12 introspection, and `PcbLayer::is_copper()` filtering.
+  - **Cargo Verification & Mutation Coverage**: 28 workspace tests (`3` in `kicad-sexpr`, `19` in `pcb-doc`, `6` in `pcb-reviewer`); `cargo mutants` catches `21 / 21` viable spatial, topology, and custom DRC mutants (`497 / 497 viable workspace mutants caught, 0 missed`).
+- `0027-headless-mcp-server-rmcp-and-mock-client.html` (App: `apps/0027-headless-mcp-server-rmcp-and-mock-client`)
+  - **`egui` Skill & PCB Feature**: Implement `PcbMcpServer` using the official `rmcp` v1.4 SDK (`#[tool_router]`, `#[tool]`, `#[tool_handler]`), exposing 4 typed MCP tools (`pcb_query_spatial`, `pcb_query_net`, `pcb_run_custom_drc`, `pcb_add_review_pin`), read-only `kicad://board/summary`, `kicad://net/{name}`, and `kicad://bom` resources (`read_kicad_resource`), and review prompts (`build_review_prompt`), paired with `MockMcpClient` over `tokio::io::duplex(4096)` and `egui` inspection triggers (`"MCP Board Summary"`, `"MCP Power Prompt"`).
+  - **Just-in-Time Rust**: `rmcp::ServerHandler`, `rmcp::ClientHandler`, `Parameters<T>`, `Json<T>`, `Arc<Mutex<BoardModel>>`, and in-memory `tokio::io::duplex` streams.
+  - **Cargo Verification & Mutation Coverage**: 29 workspace tests (`3` in `kicad-sexpr`, `20` in `pcb-doc`, `6` in `pcb-reviewer`); `cargo mutants` catches `10 / 10` viable MCP server, resource, prompt, and duplex round-trip mutants (`507 / 507 viable workspace mutants caught, 0 missed`).
+- `0028-bridged-mcp-control-channel-and-live-gui-snapshots.html` (App: `apps/0028-bridged-mcp-control-channel-and-live-gui-snapshots`)
+  - **`egui` Skill & PCB Feature**: Authenticate loopback control requests with constant-time `verify_bearer_token`, pan/zoom the live 2D CAD camera via `LoopbackControlBridge::dispatch` (`"Bridge Focus U1"`), and capture cropped PNG region snapshots (`capture_cropped_region_png`, `"Capture U1 PNG"`) prefixed with `PNG_MAGIC_HEADER`.
+  - **Just-in-Time Rust**: Constant-time byte slice comparison (`^` and `|=`), `PNG_MAGIC_HEADER` (`[u8; 8]`), and pixel budget guards (`width_px.saturating_mul(height_px) > 16_384`).
+  - **Cargo Verification & Mutation Coverage**: 30 workspace tests (`3` in `kicad-sexpr`, `21` in `pcb-doc`, `6` in `pcb-reviewer`); `cargo mutants` catches `26 / 26` viable bearer-auth, loopback bridge, and cropped PNG snapshot mutants (`533 / 533 viable workspace mutants caught, 0 missed`).
+- `0029-egui-mcp-inspector-workbench-and-agent-playbooks.html` (App: `apps/0029-egui-mcp-inspector-workbench-and-agent-playbooks`)
+  - **`egui` Skill & PCB Feature**: Embed `McpInspectorWorkbench` inside `PcbReviewerApp` with transport toggling (`McpTransportMode::HeadlessDuplex` $\leftrightarrow$ `BridgedLoopback`, `"Switch MCP Transport"`), 4-step `run_power_integrity_playbook` (`"Run Agent Playbook"`), and `RpcFrameRecord` telemetry, sealing the final Act VII `QualityScorecard`.
+  - **Just-in-Time Rust**: State-machine playbook runners (`PlaybookReport`), `RpcFrameRecord` audit logs, and dual-transport execution.
+  - **Cargo Verification & Mutation Coverage**: 31 workspace tests (`3` in `kicad-sexpr`, `22` in `pcb-doc`, `6` in `pcb-reviewer`); `cargo mutants` catches `6 / 6` viable workbench and playbook mutants (`539 / 539 viable workspace mutants caught, 0 missed`).
 
 ### Future Acts Under Exploration (`Act VIII+`, `0030`+)
 - *The course remains open-ended beyond `0029`—future acts can explore Gerber/Excellon manufacturing output & visual copper XOR revision diffing (`Rev A` vs. `Rev B`), custom WGSL GPU shaders (`egui_wgpu::CallbackTrait`) for sub-pixel copper pour & thermal relief rendering, interactive length-tuning/impedance calculators, or multi-board panelization.*

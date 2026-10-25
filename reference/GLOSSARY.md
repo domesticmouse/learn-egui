@@ -158,6 +158,22 @@ _Avoid_: concatenating unvalidated raw SQL strings or inserting review threads f
 Executing multi-pin status sign-offs on a staged transaction snapshot that commits or rolls back atomically (`execute_atomic_signoff_batch`), chaining each `AuditLogEntry` via `compute_audit_entry_hash(seq, pin_id, from_status, to_status, prev_hash)`, and merging remote replica rows when `remote.revision > local.revision` (`sync_with_remote_replica`).
 _Avoid_: partially applying a failed sign-off batch or overwriting newer local edits with stale remote revisions.
 
+**LLM-Native Spatial & Electrical Queries (`schemars::JsonSchema`, `SpatialNeighborhoodReport`, `NetTopologyReport`)**:
+Deriving JSON Schema Draft 2020-12 definitions from Rust structs (`#[derive(JsonSchema)]`) and projecting dense CAD geometry into bounded, token-efficient spatial neighborhood (`query_spatial_neighborhood`), net connectivity (`query_net_topology`), and custom DRC (`run_custom_drc`) reports with `max_items` truncation caps.
+_Avoid_: dumping raw multi-megabyte `.kicad_pcb` S-expressions into an LLM context window.
+
+**Headless Model Context Protocol Server & In-Memory Duplex Client (`rmcp`, `#[tool_router]`, `tokio::io::duplex`)**:
+Exposing `BoardModel` queries and review actions over the official Rust MCP SDK (`rmcp::ServerHandler`, `#[tool_router]`, `#[tool]`, `Parameters<T>`, `Json<T>`) together with `kicad://` resources and structured prompts, verified deterministically in-memory by connecting `PcbMcpServer` and `MockMcpClient` across `tokio::io::duplex` streams.
+_Avoid_: requiring external LLM API keys or network sockets to unit-test MCP tool schemas and handlers.
+
+**Constant-Time Bearer Auth & Cropped PNG Region Snapshots (`verify_bearer_token`, `capture_cropped_region_png`)**:
+Authenticating loopback GUI control commands (`LoopbackControlBridge`) with a bitwise XOR byte accumulator (`verify_bearer_token`) that prevents timing side-channel leaks, and rendering bounded PCB regions (`width_px * height_px <= 16_384`) into `PNG_MAGIC_HEADER`-verified (`\x89PNG\r\n\x1a\n`) snapshots (`CroppedPngSnapshot`).
+_Avoid_: using short-circuiting string equality (`==`) on bearer tokens or returning unbounded 4K screenshots to vision models.
+
+**Embedded `egui` MCP Inspector Workbench & Agent Playbooks (`McpInspectorWorkbench`, `McpTransportMode`)**:
+An in-app `egui` protocol inspector that toggles between `McpTransportMode::HeadlessDuplex` and `McpTransportMode::BridgedLoopback`, records `RpcFrameRecord` JSON-RPC 2.0 traffic, and executes deterministic 4-step hardware review playbooks (`run_power_integrity_playbook`).
+_Avoid_: shipping AI-controllable desktop tools without an offline workbench to inspect and replay JSON-RPC tool calls.
+
 ---
 
 ## Quick Lookup: Key `eframe` & `egui` APIs by Lesson
@@ -190,3 +206,7 @@ _Avoid_: partially applying a failed sign-off batch or overwriting newer local e
 | `from_kicad_pcb_sexpr` & `run_pinned_kicad_corpus` | Lowers `(kicad_pcb ...)` ASTs into `BoardModel` and enforces Tier 4 corpus pass & round-trip ratchet floors. | [Lesson 0023](../lessons/0023-parsing-kicad-pcb-and-sch-into-domain-model.html) |
 | `validate_turso_sql` & `TursoReviewStore` | Validates SQLite/Turso DDL/DML ASTs via `turso_parser`, enforces `board_id` foreign keys, and syncs pins to SQL. | [Lesson 0024](../lessons/0024-embedded-sql-review-store-with-turso.html) |
 | `execute_atomic_signoff_batch` & `verify_audit_chain` | Executes all-or-nothing SQL sign-off transactions, verifies 64-bit hash-chained `AuditLogEntry` logs, and merges replica rows. | [Lesson 0025](../lessons/0025-local-first-review-sync-and-audit-trail.html) |
+| `#[derive(JsonSchema)]` & `query_spatial_neighborhood` | Generates `schemars` JSON schemas and executes bounded spatial, net topology, and custom DRC queries. | [Lesson 0026](../lessons/0026-llm-native-spatial-and-electrical-queries.html) |
+| `#[tool_router]`, `PcbMcpServer` & `tokio::io::duplex` | Exposes MCP tools, `kicad://` resources, and review prompts over `rmcp`, verified via an in-memory duplex mock client. | [Lesson 0027](../lessons/0027-headless-mcp-server-rmcp-and-mock-client.html) |
+| `verify_bearer_token` & `capture_cropped_region_png` | Authenticates `LoopbackControlBridge` commands in constant time and captures magic-verified cropped PNG snapshots. | [Lesson 0028](../lessons/0028-bridged-mcp-control-channel-and-live-gui-snapshots.html) |
+| `McpInspectorWorkbench` & `run_power_integrity_playbook` | Toggles `HeadlessDuplex` vs. `BridgedLoopback` in `egui`, logs `RpcFrameRecord` frames, and runs 4-step agent playbooks. | [Lesson 0029](../lessons/0029-egui-mcp-inspector-workbench-and-agent-playbooks.html) |

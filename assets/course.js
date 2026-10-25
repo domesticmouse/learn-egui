@@ -2656,3 +2656,285 @@ replica_status_badge(): "Replica: TAMPERED (chain FAIL)"`,
 
   render();
 }
+
+/**
+ * 28. Lesson 0026 Simulator: LLM-Native Spatial & Electrical Queries + schemars
+ */
+function initSpatialQuerySimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const views = {
+    "spatial-u1": {
+      out: `✔ Target: U1 (LDO_3V3, SOT-23) @ (20.0, 27.0) mm
+✔ Radius: 15.0 mm -> 2 pads within radius:
+  • Pad #0 (F.Cu, VCC_3V3) dist=5.0 mm
+  • Pad #1 (F.Cu, SPI_CLK) dist=5.0 mm
+✔ Min edge-to-edge copper gap: 7.6 mm`,
+      state: `board.query_spatial_neighborhood(&SpatialQueryParams {
+    ref_des: "U1".into(), radius_mm: 15.0,
+}) => Ok(SpatialNeighborhoodReport {
+    nearby_pads: 2, nearby_components: 0, min_copper_gap_mm: Some(7.6),
+})`,
+    },
+    "net-vcc": {
+      out: `✔ NetId(1) ("VCC_3V3"):
+  • Connected Components: ["J1", "U1"]
+  • Pad Count: 1 | Trace Segments: 3
+  • Total Routed Length: 73.2 mm (F.Cu + B.Cu)`,
+      state: `board.query_net_topology(NetId(1))
+=> NetTopologyReport {
+    net: NetId(1), signal_name: "VCC_3V3",
+    pad_count: 1, trace_count: 3, connected_refs: vec!["J1", "U1"],
+}`,
+    },
+    "custom-drc": {
+      out: `⚠ Custom DRC (min_clearance=8.0 mm, min_trace_width=0.5 mm):
+  • Clearance Violations: 1 (VCC_3V3 vs SPI_CLK: 7.6 mm < 8.0 mm)
+  • Narrow Copper Traces: 0 (all F.Cu/B.Cu traces >= 0.8 mm)`,
+      state: `board.run_custom_drc(&CustomDrcParams {
+    min_clearance_mm: 8.0, min_copper_width_mm: 0.5,
+}) => Ok(CustomDrcReport { clearance_violations: 1, narrow_traces: 0 })`,
+    },
+    "json-schema": {
+      out: `{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SpatialQueryParams",
+  "type": "object",
+  "required": ["ref_des", "radius_mm"],
+  "properties": {
+    "ref_des": { "type": "string" },
+    "radius_mm": { "type": "number" }
+  }
+}`,
+      state: `let schema = schemars::schema_for!(SpatialQueryParams);
+let value = serde_json::to_value(&schema)?;
+// Exported automatically to MCP tools/list!`,
+    },
+  };
+
+  let cur = "spatial-u1";
+
+  function render() {
+    const v = views[cur];
+    const oEl = root.querySelector("[data-role='sq-output']");
+    const sEl = root.querySelector("[data-role='sq-state']");
+    if (oEl) oEl.innerHTML = `<pre style="margin:0; white-space:pre-wrap;">${v.out}</pre>`;
+    if (sEl) {
+      sEl.textContent = v.state;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(sEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-sq-act]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      cur = btn.getAttribute("data-sq-act");
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 29. Lesson 0027 Simulator: Headless PcbMcpServer (rmcp) over tokio::io::duplex
+ */
+function initHeadlessMcpSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const views = {
+    "list-tools": {
+      wire: `-> {"jsonrpc":"2.0","id":1,"method":"tools/list"}
+<- {"result":{"tools":[
+     {"name":"pcb_query_spatial","inputSchema":{"required":["ref_des","radius_mm"]}},
+     {"name":"pcb_query_net","inputSchema":{"required":["net_id"]}},
+     {"name":"pcb_run_custom_drc","inputSchema":{"required":["min_clearance_mm"]}},
+     {"name":"pcb_add_review_pin","inputSchema":{"required":["x_mm","y_mm","comment"]}}
+   ]}}`,
+      state: `// #[tool_router] + #[tool_handler] on PcbMcpServer
+let tools = client.list_all_tools().await?;
+assert_eq!(tools.len(), 4);`,
+    },
+    "read-res": {
+      wire: `-> {"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"kicad://board/summary"}}
+<- {"result":{"contents":[{
+     "uri":"kicad://board/summary",
+     "mimeType":"application/json",
+     "text":"{\\"board_id\\":\\"pwr-stage-rev-b\\",\\"components\\":3,\\"pads\\":3,\\"pins\\":2}"
+   }]}}`,
+      state: `let res = server.read_resource_uri("kicad://board/summary")?;
+// Returns ReadResourceResult with JSON board telemetry`,
+    },
+    "get-prompt": {
+      wire: `-> {"jsonrpc":"2.0","id":3,"method":"prompts/get","params":{"name":"review_power_integrity","arguments":{"ref_des":"U1"}}}
+<- {"result":{"messages":[{
+     "role":"user",
+     "content":{"type":"text","text":"Audit U1 (LDO_3V3) on net VCC_3V3..."}
+   }]}}`,
+      state: `let prompt = server.build_review_prompt("review_power_integrity", "U1")?;
+assert_eq!(prompt.messages.len(), 1);`,
+    },
+    "call-tool": {
+      wire: `-> {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"pcb_query_spatial","arguments":{"ref_des":"U1","radius_mm":15.0}}}
+<- {"result":{"content":[{"type":"text","text":"{\\"ref_des\\":\\"U1\\",\\"nearby_pads\\":2}"}],"isError":false}}`,
+      state: `let res = client.call_tool(CallToolRequestParams::new("pcb_query_spatial")...).await?;
+assert_eq!(res.is_error, Some(false));`,
+    },
+  };
+
+  let cur = "list-tools";
+
+  function render() {
+    const v = views[cur];
+    const wEl = root.querySelector("[data-role='mcp-wire']");
+    const sEl = root.querySelector("[data-role='mcp-state']");
+    if (wEl) wEl.innerHTML = `<pre style="margin:0; white-space:pre-wrap;">${v.wire}</pre>`;
+    if (sEl) {
+      sEl.textContent = v.state;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(sEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-mcp-act]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      cur = btn.getAttribute("data-mcp-act");
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 30. Lesson 0028 Simulator: Authenticated Loopback Control Bridge & Cropped PNG Snapshots
+ */
+function initBridgedMcpSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const views = {
+    "auth-ok": {
+      preview: `✔ Loopback Control 127.0.0.1:7878 Authenticated
+✔ Constant-time token check: verify_bearer_token(provided, expected) == true`,
+      state: `verify_bearer_token("pcb-secret-token-256", "pcb-secret-token-256") => true
+bridge.authenticate("pcb-secret-token-256") => Ok(())`,
+    },
+    "auth-fail": {
+      preview: `<span style="color:#ff6b5b;">✖ ControlError::Unauthorized("invalid or missing bearer token")</span>
+Live GUI camera and board state untouched!`,
+      state: `verify_bearer_token("wrong-token", "pcb-secret-token-256") => false
+bridge.handle_request(unauth_req) => Err(ControlError::Unauthorized)`,
+    },
+    "focus-u1": {
+      preview: `✔ Live egui Viewport Updated:
+  pcb_scene_rect = Rect::from_center_size((20.0, 27.0), (30.0, 24.0))
+  ctx.request_repaint() triggered!`,
+      state: `ControlCommand::FocusRegion { center_mm: pos2(20.0, 27.0), size_mm: vec2(30.0, 24.0) }
+=> ControlResponse::Focused { min_x: 5.0, min_y: 15.0, max_x: 35.0, max_y: 39.0 }`,
+    },
+    snapshot: {
+      preview: `✔ Cropped Region PNG Snapshot (64x64 RGBA -> PNG):
+  Magic Header: \\x89PNG\\r\\n\\x1a\\n (verified)
+  MCP Payload: ContentBlock::image(base64_png, "image/png")`,
+      state: `let snap = capture_cropped_region_png(&board, crop_rect, 0b0111)?;
+assert!(snap.png_bytes.starts_with(b"\\x89PNG\\r\\n\\x1a\\n"));`,
+    },
+  };
+
+  let cur = "auth-ok";
+
+  function render() {
+    const v = views[cur];
+    const pEl = root.querySelector("[data-role='br-preview']");
+    const sEl = root.querySelector("[data-role='br-state']");
+    if (pEl) pEl.innerHTML = `<pre style="margin:0; white-space:pre-wrap;">${v.preview}</pre>`;
+    if (sEl) {
+      sEl.textContent = v.state;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(sEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-br-act]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      cur = btn.getAttribute("data-br-act");
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 31. Lesson 0029 Simulator: Mock MCP Client & Inspector Workbench + Agent Playbooks
+ */
+function initMcpWorkbenchSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  let transport = "Bridged (127.0.0.1:7878)";
+  let mode = "run-playbook";
+
+  function render() {
+    const lEl = root.querySelector("[data-role='wb-log']");
+    const sEl = root.querySelector("[data-role='wb-state']");
+    if (mode === "run-playbook") {
+      if (lEl) {
+        lEl.innerHTML = `<pre style="margin:0; white-space:pre-wrap;">[Step 1/4] tools/call pcb_query_spatial({"ref_des":"U1","radius_mm":15.0}) -> 2 pads, gap=7.6mm
+[Step 2/4] tools/call pcb_run_custom_drc({"min_clearance_mm":8.0}) -> 1 violation
+[Step 3/4] tools/call pcb_add_review_pin({"x_mm":20.0,"y_mm":27.0,"comment":"Agent: U1 gap 7.6mm < 8.0mm"}) -> Pin #3
+[Step 4/4] control/focus_region({"center_mm":[20.0,27.0]}) -> Viewport focused + PNG snapshot</pre>`;
+      }
+      if (sEl) {
+        sEl.textContent = `Transport: "${transport}"
+PlaybookReport {
+    steps_executed: 4,
+    violations_found: 1,
+    created_pin_id: Some(PinId(3)),
+    focused_ref: Some("U1".into()),
+}`;
+      }
+    } else if (mode === "scorecard") {
+      if (lEl) {
+        lEl.innerHTML = `<pre style="margin:0; white-space:pre-wrap; color:#3dd68c;">✔ Foundation + Acts I–VII Complete (Lessons 0000–0029)
+✔ All workspace crates: kicad-sexpr (L0), pcb-doc (L1/L4), pcb-reviewer (L6/L7)
+✔ Mutation Score: 100% Caught (0 Missed)</pre>`;
+      }
+      if (sEl) {
+        sEl.textContent = `QualityScorecard {
+    tests_passed: 31,
+    mutants_caught: 644,
+    mutants_missed: 0,
+    registered_commands: 4,
+} // is_release_ready() == true`;
+      }
+    }
+    if (sEl && window.Prism && window.Prism.highlightElement) {
+      window.Prism.highlightElement(sEl);
+    }
+  }
+
+  root.querySelectorAll("[data-wb-act]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const act = btn.getAttribute("data-wb-act");
+      if (act === "toggle-mode") {
+        transport =
+          transport === "Bridged (127.0.0.1:7878)"
+            ? "Headless (tokio::io::duplex)"
+            : "Bridged (127.0.0.1:7878)";
+      } else {
+        mode = act;
+      }
+      render();
+    });
+  });
+
+  render();
+}
+

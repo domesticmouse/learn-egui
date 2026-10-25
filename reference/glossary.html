@@ -38,6 +38,10 @@
       <a href="../lessons/0023-parsing-kicad-pcb-and-sch-into-domain-model.html">0023</a>
       <a href="../lessons/0024-embedded-sql-review-store-with-turso.html">0024</a>
       <a href="../lessons/0025-local-first-review-sync-and-audit-trail.html">0025</a>
+      <a href="../lessons/0026-llm-native-spatial-and-electrical-queries.html">0026</a>
+      <a href="../lessons/0027-headless-mcp-server-rmcp-and-mock-client.html">0027</a>
+      <a href="../lessons/0028-bridged-mcp-control-channel-and-live-gui-snapshots.html">0028</a>
+      <a href="../lessons/0029-egui-mcp-inspector-workbench-and-agent-playbooks.html">0029</a>
       <a href="./glossary.html" class="active">Glossary</a>
       <a href="./immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="./testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
@@ -251,6 +255,26 @@
       <td><strong>Atomic SQL Transactions, Audit Hash Chain &amp; Local-First Replica Sync (<code>AuditLogEntry</code>, <code>verify_audit_chain</code>)</strong></td>
       <td>Executing multi-pin status sign-offs on a staged transaction snapshot that commits or rolls back atomically (<code>execute_atomic_signoff_batch</code>), chaining each <code>AuditLogEntry</code> via <code>compute_audit_entry_hash(seq, pin_id, from_status, to_status, prev_hash)</code>, and merging remote replica rows when <code>remote.revision &gt; local.revision</code> (<code>sync_with_remote_replica</code>).</td>
       <td><em>Avoid:</em> partially applying a failed sign-off batch or overwriting newer local edits with stale remote revisions.</td>
+    </tr>
+    <tr>
+      <td><strong>LLM-Native Spatial &amp; Electrical Queries (<code>schemars::JsonSchema</code>, <code>SpatialNeighborhoodReport</code>, <code>NetTopologyReport</code>)</strong></td>
+      <td>Deriving JSON Schema Draft 2020-12 definitions from Rust structs (<code>#[derive(JsonSchema)]</code>) and projecting dense CAD geometry into bounded, token-efficient spatial neighborhood (<code>query_spatial_neighborhood</code>), net connectivity (<code>query_net_topology</code>), and custom DRC (<code>run_custom_drc</code>) reports with <code>max_items</code> truncation caps.</td>
+      <td><em>Avoid:</em> dumping raw multi-megabyte <code>.kicad_pcb</code> S-expressions into an LLM context window.</td>
+    </tr>
+    <tr>
+      <td><strong>Headless Model Context Protocol Server &amp; In-Memory Duplex Client (<code>rmcp</code>, <code>#[tool_router]</code>, <code>tokio::io::duplex</code>)</strong></td>
+      <td>Exposing <code>BoardModel</code> queries and review actions over the official Rust MCP SDK (<code>rmcp::ServerHandler</code>, <code>#[tool_router]</code>, <code>#[tool]</code>, <code>Parameters&lt;T&gt;</code>, <code>Json&lt;T&gt;</code>) together with <code>kicad://</code> resources and structured prompts, verified deterministically in-memory by connecting <code>PcbMcpServer</code> and <code>MockMcpClient</code> across <code>tokio::io::duplex</code> streams.</td>
+      <td><em>Avoid:</em> requiring external LLM API keys or network sockets to unit-test MCP tool schemas and handlers.</td>
+    </tr>
+    <tr>
+      <td><strong>Constant-Time Bearer Auth &amp; Cropped PNG Region Snapshots (<code>verify_bearer_token</code>, <code>capture_cropped_region_png</code>)</strong></td>
+      <td>Authenticating loopback GUI control commands (<code>LoopbackControlBridge</code>) with a bitwise XOR byte accumulator (<code>verify_bearer_token</code>) that prevents timing side-channel leaks, and rendering bounded PCB regions (<code>width_px * height_px &lt;= 16_384</code>) into <code>PNG_MAGIC_HEADER</code>-verified (<code>\x89PNG\r\n\x1a\n</code>) snapshots (<code>CroppedPngSnapshot</code>).</td>
+      <td><em>Avoid:</em> using short-circuiting string equality (<code>==</code>) on bearer tokens or returning unbounded 4K screenshots to vision models.</td>
+    </tr>
+    <tr>
+      <td><strong>Embedded <code>egui</code> MCP Inspector Workbench &amp; Agent Playbooks (<code>McpInspectorWorkbench</code>, <code>McpTransportMode</code>)</strong></td>
+      <td>An in-app <code>egui</code> protocol inspector that toggles between <code>McpTransportMode::HeadlessDuplex</code> and <code>McpTransportMode::BridgedLoopback</code>, records <code>RpcFrameRecord</code> JSON-RPC 2.0 traffic, and executes deterministic 4-step hardware review playbooks (<code>run_power_integrity_playbook</code>).</td>
+      <td><em>Avoid:</em> shipping AI-controllable desktop tools without an offline workbench to inspect and replay JSON-RPC tool calls.</td>
     </tr>
   </tbody>
 </table>

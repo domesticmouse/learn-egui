@@ -32,6 +32,10 @@ Interactive engineering course for learning **Rust** and **[`egui`](https://docs
   - [Lesson 0023: Lowering KiCad `.kicad_pcb` S-Expressions into `BoardModel` & Corpus Oracles](https://domesticmouse.github.io/learn-egui/lessons/0023-parsing-kicad-pcb-and-sch-into-domain-model.html) (`apps/0023-parsing-kicad-pcb-and-sch-into-domain-model`)
   - [Lesson 0024: Embedded SQL Review Store with Turso (`turso_parser` & Async `tokio` Bridge)](https://domesticmouse.github.io/learn-egui/lessons/0024-embedded-sql-review-store-with-turso.html) (`apps/0024-embedded-sql-review-store-with-turso`)
   - [Lesson 0025: Local-First Replica Sync, Atomic SQL Transactions & Tamper-Evident Audit Trails](https://domesticmouse.github.io/learn-egui/lessons/0025-local-first-review-sync-and-audit-trail.html) (`apps/0025-local-first-review-sync-and-audit-trail`)
+  - [Lesson 0026: LLM-Native Spatial & Electrical Queries (`schemars` JSON Schema)](https://domesticmouse.github.io/learn-egui/lessons/0026-llm-native-spatial-and-electrical-queries.html) (`apps/0026-llm-native-spatial-and-electrical-queries`)
+  - [Lesson 0027: Headless MCP Server (`rmcp`), Resources, Tools, Prompts & Mock Duplex Client](https://domesticmouse.github.io/learn-egui/lessons/0027-headless-mcp-server-rmcp-and-mock-client.html) (`apps/0027-headless-mcp-server-rmcp-and-mock-client`)
+  - [Lesson 0028: Bridged MCP Control Channel, Bearer Auth & Cropped Live GUI Snapshots](https://domesticmouse.github.io/learn-egui/lessons/0028-bridged-mcp-control-channel-and-live-gui-snapshots.html) (`apps/0028-bridged-mcp-control-channel-and-live-gui-snapshots`)
+  - [Lesson 0029: Embedded `egui` MCP Inspector Workbench, Agent Playbooks & Act VII Scorecard](https://domesticmouse.github.io/learn-egui/lessons/0029-egui-mcp-inspector-workbench-and-agent-playbooks.html) (`apps/0029-egui-mcp-inspector-workbench-and-agent-playbooks`)
 - **Reference & Cheat Sheets:**
   - [Glossary of Rust & `egui` Terms](https://domesticmouse.github.io/learn-egui/reference/glossary.html)
   - [Immediate-Mode GUI Cheat Sheet](https://domesticmouse.github.io/learn-egui/reference/immediate-mode-cheatsheet.html)

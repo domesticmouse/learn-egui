@@ -1,6 +1,6 @@
 ---
 title: "Reference: Continuous Verification & Mutation Testing (`cargo-mutants`)"
-subtitle: How we verify every PCB Reviewer feature with `cargo test` and measure real assertion coverage with `cargo mutants` across Acts I–VI.
+subtitle: How we verify every PCB Reviewer feature with `cargo test` and measure real assertion coverage with `cargo mutants` across Acts I–VII.
 page_type: reference
 ---
 
@@ -116,7 +116,15 @@ In Act VI, we expand the workspace to 3 crates (`crates/kicad-sexpr` at `L0` Sta
 2. **Tier 4 Pinned `.kicad_pcb` Corpus Oracles & Ratchet Floors (`0023`)**: Runs `run_pinned_kicad_corpus()` across `PINNED_KICAD_CORPUS`, asserting `passed_files >= CORPUS_PASS_FLOOR`, `roundtrip_files >= CORPUS_ROUNDTRIP_FLOOR`, and `reloaded == board` (`from_kicad_pcb_sexpr` ↔ `to_kicad_pcb_sexpr`).
 3. **Tier 2 Async `#[tokio::test]` SQL AST, Atomic Rollback & Audit Hash-Chain Gates (`0024`–`0025`)**: Validates SQL DDL/DML/transaction statements via `turso_parser::parser::Parser`, verifies foreign-key rejection on unregistered `board_id`s, tests atomic rollback on invalid status transitions inside `execute_atomic_signoff_batch`, and verifies tamper detection in `verify_audit_chain()`.
 
-## 7. Progression of Testing Across the Six Acts
+## 7. Act VII Agentic MCP Duplex Round-Trips, Constant-Time Auth & Cropped PNG Oracles (`0026`–`0029`)
+
+In Act VII, we verify every layer of our Model Context Protocol (`rmcp`) stack without external network calls or cloud LLM dependencies:
+
+1. **Tier 2 `schemars` JSON Schema & Bounded Query Invariants (`0026`)**: Asserts that `spatial_query_json_schema()` emits mandatory tool parameter definitions and that `query_spatial_neighborhood`, `query_net_topology`, and `run_custom_drc` enforce Euclidean radius bounds, `max_items` truncation flags, and pad-clearance distance thresholds.
+2. **Tier 6 In-Memory `tokio::io::duplex` MCP Client-Server Acceptance (`0027`)**: Spawns `PcbMcpServer` and `MockMcpClient` over `tokio::io::duplex(4096)` inside `#[tokio::test]`, asserting full JSON-RPC 2.0 tool discovery (`list_all_tools`), typed `call_tool` execution, `kicad://` resource reads, and prompt templates.
+3. **Tier 6 Constant-Time Bearer Auth, Cropped PNG Magic & Agent Playbook Gates (`0028`–`0029`)**: Verifies that `verify_bearer_token` rejects empty or mismatched tokens via constant-time XOR accumulation, `capture_cropped_region_png` enforces pixel budgets (`width_px * height_px <= 16_384`) and `PNG_MAGIC_HEADER` (`\x89PNG\r\n\x1a\n`), and `McpInspectorWorkbench::run_power_integrity_playbook` logs all 4 JSON-RPC frames across both `HeadlessDuplex` and `BridgedLoopback` modes.
+
+## 8. Progression of Testing Across the Seven Acts
 
 | Curriculum Stage | Testing Mechanism Introduced | What `cargo test` + `cargo mutants` Verifies |
 | --- | --- | --- |
@@ -126,3 +134,4 @@ In Act VI, we expand the workspace to 3 crates (`crates/kicad-sexpr` at `L0` Sta
 | **Act IV (0014–0017)** | Workspace layer gates, panic-free lints & `proptest!` | `#![deny(clippy::unwrap_used)]`, sub-second `cargo mutants -p pcb-doc`, corrupt JSON rejection, and `Arc::make_mut` undo/redo snapshot invariants. |
 | **Act V (0018–0021)** | `panic_hunt` command fuzzer, perf budgets & `gpu_lock()` snapshots | Adversarial JSON fuzzing of every `CommandSpec`, spatial culling equivalence, background worker cancellation, and offscreen `wgpu` PNG visual parity. |
 | **Act VI (0022–0025)** | Real-file KiCad corpus oracles & `#[tokio::test]` SQL harnesses | `nom` S-expression parser edge cases, pinned `.kicad_pcb` oracle pass/round-trip ratchets, Turso (`libsql`) transactions, and `docs/scorecard.md`. |
+| **Act VII (0026–0029)** | `schemars` schema gates, `tokio::io::duplex` MCP client & PNG magic | Bounded spatial/electrical LLM queries, `rmcp` tool/resource/prompt round-trips, constant-time bearer auth, cropped PNG headers, and agent playbooks. |

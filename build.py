@@ -1616,6 +1616,145 @@ def widget_replica_sync_sim(scripts_out: list[str]) -> str:
 </section>"""
 
 
+def widget_spatial_query_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initSpatialQuerySimulator("spatial-query-sim");')
+    return """<section class="full-width-panel" id="spatial-query-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: LLM-Native Spatial &amp; Electrical Queries + <code>schemars::JsonSchema</code></span>
+    <span class="panel-badge">query_spatial_neighborhood • query_net_topology • schema_for!</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Execute high-leverage spatial and electrical queries that LLMs cannot reliably compute from raw S-expression text, or inspect the generated JSON Schema 2020-12 contract derived via <code>#[derive(schemars::JsonSchema)]</code>.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Engine Query Selector</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-sq-act="spatial-u1"><code>query_spatial_neighborhood("U1", 15.0)</code></button>
+        <button type="button" class="egui-btn" data-sq-act="net-vcc"><code>query_net_topology(NetId(1))</code> (<code>VCC_3V3</code>)</button>
+        <button type="button" class="egui-btn" data-sq-act="custom-drc"><code>run_custom_drc(8.0, 0.5)</code></button>
+        <button type="button" class="egui-btn" data-sq-act="json-schema">Inspect <code>schema_for!(SpatialQueryParams)</code></button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Query Output / JSON Schema</h4>
+      <div data-role="sq-output" style="font-family:var(--font-mono); font-size:0.75rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. Rust Query Telemetry</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="sq-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_headless_mcp_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initHeadlessMcpSimulator("headless-mcp-sim");')
+    return """<section class="full-width-panel" id="headless-mcp-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Headless <code>PcbMcpServer</code> (<code>rmcp</code>) over <code>tokio::io::duplex</code></span>
+    <span class="panel-badge">#[tool_router] • #[tool_handler] • kicad:// Resources • Prompts</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Send MCP JSON-RPC requests from the in-process Mock MCP Client over <code>tokio::io::duplex(4096)</code> to <code>PcbMcpServer</code> and inspect the structured responses.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Mock MCP Client Requests</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-mcp-act="list-tools"><code>tools/list</code> (Router Introspection)</button>
+        <button type="button" class="egui-btn" data-mcp-act="read-res"><code>resources/read</code> (<code>kicad://board/summary</code>)</button>
+        <button type="button" class="egui-btn" data-mcp-act="get-prompt"><code>prompts/get</code> (<code>review_power_integrity</code>)</button>
+        <button type="button" class="egui-btn" data-mcp-act="call-tool"><code>tools/call</code> (<code>pcb_query_spatial</code>)</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. <code>tokio::io::duplex</code> Wire Payload</h4>
+      <div data-role="mcp-wire" style="font-family:var(--font-mono); font-size:0.74rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. <code>PcbMcpServer</code> Handler State</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="mcp-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_bridged_mcp_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initBridgedMcpSimulator("bridged-mcp-sim");')
+    return """<section class="full-width-panel" id="bridged-mcp-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Authenticated Loopback Control Bridge &amp; Cropped PNG Snapshots</span>
+    <span class="panel-badge">verify_bearer_token • ui.focus_region • ContentBlock::image</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Test bearer-token authentication on the loopback control channel, focus the live <code>egui</code> camera on a region, and capture a cropped board snapshot returned as MCP <code>ContentBlock::image</code>.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Bridge Control Actions</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-br-act="auth-ok">1. Authenticate Valid Bearer Token</button>
+        <button type="button" class="egui-btn" data-br-act="auth-fail">2. Test Invalid Token (Rejected)</button>
+        <button type="button" class="egui-btn" data-br-act="focus-u1">3. <code>ui.focus_region</code> around <code>U1</code></button>
+        <button type="button" class="egui-btn" data-br-act="snapshot">4. <code>ui.region_snapshot</code> (Base64 PNG)</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Live <code>egui</code> Viewport &amp; Image Payload</h4>
+      <div data-role="br-preview" style="font-family:var(--font-mono); font-size:0.75rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. Bridge Telemetry</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="br-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_mcp_workbench_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initMcpWorkbenchSimulator("mcp-workbench-sim");')
+    return """<section class="full-width-panel" id="mcp-workbench-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Mock MCP Client &amp; Inspector Workbench + Agent Playbooks</span>
+    <span class="panel-badge">Headless vs Bridged • JSON-RPC Frame Log • 4-Step Agent Playbook</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Switch between <strong>Headless</strong> and <strong>Bridged Live-GUI</strong> transports and run the automated 4-step <strong>Power Integrity Agent Playbook</strong> end-to-end.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Workbench Controls</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-wb-act="run-playbook">▶ Run 4-Step Power Integrity Playbook</button>
+        <button type="button" class="egui-btn" data-wb-act="toggle-mode">⇄ Toggle Transport (Headless / Bridged)</button>
+        <button type="button" class="egui-btn" data-wb-act="scorecard">✔ Generate Final Course Scorecard</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. JSON-RPC Frame Log &amp; Playbook Steps</h4>
+      <div data-role="wb-log" style="font-family:var(--font-mono); font-size:0.74rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. Workbench &amp; Scorecard State</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="wb-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
 def widget_layer_swatch_sim(scripts_out: list[str]) -> str:
     scripts_out.append('    initLayerSwatchSimulator("layer-swatch-sim");')
     return """<section class="full-width-panel" id="layer-swatch-sim">
@@ -1715,6 +1854,10 @@ def filter_lessons(
             "vi": (22, 25),
             "act-6": (22, 25),
             "act-vi": (22, 25),
+            "7": (26, 29),
+            "vii": (26, 29),
+            "act-7": (26, 29),
+            "act-vii": (26, 29),
         }
         if act_str in act_ranges:
             start_n, end_n = act_ranges[act_str]
@@ -2031,6 +2174,10 @@ def compile_markdown_body(
         "{{widget:kicad-corpus-sim}}": lambda: widget_kicad_corpus_sim(scripts_out),
         "{{widget:turso-sql-sim}}": lambda: widget_turso_sql_sim(scripts_out),
         "{{widget:replica-sync-sim}}": lambda: widget_replica_sync_sim(scripts_out),
+        "{{widget:spatial-query-sim}}": lambda: widget_spatial_query_sim(scripts_out),
+        "{{widget:headless-mcp-sim}}": lambda: widget_headless_mcp_sim(scripts_out),
+        "{{widget:bridged-mcp-sim}}": lambda: widget_bridged_mcp_sim(scripts_out),
+        "{{widget:mcp-workbench-sim}}": lambda: widget_mcp_workbench_sim(scripts_out),
     }
     for shortcode, factory in fullwidth_widgets.items():
         if shortcode in text:

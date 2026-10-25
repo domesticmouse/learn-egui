@@ -20,7 +20,7 @@ flowchart LR
 ```
 _Multi-Act Curriculum Progression: Every lesson builds toward an engine-first, AI-controllable Schematic & PCB Design Review System verified with unit tests and mutation coverage._
 
-## Published Interactive Lessons (`0000`–`0025`)
+## Published Interactive Lessons (`0000`–`0029`)
 
 Start with [Lesson 0000](./lessons/0000-project-setup-and-eframe-boot.html) to set up your Cargo project and mutation-testing harness, or jump directly to any section using the curriculum table of contents below:
 
@@ -34,6 +34,7 @@ Start with [Lesson 0000](./lessons/0000-project-setup-and-eframe-boot.html) to s
     <li><a href="#act-4">Act IV: Engine-First Architecture &amp; Persistence</a> <span class="act-toc-badge">Lessons 0014–0017</span></li>
     <li><a href="#act-5">Act V: Command Engine, Performance &amp; Polish</a> <span class="act-toc-badge">Lessons 0018–0021</span></li>
     <li><a href="#act-6">Act VI: Real-World KiCad Parsing (nom) &amp; Embedded SQL (Turso)</a> <span class="act-toc-badge">Lessons 0022–0025</span></li>
+    <li><a href="#act-7">Act VII: Agentic Hardware Review &amp; Model Context Protocol (rmcp)</a> <span class="act-toc-badge">Lessons 0026–0029</span></li>
   </ol>
 </nav>
 
@@ -79,6 +80,12 @@ Act VI connects our CAD engine to real-world hardware files and relational revie
 
 {{widget:lesson-cards act="6"}}
 
+### Act VII: Agentic Hardware Review & Model Context Protocol (`rmcp`) (`0026`–`0029`) {#act-7}
+
+Act VII turns our PCB Design Reviewer into an AI-native hardware verification platform. We design token-efficient, `schemars`-typed spatial neighborhood, net topology, and custom DRC query engines (`query_spatial_neighborhood`, `query_net_topology`, `run_custom_drc`), build a headless Model Context Protocol (`rmcp`) server exposing `kicad://` resources, `#[tool]` endpoints, and structured prompts tested over in-memory `tokio::io::duplex` streams, bridge the MCP server to the live `egui` desktop viewport over a constant-time bearer-authenticated control channel (`verify_bearer_token`) with cropped PNG region snapshots (`capture_cropped_region_png`), and embed an interactive **MCP Inspector Workbench** inside `egui` to audit JSON-RPC 2.0 frames and execute multi-step **Agent Review Playbooks**.
+
+{{widget:lesson-cards act="7"}}
+
 ## Reference Sheets & Printable Cheat Sheets
 
 Turns out, having a one-page cheat sheet next to your editor saves a lot of tab-switching. These reference documents compress the core Rust, immediate-mode GUI, and mutation-testing mechanics into quick-lookup tables designed for both screen review and clean paper printing:
@@ -94,14 +101,14 @@ Turns out, having a one-page cheat sheet next to your editor saves a lot of tab-
 Every lesson is backed by a standalone, runnable Cargo package or workspace under `./apps/<NNNN-lesson-slug>/` that compiles with zero warnings and passes both `cargo test` and `cargo mutants`:
 
 ```bash
-# Launch Lesson 0025's interactive 3-crate PCB Reviewer desktop window
-cargo run --manifest-path ./apps/0025-local-first-review-sync-and-audit-trail/Cargo.toml
+# Launch Lesson 0029's interactive 3-crate PCB Reviewer & MCP Inspector Workbench
+cargo run --manifest-path ./apps/0029-egui-mcp-inspector-workbench-and-agent-playbooks/Cargo.toml
 
 # Run workspace unit + proptest + tokio::test suites and fast L0/L1 mutation checks
-cargo test --manifest-path ./apps/0025-local-first-review-sync-and-audit-trail/Cargo.toml --workspace
-cargo mutants --manifest-path ./apps/0025-local-first-review-sync-and-audit-trail/Cargo.toml -p kicad-sexpr -p pcb-doc --in-place
+cargo test --manifest-path ./apps/0029-egui-mcp-inspector-workbench-and-agent-playbooks/Cargo.toml --workspace
+cargo mutants --manifest-path ./apps/0029-egui-mcp-inspector-workbench-and-agent-playbooks/Cargo.toml -p kicad-sexpr -p pcb-doc --in-place
 ```
 
 :::teacher-prompt
-**Ready to dive in?** Start with [**Lesson 0000: Bootstrapping Your Rust & `eframe` Project**](./lessons/0000-project-setup-and-eframe-boot.html) or jump straight to [**Lesson 0025: Local-First Replica Sync, Atomic SQL Transactions & Tamper-Evident Audit Trails**](./lessons/0025-local-first-review-sync-and-audit-trail.html).
+**Ready to dive in?** Start with [**Lesson 0000: Bootstrapping Your Rust & `eframe` Project**](./lessons/0000-project-setup-and-eframe-boot.html) or jump straight to [**Lesson 0029: Embedded `egui` MCP Inspector Workbench, Agent Playbooks & Act VII Scorecard**](./lessons/0029-egui-mcp-inspector-workbench-and-agent-playbooks.html).
 :::
