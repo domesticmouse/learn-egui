@@ -1476,6 +1476,146 @@ def widget_snapshot_wasm_sim(scripts_out: list[str]) -> str:
 </section>"""
 
 
+def widget_sexpr_ast_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initSexprAstSimulator("sexpr-ast-sim");')
+    return """<section class="full-width-panel" id="sexpr-ast-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: KiCad S-Expression Tokenizer &amp; AST Inspector (<code>nom</code>)</span>
+    <span class="panel-badge">L0 kicad-sexpr • SexprNode • egui::CollapsingHeader</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Select a KiCad S-expression input below to run <code>parse_sexpr_str(input)</code> and inspect the resulting <code>SexprNode</code> tree, node count, and nesting depth rendered inside <code>egui::CollapsingHeader</code>.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. S-Expression Input</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-sexpr-preset="valid">Sample <code>(kicad_pcb ...)</code> (51 nodes)</button>
+        <button type="button" class="egui-btn" data-sexpr-preset="packed">Packed <code>(footprint"SOT-23"(at 20.0 27.0))</code></button>
+        <button type="button" class="egui-btn" data-sexpr-preset="unclosed">Unclosed <code>(kicad_pcb (net 1</code></button>
+        <button type="button" class="egui-btn" data-sexpr-preset="trailing">Trailing <code>(net 1 "VCC") extra_token</code></button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. <code>egui::CollapsingHeader</code> Tree</h4>
+      <div data-role="sexpr-tree" style="font-family:var(--font-mono); font-size:0.76rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. <code>SexprNode</code> Telemetry</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="sexpr-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_kicad_corpus_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initKicadCorpusSimulator("kicad-corpus-sim");')
+    return """<section class="full-width-panel" id="kicad-corpus-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: KiCad AST Lowering &amp; Tier 4 Pinned Corpus Oracle</span>
+    <span class="panel-badge">from_kicad_pcb_sexpr • to_kicad_pcb_sexpr • CorpusOracleReport</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Inspect the pinned <code>PINNED_KICAD_CORPUS</code> fixtures or inject a synthetic regression to see how <code>BoardModel::from_kicad_pcb_sexpr</code> and <code>CorpusOracleReport::meets_ratchet_floors()</code> enforce Tier 4 round-trip ratchets.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Corpus Fixture Selector</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-corpus-board="ldo"><code>ldo-power-rev-a.kicad_pcb</code> (Valid)</button>
+        <button type="button" class="egui-btn" data-corpus-board="spi"><code>spi-sensor-rev-b.kicad_pcb</code> (Valid)</button>
+        <button type="button" class="egui-btn" data-corpus-board="usb"><code>usb-header-rev-c.kicad_pcb</code> (Valid)</button>
+        <button type="button" class="egui-btn" data-corpus-board="bad-layer">Synthetic: Unknown Layer <code>In1.Cu</code></button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Lowered <code>BoardModel</code> Entities</h4>
+      <div data-role="corpus-entities" style="font-family:var(--font-mono); font-size:0.76rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. <code>CorpusOracleReport</code> Ratchet</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="corpus-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_turso_sql_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initTursoSqlSimulator("turso-sql-sim");')
+    return """<section class="full-width-panel" id="turso-sql-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Embedded SQL Review Store (<code>turso_parser</code> &amp; <code>TursoReviewStore</code>)</span>
+    <span class="panel-badge">validate_turso_sql • migrate() • ForeignKeyViolation</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Run idempotent SQL migrations, sync review pins into <code>review_threads</code>, or test an unregistered <code>board_id</code> to observe how <code>turso_parser::parser::Parser</code> and <code>TursoReviewStore</code> validate SQL statements and foreign keys.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. SQL Store Actions</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-sql-act="migrate">1. Run <code>migrate()</code> + Sync Pins</button>
+        <button type="button" class="egui-btn" data-sql-act="filter-alice">2. Filter SQL: <code>query = "alice"</code></button>
+        <button type="button" class="egui-btn" data-sql-act="fk-error">3. Upsert Unregistered <code>board_id</code></button>
+        <button type="button" class="egui-btn" data-sql-act="bad-sql">4. Test Invalid SQL Syntax</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. <code>review_threads</code> Rows</h4>
+      <div data-role="sql-rows" style="font-family:var(--font-mono); font-size:0.75rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. <code>TursoReviewStore</code> State</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="sql-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_replica_sync_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initReplicaSyncSimulator("replica-sync-sim");')
+    return """<section class="full-width-panel" id="replica-sync-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Atomic SQL Transactions, Hash-Chained Audit Logs &amp; Replica Sync</span>
+    <span class="panel-badge">execute_atomic_signoff_batch • verify_audit_chain • sync_with_remote_replica</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Execute an atomic sign-off transaction batch, merge remote replica rows by monotonic revision, or simulate a rollback / hash-chain tamper below.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Transaction &amp; Replica Controls</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-rep-act="commit-valid">Commit Valid Sign-Off Batch</button>
+        <button type="button" class="egui-btn" data-rep-act="rollback">Test Invalid Batch (Atomic Rollback)</button>
+        <button type="button" class="egui-btn" data-rep-act="sync">Sync Remote Replica (<code>rev 5</code>)</button>
+        <button type="button" class="egui-btn" data-rep-act="tamper">Simulate Audit Log Tamper</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Hash-Chained <code>audit_log</code></h4>
+      <div data-role="rep-audit" style="font-family:var(--font-mono); font-size:0.75rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. Replica &amp; Audit Chain Telemetry</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="rep-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
 def widget_layer_swatch_sim(scripts_out: list[str]) -> str:
     scripts_out.append('    initLayerSwatchSimulator("layer-swatch-sim");')
     return """<section class="full-width-panel" id="layer-swatch-sim">
@@ -1772,6 +1912,10 @@ def compile_markdown_body(
         "{{widget:viewport-cull-sim}}": lambda: widget_viewport_cull_sim(scripts_out),
         "{{widget:async-import-sim}}": lambda: widget_async_import_sim(scripts_out),
         "{{widget:snapshot-wasm-sim}}": lambda: widget_snapshot_wasm_sim(scripts_out),
+        "{{widget:sexpr-ast-sim}}": lambda: widget_sexpr_ast_sim(scripts_out),
+        "{{widget:kicad-corpus-sim}}": lambda: widget_kicad_corpus_sim(scripts_out),
+        "{{widget:turso-sql-sim}}": lambda: widget_turso_sql_sim(scripts_out),
+        "{{widget:replica-sync-sim}}": lambda: widget_replica_sync_sim(scripts_out),
     }
     for shortcode, factory in fullwidth_widgets.items():
         if shortcode in text:

@@ -108,7 +108,15 @@ In Act V, we harden the multi-crate workspace with three production gates:
 2. **Tier 2 + Tier 7 Spatial Culling Equivalence & Budgets (`0019`)**: Uses `proptest!` to prove `culled_pads_in_rect` and `culled_traces_in_rect` match reference filtering across arbitrary camera viewports while `check_cull_budget` enforces microsecond budgets.
 3. **Tier 3/6 `gpu_lock()` & `FrameSnapshotDigest` (`0021`)**: Acquires `let _gpu = gpu_lock();` (`OnceLock<Mutex<()>>` with `PoisonError::into_inner`) on the first line of snapshot tests, computes a deterministic 64-bit FNV-1a digest over visible layer bitmasks and culled geometry counts, and verifies release readiness via `QualityScorecard::is_release_ready()`.
 
-## 6. Progression of Testing Across the Six Acts
+## 6. Act VI Real-File KiCad Corpus Oracles & Async Turso SQL Harnesses (`0022`–`0025`)
+
+In Act VI, we expand the workspace to 3 crates (`crates/kicad-sexpr` at `L0` Standalone, `crates/pcb-doc` at `L1`/`L4`, and `pcb-reviewer` at `L6`/`L7`) and add three new verification gates:
+
+1. **Tier 1 + Tier 2 `L0` Standalone Parser & `proptest` Round-Tripping (`0022`)**: Enforces `validate_l0_standalone_manifest` on `crates/kicad-sexpr/Cargo.toml` and uses `proptest!` (`prop_sexpr_parser_roundtrips_arbitrary_footprints`) to verify `parse_sexpr_str` across arbitrary KiCad S-expression trees in ~15 seconds for all 38 `L0` mutants.
+2. **Tier 4 Pinned `.kicad_pcb` Corpus Oracles & Ratchet Floors (`0023`)**: Runs `run_pinned_kicad_corpus()` across `PINNED_KICAD_CORPUS`, asserting `passed_files >= CORPUS_PASS_FLOOR`, `roundtrip_files >= CORPUS_ROUNDTRIP_FLOOR`, and `reloaded == board` (`from_kicad_pcb_sexpr` ↔ `to_kicad_pcb_sexpr`).
+3. **Tier 2 Async `#[tokio::test]` SQL AST, Atomic Rollback & Audit Hash-Chain Gates (`0024`–`0025`)**: Validates SQL DDL/DML/transaction statements via `turso_parser::parser::Parser`, verifies foreign-key rejection on unregistered `board_id`s, tests atomic rollback on invalid status transitions inside `execute_atomic_signoff_batch`, and verifies tamper detection in `verify_audit_chain()`.
+
+## 7. Progression of Testing Across the Six Acts
 
 | Curriculum Stage | Testing Mechanism Introduced | What `cargo test` + `cargo mutants` Verifies |
 | --- | --- | --- |

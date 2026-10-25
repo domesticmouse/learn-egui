@@ -25,7 +25,7 @@
 
 ## Curriculum Arc (`0000`–`0029`+) with Continuous Verification & Mutation Testing
 
-### Completed Lessons (`0000`–`0021`: Foundation + Act I + Act II + Act III + Act IV + Act V)
+### Completed Lessons (`0000`–`0025`: Foundation + Act I + Act II + Act III + Act IV + Act V + Act VI)
 - `0000-project-setup-and-eframe-boot.html` (App: `apps/0000-project-setup-and-eframe-boot`)
   - **`egui` Skill & PCB Feature**: Creating the Cargo crate (`Cargo.toml`, `eframe = "0.33"`, dev-profile optimization) and booting the native window with `eframe::run_native`.
   - **Just-in-Time Rust**: `impl Default` delegating to `reset_layers(&mut self)`, `ViewportBuilder` method chaining, `Box::new`, and `#[cfg(test)]` / `#[test]` / `assert!`.
@@ -130,24 +130,24 @@
   - **Just-in-Time Rust**: `std::sync::OnceLock<Mutex<()>>`, panic-free lock recovery via `PoisonError::into_inner`, 64-bit FNV-1a hashing, and `#[cfg(target_arch = "wasm32")]`.
   - **Cargo Verification & Mutation Coverage**: 21 workspace tests (`15` in `pcb-doc`, `6` in `pcb-reviewer`) verifying `gpu_lock()`, `FrameSnapshotDigest`, `visible_layer_mask()`, and `QualityScorecard::is_release_ready()` (`304 / 304 viable mutants caught, 39 unviable, 0 missed`).
 
-### Act VI: Real-World KiCad Parsing (`nom`) & Embedded SQL (`turso` / `libsql`) (`0022`–`0025`)
+### Act VI: Real-World KiCad Parsing (`nom`) & Embedded SQL (`turso` / `libsql`) (`0022`–`0025`) — *Completed*
 *Goal: Parse real-world KiCad `.kicad_pcb` and `.kicad_sch` files with `nom` in an `L0` standalone parser crate, verify against pinned real-file corpus oracles, and persist/sync multi-engineer review threads in an embedded Turso (`libsql`) SQL database.*
-- `0022-sexpr-tokenizer-and-ast-with-nom.html`
-  - **`egui` Skill & PCB Feature**: Build an interactive S-expression AST inspector panel (`CollapsingHeader` tree view) visualizing raw KiCad `(kicad_pcb ...)` nodes parsed by a standalone `L0` `kicad-sexpr` crate.
-  - **Just-in-Time Rust**: Parser combinators (`nom::IResult`, `delimited`, `multispace0`, `alt`, `many0`), zero-copy string slices (`&'a str`), and recursive enums (`Box<Sexpr<'a>>`).
-  - **Cargo Verification & Mutation Coverage**: Fuzz and unit-test `kicad-sexpr` against deeply nested, unclosed, and non-UTF8/escaped inputs; run `cargo mutants -p kicad-sexpr` to guarantee 100% of grammar combinator branches are asserted.
-- `0023-parsing-kicad-pcb-and-sch-into-domain-model.html`
-  - **`egui` Skill & PCB Feature**: Lower KiCad S-expression trees into typed `Footprint`, `Pad`, `Segment`, and schematic `Symbol`/`Wire` structs (`L4` `io` crate) to render real open-source KiCad boards on the 2D canvas.
-  - **Just-in-Time Rust**: `TryFrom` / `FromStr` conversions, typed parse diagnostics with source spans, and fallible allocation (`Vec::try_reserve`).
-  - **Cargo Verification & Mutation Coverage**: Build a Tier 4 pinned KiCad corpus oracle harness (`pass_floor` and `roundtrip_floor` ratchets + synthetic regression tests) and run `cargo mutants -p pcb-io` on coordinate, layer, and net-lowering logic.
-- `0024-embedded-sql-review-store-with-turso.html`
-  - **`egui` Skill & PCB Feature**: Persist engineering review sessions, anchored comment threads, and DRC sign-off statuses in a local embedded Turso (`libsql`) SQL database with schema migrations and instant SQL search/filtering in the `egui` inspector.
-  - **Just-in-Time Rust**: Async Rust fundamentals (`async`/`await`, `tokio` runtime bridge for `egui`), parameterized SQL queries (`params!`), and row mapping.
-  - **Cargo Verification & Mutation Coverage**: Write async integration tests (`#[tokio::test]`) against ephemeral `:memory:` / temp `libsql::Builder::new_local` databases verifying idempotent migrations, foreign-key constraints, and SQL query filters under `cargo mutants`.
-- `0025-local-first-review-sync-and-audit-trail.html`
-  - **`egui` Skill & PCB Feature**: Add a live database sync indicator, offline-first review merge view, and an interactive SQL audit-log timeline comparing engineering sign-offs across board revisions.
-  - **Just-in-Time Rust**: Turso embedded replica sync (`Database::sync`), SQL transactions (`Transaction`), and thread-safe async state channels.
-  - **Cargo Verification & Mutation Coverage**: Test atomic transaction rollback on failure, concurrent engineer review merges, tamper-evident audit-log ordering, and compile our workspace `docs/scorecard.md` summarizing test, corpus, perf, and `cargo mutants` coverage across the workspace.
+- `0022-sexpr-tokenizer-and-ast-with-nom.html` (App: `apps/0022-sexpr-tokenizer-and-ast-with-nom`)
+  - **`egui` Skill & PCB Feature**: Interactive S-expression AST inspector panel (`egui::CollapsingHeader` tree view) visualizing raw KiCad `(kicad_pcb ...)` nodes parsed by a standalone `L0` `crates/kicad-sexpr` crate (`SAMPLE_KICAD_PCB_SNIPPET`).
+  - **Just-in-Time Rust**: Parser combinators (`nom::IResult`, `delimited`, `multispace0`, `alt`, `many0`), zero-copy string slices, recursive `SexprNode` ASTs, and `validate_l0_standalone_manifest`.
+  - **Cargo Verification & Mutation Coverage**: 24 workspace tests (`3` in `kicad-sexpr` including `prop_sexpr_parser_roundtrips_arbitrary_footprints`, `15` in `pcb-doc`, `6` in `pcb-reviewer`); `cargo mutants` catches `38 / 38` viable `L0` + UI inspector mutants (`342 / 342 viable workspace mutants caught, 0 missed`).
+- `0023-parsing-kicad-pcb-and-sch-into-domain-model.html` (App: `apps/0023-parsing-kicad-pcb-and-sch-into-domain-model`)
+  - **`egui` Skill & PCB Feature**: Lower `(kicad_pcb ...)` ASTs into `BoardModel` (`from_kicad_pcb_sexpr`) and export back (`to_kicad_pcb_sexpr`) with `"Import KiCad Board"` and `"Export KiCad S-Expr"` controls and a live `Corpus [PASS]: 3/3 pass, 3/3 round-trip` badge in `SidePanel::right`.
+  - **Just-in-Time Rust**: Typed `KicadLowerError` diagnostics (`#[from] SexprParseError`, `UnexpectedRootTag`, `MissingField`, `InvalidNumber`, `UnknownLayer`), `PcbLayer::from_kicad_name`, and Tier 4 `CORPUS_PASS_FLOOR` / `CORPUS_ROUNDTRIP_FLOOR` ratchets.
+  - **Cargo Verification & Mutation Coverage**: 25 workspace tests (`3` in `kicad-sexpr`, `16` in `pcb-doc`, `6` in `pcb-reviewer`); `cargo mutants` catches `43 / 43` viable lowering & corpus oracle mutants (`385 / 385 viable workspace mutants caught, 0 missed`).
+- `0024-embedded-sql-review-store-with-turso.html` (App: `apps/0024-embedded-sql-review-store-with-turso`)
+  - **`egui` Skill & PCB Feature**: Validate SQLite/Turso DDL & DML syntax (`REVIEW_STORE_SCHEMA_SQL`, `CREATE TABLE IF NOT EXISTS`, `INSERT INTO`, `SELECT`) via `turso_parser::parser::Parser`, enforce `board_id` foreign-key constraints in `TursoReviewStore`, and sync review pins from `egui` (`"Sync Pins to SQL"`).
+  - **Just-in-Time Rust**: `turso_parser::ast::{Cmd, Stmt}`, `async`/`await` storage methods paired with synchronous bridges, and `#[tokio::test]` async integration tests.
+  - **Cargo Verification & Mutation Coverage**: 26 workspace tests (`3` in `kicad-sexpr`, `17` in `pcb-doc`, `6` in `pcb-reviewer`); `cargo mutants` catches `40 / 40` viable SQL parser & store mutants (`425 / 425 viable workspace mutants caught, 0 missed`).
+- `0025-local-first-review-sync-and-audit-trail.html` (App: `apps/0025-local-first-review-sync-and-audit-trail`)
+  - **`egui` Skill & PCB Feature**: Execute atomic `BEGIN` / `COMMIT` / `ROLLBACK` sign-off batches (`"Commit Sign-Off Batch"`), verify 64-bit hash-chained `AuditLogEntry` records (`verify_audit_chain` & `Replica: X pending, Y audit [VALID]`), and merge remote replica rows (`"Sync Replica"`).
+  - **Just-in-Time Rust**: Staged transactional rollback snapshots (`execute_atomic_signoff_batch`), hash-chained audit logs (`compute_audit_entry_hash`), and monotonic revision replica merging (`remote.revision > local.revision`).
+  - **Cargo Verification & Mutation Coverage**: 27 workspace tests (`3` in `kicad-sexpr`, `18` in `pcb-doc`, `6` in `pcb-reviewer`); `cargo mutants` catches `51 / 51` viable transaction, audit-chain, and replica-sync mutants (`476 / 476 viable workspace mutants caught, 0 missed`).
 
 ### Act VII: Agentic Hardware Review & Model Context Protocol (`rmcp`) (`0026`–`0029`)
 *Goal: Turn the PCB Reviewer into an AI-controllable engineering co-pilot via the official `rmcp` SDK (`egui-app-runner` & `egui-command-engine`), adding LLM-native spatial/topological queries, Headless and Bridged live-GUI MCP servers, and a companion **Mock MCP Client & Inspector Workbench** app to test and drive multi-step agent playbooks.*

@@ -34,6 +34,10 @@
       <a href="./lessons/0019-viewport-culling-and-cached-tessellation.html">0019</a>
       <a href="./lessons/0020-non-blocking-file-import-and-progress-ui.html">0020</a>
       <a href="./lessons/0021-headless-snapshot-testing-and-wasm-build.html">0021</a>
+      <a href="./lessons/0022-sexpr-tokenizer-and-ast-with-nom.html">0022</a>
+      <a href="./lessons/0023-parsing-kicad-pcb-and-sch-into-domain-model.html">0023</a>
+      <a href="./lessons/0024-embedded-sql-review-store-with-turso.html">0024</a>
+      <a href="./lessons/0025-local-first-review-sync-and-audit-trail.html">0025</a>
       <a href="./reference/glossary.html">Glossary</a>
       <a href="./reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="./reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
@@ -417,6 +421,70 @@ flowchart LR
       <span><strong><code>egui</code> Skill:</strong> Offscreen Frame Snapshot Digests (<code>gpu_lock</code>), Visual Baseline Diffing &amp; Scorecard UI</span>
       <span><strong>Rust Concept:</strong> <code>OnceLock&lt;Mutex&lt;()&gt;&gt;</code> (<code>PoisonError::into_inner</code>), FNV-1a Hashing &amp; <code>#[cfg(target_arch = &quot;wasm32&quot;)]</code></span>
       <span><strong>Runnable App:</strong> <code>apps/0021-headless-snapshot-testing-and-wasm-build</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0022</span>
+        <span class="lesson-card-mutants">342 / 342 Caught</span>
+      </div>
+      <h3><a href="./lessons/0022-sexpr-tokenizer-and-ast-with-nom.html">KiCad S-Expression AST &amp; <code>nom</code> Combinators (<code>L0</code>)</a></h3>
+      <p>Build a standalone <code>L0</code> <code>kicad-sexpr</code> crate using <code>nom</code> combinators (<code>delimited</code>, <code>many0</code>, <code>alt</code>), enforce <code>validate_l0_standalone_manifest</code>, and inspect recursive <code>SexprNode</code> trees in <code>egui::CollapsingHeader</code>.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> Interactive AST Tree Inspector (<code>egui::CollapsingHeader</code>) &amp; Live Parse Telemetry</span>
+      <span><strong>Rust Concept:</strong> Parser Combinators (<code>nom::IResult</code>, <code>delimited</code>, <code>many0</code>, <code>alt</code>) &amp; Recursive Enums (<code>SexprNode</code>)</span>
+      <span><strong>Runnable App:</strong> <code>apps/0022-sexpr-tokenizer-and-ast-with-nom</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0023</span>
+        <span class="lesson-card-mutants">385 / 385 Caught</span>
+      </div>
+      <h3><a href="./lessons/0023-parsing-kicad-pcb-and-sch-into-domain-model.html">KiCad AST Lowering &amp; Tier 4 Corpus Oracles</a></h3>
+      <p>Lower <code>SexprNode</code> trees into <code>BoardModel</code> (<code>from_kicad_pcb_sexpr</code> / <code>to_kicad_pcb_sexpr</code>), validate KiCad layer names (<code>F.Cu</code>, <code>B.Cu</code>, <code>F.SilkS</code>), and enforce Tier 4 corpus pass &amp; round-trip ratchets.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> Live KiCad S-Expression Board Import/Export &amp; Corpus Oracle Telemetry</span>
+      <span><strong>Rust Concept:</strong> AST Lowering (<code>Result&lt;T, KicadLowerError&gt;</code>), <code>#[from]</code> Error Chaining &amp; Corpus Floor Ratchets</span>
+      <span><strong>Runnable App:</strong> <code>apps/0023-parsing-kicad-pcb-and-sch-into-domain-model</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0024</span>
+        <span class="lesson-card-mutants">425 / 425 Caught</span>
+      </div>
+      <h3><a href="./lessons/0024-embedded-sql-review-store-with-turso.html">Embedded SQL Review Store (<code>turso_parser</code> &amp; <code>tokio</code>)</a></h3>
+      <p>Parse and validate SQL migrations and parameterized queries with <code>turso_parser</code>, enforce foreign-key constraints on <code>board_id</code>, and filter SQL review threads in the <code>egui</code> inspector.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> Embedded SQL Review Inspector, Live Row Sync &amp; Parameterized Search Filter</span>
+      <span><strong>Rust Concept:</strong> SQL AST Validation (<code>turso_parser::parser::Parser</code>), <code>async</code>/<code>await</code> &amp; <code>#[tokio::test]</code></span>
+      <span><strong>Runnable App:</strong> <code>apps/0024-embedded-sql-review-store-with-turso</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0025</span>
+        <span class="lesson-card-mutants">476 / 476 Caught</span>
+      </div>
+      <h3><a href="./lessons/0025-local-first-review-sync-and-audit-trail.html">Local-First Replica Sync &amp; SQL Audit Trails</a></h3>
+      <p>Execute atomic <code>BEGIN</code>/<code>COMMIT</code>/<code>ROLLBACK</code> sign-off batches, verify hash-chained <code>AuditLogEntry</code> trails (<code>verify_audit_chain</code>), merge remote replica rows by monotonic revision, and audit Act VI release readiness.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> Live Replica Sync Indicator, Atomic Sign-Off Batching &amp; SQL Audit Timeline UI</span>
+      <span><strong>Rust Concept:</strong> Transactional Rollback Snapshots, Hash-Chained Audit Logs (<code>verify_audit_chain</code>) &amp; Replica Merging</span>
+      <span><strong>Runnable App:</strong> <code>apps/0025-local-first-review-sync-and-audit-trail</code></span>
     </div>
   </article>
 </section>

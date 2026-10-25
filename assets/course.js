@@ -2402,3 +2402,257 @@ FrameSnapshotDigest {
 
   render();
 }
+
+/**
+ * 24. Lesson 0022 Simulator: KiCad S-Expression AST Inspector (nom)
+ */
+function initSexprAstSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const presets = {
+    valid: {
+      tree: `▼ Root (kicad_pcb) [5 children]
+  • Node: (version) • 1 items
+  • Node: (net) • 2 items ["VCC_3V3"]
+  • Node: (net) • 2 items ["SPI_CLK"]
+  • Node: (footprint) • 6 items ["SOT-23", U1]
+  • Node: (pad) • 6 items ["1", smd, F.Cu]`,
+      rust: `parse_sexpr_str(SAMPLE_KICAD_PCB_SNIPPET)
+=> Ok(SexprNode::List(_))
+tag_name(): Some("kicad_pcb")
+node_count(): 51, max_depth(): 3
+summary_badge(): "AST: (kicad_pcb) • 51 nodes, depth 3"`,
+    },
+    packed: {
+      tree: `▼ Root (footprint) [2 children]
+  • Quoted: "SOT-23"
+  • Node: (at) • 2 items [20.0, 27.0]`,
+      rust: `parse_sexpr_str("(footprint\\"SOT-23\\"(at 20.0 27.0))")
+=> Ok(SexprNode::List(_))
+tag_name(): Some("footprint")
+node_count(): 6, max_depth(): 2`,
+    },
+    unclosed: {
+      tree: `<span style="color:#ff6b5b;">✖ SexprParseError::SyntaxError("(kicad_pcb (net 1")</span>`,
+      rust: `parse_sexpr_str("(kicad_pcb (net 1")
+=> Err(SexprParseError::SyntaxError("(kicad_pcb (net 1"))
+ast_status_badge(): "AST Error: unclosed or malformed S-expression"`,
+    },
+    trailing: {
+      tree: `<span style="color:#ff6b5b;">✖ SexprParseError::TrailingTokens("extra_token")</span>`,
+      rust: `parse_sexpr_str("(net 1 \\"VCC\\") extra_token")
+=> Err(SexprParseError::TrailingTokens("extra_token"))`,
+    },
+  };
+
+  let current = "valid";
+
+  function render() {
+    const p = presets[current];
+    const treeEl = root.querySelector("[data-role='sexpr-tree']");
+    const stEl = root.querySelector("[data-role='sexpr-state']");
+    if (treeEl) treeEl.innerHTML = `<pre style="margin:0; white-space:pre-wrap;">${p.tree}</pre>`;
+    if (stEl) {
+      stEl.textContent = p.rust;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-sexpr-preset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      current = btn.getAttribute("data-sexpr-preset");
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 25. Lesson 0023 Simulator: KiCad AST Lowering & Tier 4 Corpus Oracle
+ */
+function initKicadCorpusSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const boards = {
+    ldo: {
+      entities: `✔ ComponentSymbol: U1 (LDO_3V3, SOT-23) @ (20.0, 27.0) mm
+✔ SmdPad: #1 TopCopper (F.Cu) @ (20.0, 22.0) mm [NET_1]
+✔ Round-Trip S-Expr: Lossless match`,
+      state: `BoardModel::from_kicad_pcb_sexpr("ldo-power-rev-a.kicad_pcb") => Ok(_)
+CorpusOracleReport { total_files: 3, passed_files: 3, roundtrip_files: 3 }
+meets_ratchet_floors(): true
+summary_badge(): "Corpus [PASS]: 3/3 pass, 3/3 round-trip"`,
+    },
+    spi: {
+      entities: `✔ ComponentSymbol: R12 (10k, 0603) @ (52.0, 35.0) mm
+✔ SmdPad: #1 BottomCopper (B.Cu) @ (20.0, 48.0) mm [NET_2]
+✔ TraceSegment: (20.0, 48.0) -> (55.0, 48.0) width=0.80 mm`,
+      state: `BoardModel::from_kicad_pcb_sexpr("spi-sensor-rev-b.kicad_pcb") => Ok(_)
+CorpusOracleReport { total_files: 3, passed_files: 3, roundtrip_files: 3 }
+meets_ratchet_floors(): true`,
+    },
+    usb: {
+      entities: `✔ ComponentSymbol: J1 (CONN_2P, Header) @ (68.0, 35.0) mm
+✔ TraceSegment: Silkscreen (F.SilkS) & Ratsnest lowered
+✔ Round-Trip S-Expr: Lossless match`,
+      state: `BoardModel::from_kicad_pcb_sexpr("usb-header-rev-c.kicad_pcb") => Ok(_)
+CorpusOracleReport { total_files: 3, passed_files: 3, roundtrip_files: 3 }
+meets_ratchet_floors(): true`,
+    },
+    "bad-layer": {
+      entities: `<span style="color:#ff6b5b;">✖ Err(KicadLowerError::UnknownLayer("In1.Cu"))</span>`,
+      state: `PcbLayer::from_kicad_name("In1.Cu")
+=> Err(KicadLowerError::UnknownLayer("In1.Cu"))
+// Caught by synthetic regression test in crates/pcb-doc`,
+    },
+  };
+
+  let active = "ldo";
+
+  function render() {
+    const item = boards[active];
+    const entEl = root.querySelector("[data-role='corpus-entities']");
+    const stEl = root.querySelector("[data-role='corpus-state']");
+    if (entEl) entEl.innerHTML = `<pre style="margin:0; white-space:pre-wrap;">${item.entities}</pre>`;
+    if (stEl) {
+      stEl.textContent = item.state;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-corpus-board]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      active = btn.getAttribute("data-corpus-board");
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 26. Lesson 0024 Simulator: Embedded SQL Review Store (turso_parser)
+ */
+function initTursoSqlSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const modes = {
+    migrate: {
+      rows: `pin_id=1 | board="pwr-stage-rev-b" | @alice | Critical | Open
+pin_id=2 | board="pwr-stage-rev-b" | @bob   | Warning  | Resolved`,
+      state: `validate_turso_sql(REVIEW_STORE_SCHEMA_SQL) => Ok(2)
+store.migrate().await => Ok(1)
+summary_badge(): "Turso SQL: 2 rows (Schema v1)"`,
+    },
+    "filter-alice": {
+      rows: `pin_id=1 | board="pwr-stage-rev-b" | @alice | Critical | Open`,
+      state: `store.query_review_records("alice", false).await
+=> Ok(vec![SqlReviewRecord { pin_id: PinId(1), author: "alice", .. }])`,
+    },
+    "fk-error": {
+      rows: `<span style="color:#ff6b5b;">✖ ForeignKeyViolation("unregistered-board")</span>`,
+      state: `store.upsert_pin_record("unregistered-board", &note).await
+=> Err(SqlStoreError::ForeignKeyViolation("unregistered-board"))`,
+    },
+    "bad-sql": {
+      rows: `<span style="color:#ff6b5b;">✖ InvalidSql("syntax error nearSELEC")</span>`,
+      state: `validate_turso_sql("SELEC * FORM broken")
+=> Err(SqlStoreError::InvalidSql(...))`,
+    },
+  };
+
+  let cur = "migrate";
+
+  function render() {
+    const m = modes[cur];
+    const rEl = root.querySelector("[data-role='sql-rows']");
+    const sEl = root.querySelector("[data-role='sql-state']");
+    if (rEl) rEl.innerHTML = `<pre style="margin:0; white-space:pre-wrap;">${m.rows}</pre>`;
+    if (sEl) {
+      sEl.textContent = m.state;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(sEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-sql-act]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      cur = btn.getAttribute("data-sql-act");
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 27. Lesson 0025 Simulator: Atomic SQL Transactions, Audit Hash Chain & Replica Sync
+ */
+function initReplicaSyncSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const views = {
+    "commit-valid": {
+      audit: `seq=1 | pin=#1 | Open -> Resolved  | prev=0x00000000 -> hash=0x000004d2
+seq=2 | pin=#2 | Resolved -> Verified | prev=0x000004d2 -> hash=0x4a69df89`,
+      state: `execute_atomic_signoff_batch("lead", &[(PinId(1), Resolved), (PinId(2), Verified)])
+=> Ok(2) // COMMIT
+verify_audit_chain(): true
+replica_status_badge(): "Replica: Synced (rev 3, 2 audit entries, chain OK)"`,
+    },
+    rollback: {
+      audit: `<span style="color:#ffd33d;">↺ ROLLBACK: InvalidStatusTransition(PinId(1), Open -> Verified)</span>
+Audit log and review_threads restored to pre-batch snapshot!`,
+      state: `execute_atomic_signoff_batch("lead", &[(PinId(1), Verified)])
+=> Err(SqlStoreError::InvalidStatusTransition { pin_id: PinId(1), .. })
+verify_audit_chain(): true`,
+    },
+    sync: {
+      audit: `✔ Merged 1 remote row (pin_id=#3 @ rev 5 > local rev 3)
+✔ Stale remote snapshot (pin_id=#1 @ rev 1) ignored`,
+      state: `store.sync_with_remote_replica(&remote_rows).await => Ok(1)
+pending_local_writes: 0
+verify_audit_chain(): true`,
+    },
+    tamper: {
+      audit: `<span style="color:#ff6b5b;">✖ TAMPER DETECTED at seq=2: entry_hash mismatch!</span>`,
+      state: `entry.entry_hash ^= 0x1;
+store.verify_audit_chain() => false
+replica_status_badge(): "Replica: TAMPERED (chain FAIL)"`,
+    },
+  };
+
+  let cur = "commit-valid";
+
+  function render() {
+    const v = views[cur];
+    const aEl = root.querySelector("[data-role='rep-audit']");
+    const sEl = root.querySelector("[data-role='rep-state']");
+    if (aEl) aEl.innerHTML = `<pre style="margin:0; white-space:pre-wrap;">${v.audit}</pre>`;
+    if (sEl) {
+      sEl.textContent = v.state;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(sEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-rep-act]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      cur = btn.getAttribute("data-rep-act");
+      render();
+    });
+  });
+
+  render();
+}

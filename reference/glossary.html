@@ -34,6 +34,10 @@
       <a href="../lessons/0019-viewport-culling-and-cached-tessellation.html">0019</a>
       <a href="../lessons/0020-non-blocking-file-import-and-progress-ui.html">0020</a>
       <a href="../lessons/0021-headless-snapshot-testing-and-wasm-build.html">0021</a>
+      <a href="../lessons/0022-sexpr-tokenizer-and-ast-with-nom.html">0022</a>
+      <a href="../lessons/0023-parsing-kicad-pcb-and-sch-into-domain-model.html">0023</a>
+      <a href="../lessons/0024-embedded-sql-review-store-with-turso.html">0024</a>
+      <a href="../lessons/0025-local-first-review-sync-and-audit-trail.html">0025</a>
       <a href="./glossary.html" class="active">Glossary</a>
       <a href="./immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="./testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
@@ -227,6 +231,26 @@
       <td><strong>Process-Wide GPU Lock &amp; Frame Snapshot Digest (<code>gpu_lock</code>, <code>FrameSnapshotDigest</code>)</strong></td>
       <td>A <code>OnceLock&lt;Mutex&lt;()&gt;&gt;</code> guard (<code>let _gpu = gpu_lock();</code> using <code>PoisonError::into_inner</code>) acquired on the first line of GPU/snapshot tests to serialize concurrent driver access, paired with a deterministic 64-bit FNV-1a <code>FrameSnapshotDigest</code> over visible layer masks, culled geometry counts, and DRC markers.</td>
       <td><em>Avoid:</em> running multiple concurrent <code>wgpu</code> or snapshot harnesses across threads without acquiring <code>gpu_lock()</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Zero-Copy S-Expression Parser Combinators (<code>nom::IResult</code>, <code>SexprNode</code>)</strong></td>
+      <td>Functional parser combinators (<code>delimited</code>, <code>many0</code>, <code>alt</code>, <code>take_while1</code>) from <code>nom</code> that thread an unconsumed <code>&amp;str</code> slice through <code>IResult&lt;&amp;str, SexprNode&gt;</code> in a standalone <code>L0</code> crate (<code>crates/kicad-sexpr</code>) enforced by <code>validate_l0_standalone_manifest</code> (<a href="https://docs.rs/nom/latest/nom/">docs.rs/nom</a>).</td>
+      <td><em>Avoid:</em> writing ad-hoc regexes or byte-index loops that panic on unclosed parentheses or unterminated string literals.</td>
+    </tr>
+    <tr>
+      <td><strong>Pinned KiCad Corpus Oracle &amp; Ratchet Floors (<code>CORPUS_PASS_FLOOR</code>, <code>CORPUS_ROUNDTRIP_FLOOR</code>)</strong></td>
+      <td>A Tier 4 verification harness (<code>run_pinned_kicad_corpus</code>) that lowers real-structure <code>.kicad_pcb</code> S-expression fixtures into <code>BoardModel</code>, re-exports them (<code>to_kicad_pcb_sexpr</code>), and asserts non-decreasing pass and round-trip floor constants (<code>reloaded == board</code>).</td>
+      <td><em>Avoid:</em> testing a CAD parser on a single synthetic toy string without lossless round-trip oracles.</td>
+    </tr>
+    <tr>
+      <td><strong>Embedded SQL AST Validation &amp; Foreign-Key Store (<code>turso_parser</code>, <code>TursoReviewStore</code>)</strong></td>
+      <td>Validating SQLite/Turso DDL and DML statements (<code>Stmt::CreateTable</code>, <code>Stmt::Insert</code>, <code>Stmt::Select</code>, <code>Stmt::Begin</code>, <code>Stmt::Commit</code>, <code>Stmt::Rollback</code>) with <code>turso_parser::parser::Parser</code> before executing idempotent schema migrations and foreign-key-checked <code>SqlReviewRecord</code> queries in <code>TursoReviewStore</code>.</td>
+      <td><em>Avoid:</em> concatenating unvalidated raw SQL strings or inserting review threads for unregistered <code>board_id</code> keys.</td>
+    </tr>
+    <tr>
+      <td><strong>Atomic SQL Transactions, Audit Hash Chain &amp; Local-First Replica Sync (<code>AuditLogEntry</code>, <code>verify_audit_chain</code>)</strong></td>
+      <td>Executing multi-pin status sign-offs on a staged transaction snapshot that commits or rolls back atomically (<code>execute_atomic_signoff_batch</code>), chaining each <code>AuditLogEntry</code> via <code>compute_audit_entry_hash(seq, pin_id, from_status, to_status, prev_hash)</code>, and merging remote replica rows when <code>remote.revision &gt; local.revision</code> (<code>sync_with_remote_replica</code>).</td>
+      <td><em>Avoid:</em> partially applying a failed sign-off batch or overwriting newer local edits with stale remote revisions.</td>
     </tr>
   </tbody>
 </table>

@@ -34,6 +34,10 @@
       <a href="../lessons/0019-viewport-culling-and-cached-tessellation.html">0019</a>
       <a href="../lessons/0020-non-blocking-file-import-and-progress-ui.html">0020</a>
       <a href="../lessons/0021-headless-snapshot-testing-and-wasm-build.html">0021</a>
+      <a href="../lessons/0022-sexpr-tokenizer-and-ast-with-nom.html">0022</a>
+      <a href="../lessons/0023-parsing-kicad-pcb-and-sch-into-domain-model.html">0023</a>
+      <a href="../lessons/0024-embedded-sql-review-store-with-turso.html">0024</a>
+      <a href="../lessons/0025-local-first-review-sync-and-audit-trail.html">0025</a>
       <a href="./glossary.html">Glossary</a>
       <a href="./immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="./testing-and-mutation-cheatsheet.html" class="active">Mutation Cheat Sheet</a>
@@ -154,7 +158,14 @@ cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescin
 <li><strong>Tier 2 + Tier 7 Spatial Culling Equivalence &amp; Budgets (<code>0019</code>)</strong>: Uses <code>proptest!</code> to prove <code>culled_pads_in_rect</code> and <code>culled_traces_in_rect</code> match reference filtering across arbitrary camera viewports while <code>check_cull_budget</code> enforces microsecond budgets.</li>
 <li><strong>Tier 3/6 <code>gpu_lock()</code> &amp; <code>FrameSnapshotDigest</code> (<code>0021</code>)</strong>: Acquires <code>let _gpu = gpu_lock();</code> (<code>OnceLock&lt;Mutex&lt;()&gt;&gt;</code> with <code>PoisonError::into_inner</code>) on the first line of snapshot tests, computes a deterministic 64-bit FNV-1a digest over visible layer bitmasks and culled geometry counts, and verifies release readiness via <code>QualityScorecard::is_release_ready()</code>.</li>
 </ol>
-<h2>6. Progression of Testing Across the Six Acts</h2>
+<h2>6. Act VI Real-File KiCad Corpus Oracles &amp; Async Turso SQL Harnesses (<code>0022</code>–<code>0025</code>)</h2>
+<p>In Act VI, we expand the workspace to 3 crates (<code>crates/kicad-sexpr</code> at <code>L0</code> Standalone, <code>crates/pcb-doc</code> at <code>L1</code>/<code>L4</code>, and <code>pcb-reviewer</code> at <code>L6</code>/<code>L7</code>) and add three new verification gates:</p>
+<ol>
+<li><strong>Tier 1 + Tier 2 <code>L0</code> Standalone Parser &amp; <code>proptest</code> Round-Tripping (<code>0022</code>)</strong>: Enforces <code>validate_l0_standalone_manifest</code> on <code>crates/kicad-sexpr/Cargo.toml</code> and uses <code>proptest!</code> (<code>prop_sexpr_parser_roundtrips_arbitrary_footprints</code>) to verify <code>parse_sexpr_str</code> across arbitrary KiCad S-expression trees in ~15 seconds for all 38 <code>L0</code> mutants.</li>
+<li><strong>Tier 4 Pinned <code>.kicad_pcb</code> Corpus Oracles &amp; Ratchet Floors (<code>0023</code>)</strong>: Runs <code>run_pinned_kicad_corpus()</code> across <code>PINNED_KICAD_CORPUS</code>, asserting <code>passed_files &gt;= CORPUS_PASS_FLOOR</code>, <code>roundtrip_files &gt;= CORPUS_ROUNDTRIP_FLOOR</code>, and <code>reloaded == board</code> (<code>from_kicad_pcb_sexpr</code> ↔ <code>to_kicad_pcb_sexpr</code>).</li>
+<li><strong>Tier 2 Async <code>#[tokio::test]</code> SQL AST, Atomic Rollback &amp; Audit Hash-Chain Gates (<code>0024</code>–<code>0025</code>)</strong>: Validates SQL DDL/DML/transaction statements via <code>turso_parser::parser::Parser</code>, verifies foreign-key rejection on unregistered <code>board_id</code>s, tests atomic rollback on invalid status transitions inside <code>execute_atomic_signoff_batch</code>, and verifies tamper detection in <code>verify_audit_chain()</code>.</li>
+</ol>
+<h2>7. Progression of Testing Across the Six Acts</h2>
 <table class="ref-table">
 <thead>
 <tr>

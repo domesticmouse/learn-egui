@@ -142,6 +142,22 @@ _Avoid_: calling blocking `rx.recv()` inside `eframe::App::update` (which freeze
 A `OnceLock<Mutex<()>>` guard (`let _gpu = gpu_lock();` using `PoisonError::into_inner`) acquired on the first line of GPU/snapshot tests to serialize concurrent driver access, paired with a deterministic 64-bit FNV-1a `FrameSnapshotDigest` over visible layer masks, culled geometry counts, and DRC markers.
 _Avoid_: running multiple concurrent `wgpu` or snapshot harnesses across threads without acquiring `gpu_lock()`.
 
+**Zero-Copy S-Expression Parser Combinators (`nom::IResult`, `SexprNode`)**:
+Functional parser combinators (`delimited`, `many0`, `alt`, `take_while1`) from `nom` that thread an unconsumed `&str` slice through `IResult<&str, SexprNode>` in a standalone `L0` crate (`crates/kicad-sexpr`) enforced by `validate_l0_standalone_manifest` ([docs.rs/nom](https://docs.rs/nom/latest/nom/)).
+_Avoid_: writing ad-hoc regexes or byte-index loops that panic on unclosed parentheses or unterminated string literals.
+
+**Pinned KiCad Corpus Oracle & Ratchet Floors (`CORPUS_PASS_FLOOR`, `CORPUS_ROUNDTRIP_FLOOR`)**:
+A Tier 4 verification harness (`run_pinned_kicad_corpus`) that lowers real-structure `.kicad_pcb` S-expression fixtures into `BoardModel`, re-exports them (`to_kicad_pcb_sexpr`), and asserts non-decreasing pass and round-trip floor constants (`reloaded == board`).
+_Avoid_: testing a CAD parser on a single synthetic toy string without lossless round-trip oracles.
+
+**Embedded SQL AST Validation & Foreign-Key Store (`turso_parser`, `TursoReviewStore`)**:
+Validating SQLite/Turso DDL and DML statements (`Stmt::CreateTable`, `Stmt::Insert`, `Stmt::Select`, `Stmt::Begin`, `Stmt::Commit`, `Stmt::Rollback`) with `turso_parser::parser::Parser` before executing idempotent schema migrations and foreign-key-checked `SqlReviewRecord` queries in `TursoReviewStore`.
+_Avoid_: concatenating unvalidated raw SQL strings or inserting review threads for unregistered `board_id` keys.
+
+**Atomic SQL Transactions, Audit Hash Chain & Local-First Replica Sync (`AuditLogEntry`, `verify_audit_chain`)**:
+Executing multi-pin status sign-offs on a staged transaction snapshot that commits or rolls back atomically (`execute_atomic_signoff_batch`), chaining each `AuditLogEntry` via `compute_audit_entry_hash(seq, pin_id, from_status, to_status, prev_hash)`, and merging remote replica rows when `remote.revision > local.revision` (`sync_with_remote_replica`).
+_Avoid_: partially applying a failed sign-off batch or overwriting newer local edits with stale remote revisions.
+
 ---
 
 ## Quick Lookup: Key `eframe` & `egui` APIs by Lesson
@@ -170,3 +186,7 @@ _Avoid_: running multiple concurrent `wgpu` or snapshot harnesses across threads
 | `Rect::intersects` & `ViewportCullStats` | Culls off-screen pads and stroke-expanded traces against `pcb_scene_rect` and enforces frame budgets. | [Lesson 0019](../lessons/0019-viewport-culling-and-cached-tessellation.html) |
 | `mpsc::Receiver::try_recv` & `egui::ProgressBar` | Streams background file import progress without blocking the UI thread and wakes `egui` via `ctx.request_repaint()`. | [Lesson 0020](../lessons/0020-non-blocking-file-import-and-progress-ui.html) |
 | `gpu_lock()`, `FrameSnapshotDigest` & `QualityScorecard` | Serializes snapshot tests with `OnceLock<Mutex<()>>`, computes 64-bit FNV-1a visual digests, and gates `wasm32` release readiness. | [Lesson 0021](../lessons/0021-headless-snapshot-testing-and-wasm-build.html) |
+| `parse_sexpr_str`, `SexprNode` & `CollapsingHeader` | Parses KiCad S-expressions with `nom` in standalone `L0` `crates/kicad-sexpr` and renders a collapsible AST inspector. | [Lesson 0022](../lessons/0022-sexpr-tokenizer-and-ast-with-nom.html) |
+| `from_kicad_pcb_sexpr` & `run_pinned_kicad_corpus` | Lowers `(kicad_pcb ...)` ASTs into `BoardModel` and enforces Tier 4 corpus pass & round-trip ratchet floors. | [Lesson 0023](../lessons/0023-parsing-kicad-pcb-and-sch-into-domain-model.html) |
+| `validate_turso_sql` & `TursoReviewStore` | Validates SQLite/Turso DDL/DML ASTs via `turso_parser`, enforces `board_id` foreign keys, and syncs pins to SQL. | [Lesson 0024](../lessons/0024-embedded-sql-review-store-with-turso.html) |
+| `execute_atomic_signoff_batch` & `verify_audit_chain` | Executes all-or-nothing SQL sign-off transactions, verifies 64-bit hash-chained `AuditLogEntry` logs, and merges replica rows. | [Lesson 0025](../lessons/0025-local-first-review-sync-and-audit-trail.html) |
