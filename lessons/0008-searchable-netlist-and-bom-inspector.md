@@ -3,6 +3,14 @@ title: "Lesson 0008: Searchable Netlist, Virtualised BOM & Iterator Adapters"
 subtitle: Filtering components and nets with `TextEdit::singleline`, `.filter()`, and virtualised scrolling via `ScrollArea::vertical().show_rows(...)`
 lesson_num: "0008"
 act_badge: "Act II: Schematic Views, Layout & egui_kittest"
+card:
+  num: "Lesson 0008"
+  mutants: "47 / 47 Mutants Caught"
+  title: "Searchable Netlist, Virtualised BOM & Iterator Adapters"
+  summary: "Filter components and nets live with `TextEdit::singleline`, lay out virtualised rows using `ScrollArea::show_rows` and `egui::Grid`, and catch boolean filter mutants."
+  egui_skill: "`TextEdit::singleline`, `ScrollArea::show_rows`, `Grid`"
+  rust_concept: "Iterator adapters (`.filter()`), slices & case-insensitive search"
+  app_dir: "apps/0008-searchable-netlist-and-bom-inspector"
 ---
 
 A row of three buttons in a toolbar works fine for a tiny demo board. Try doing that on a synth voice card with 400 passives and ICs, though, and your toolbar will run right off the side of your monitor.

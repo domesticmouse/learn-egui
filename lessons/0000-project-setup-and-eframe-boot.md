@@ -3,6 +3,14 @@ title: "Lesson 0000: Bootstrapping Your Rust & `eframe` Project"
 subtitle: Creating the Cargo workspace and native window shell that your PCB Reviewer code will inhabit
 lesson_num: "0000"
 act_badge: "Mission: Schematic & PCB Design Review System"
+card:
+  num: "Lesson 0000"
+  mutants: "1 / 1 Mutants Caught"
+  title: "Bootstrapping Your Rust & `eframe` Project"
+  summary: "Create the Cargo package, configure dev-profile optimisation for 60 FPS rendering, boot a native window with `eframe::run_native`, and catch your first mutant."
+  egui_skill: "`eframe::run_native` & `ViewportBuilder`"
+  rust_concept: "`impl Default`, `Box::new`, `#[cfg(test)]`"
+  app_dir: "apps/0000-project-setup-and-eframe-boot"
 ---
 
 The joy of building a custom hardware tool is getting your own PCB viewport up on screen. The first hurdle, though, is getting past a blank terminal and figuring out which crate actually opens the window.

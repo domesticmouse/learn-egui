@@ -5,7 +5,7 @@ lesson_num: "0013"
 act_badge: "Act III Finale: Design Review Workflows"
 card:
   num: "Lesson 0013"
-  mutants: "134 / 134 Caught"
+  mutants: "134 / 134 Mutants Caught"
   title: "Custom `egui::Widget` Layer Swatches & Lifetimes"
   summary: "Build a reusable `LayerSwatch<'a>` implementing `egui::Widget` (colour swatch + visibility toggle + opacity slider) and test it standalone with `Harness::new_ui_state`."
   egui_skill: "`impl<'a> egui::Widget for LayerSwatch<'a>` & `ui.add(...)`"

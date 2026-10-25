@@ -3,6 +3,14 @@ title: "Lesson 0005: Hit-Testing & Net Cross-Probing (`Option<NetId>`)"
 subtitle: Hovering and clicking PCB pads in physical world coordinates to highlight connected nets and drive the `SidePanel` Net Inspector
 lesson_num: "0005"
 act_badge: "Act I Finale: The 2D CAD Canvas & Viewport"
+card:
+  num: "Lesson 0005"
+  mutants: "25 / 25 Mutants Caught"
+  title: "Spatial Hit-Testing, Selection State & Net Cross-Probing"
+  summary: "Convert pointer coordinates back into physical millimetres, hit-test SMD pads in reverse Z-order, highlight connected nets, and populate the Net Inspector."
+  egui_skill: "`Sense::click_and_drag()`, hover vs. locked selection"
+  rust_concept: "`Option<NetId>`, `if let Some(...)`, `.or(...)`"
+  app_dir: "apps/0005-hit-testing-and-net-cross-probing"
 ---
 
 Drawing a PCB in physical millimetres is a great start. Being able to hover over an SMD pad, see which electrical net it belongs to, and watch every connected trace light up across the board is when it starts feeling like a real CAD tool.

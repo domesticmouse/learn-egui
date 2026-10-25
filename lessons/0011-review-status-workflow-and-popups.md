@@ -5,7 +5,7 @@ lesson_num: "0011"
 act_badge: "Act III: Design Review Workflows"
 card:
   num: "Lesson 0011"
-  mutants: "88 / 88 Caught"
+  mutants: "88 / 88 Mutants Caught"
   title: "Review Status Triage & Severity Filtering"
   summary: "Triage engineering review pins through an `Open` → `Resolved` → `Verified` state machine, filter by severity using static enum slices, and verify all transition and boolean filter branches."
   egui_skill: "`ui.selectable_value` & interactive callout triage"

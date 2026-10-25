@@ -5,7 +5,7 @@ lesson_num: "0012"
 act_badge: "Act III: Design Review Workflows"
 card:
   num: "Lesson 0012"
-  mutants: "125 / 125 Caught"
+  mutants: "125 / 125 Mutants Caught"
   title: "DRC Violation Halos & Minimap Clamping"
   summary: "Compute Euclidean edge-to-edge copper pad clearance, highlight Design Rule Check (DRC) violations on the canvas, and clamp bird's-eye minimap camera bounds."
   egui_skill: "`painter.circle_stroke` DRC halos & camera jump"

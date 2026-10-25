@@ -3,6 +3,14 @@ title: "Lesson 0004: Modelling Layers, Traces & Deterministic Z-Order"
 subtitle: Structuring PCB geometry with `enum PcbLayer`, `Vec<TraceSegment>`, exhaustive `match`, and shared loop borrowing
 lesson_num: "0004"
 act_badge: "Act I: The 2D CAD Canvas & Viewport"
+card:
+  num: "Lesson 0004"
+  mutants: "20 / 20 Mutants Caught"
+  title: "Modelling PCB Layers, Traces & Deterministic Z-Ordering"
+  summary: "Model multi-layer board primitives with a strongly-typed `PcbLayer` enum and sort visible traces in deterministic back-to-front Z-order."
+  egui_skill: "Multi-layer painter batching & Z-order rendering"
+  rust_concept: "`enum`, exhaustive `match`, `Vec<T>` & slices"
+  app_dir: "apps/0004-modeling-layers-traces-and-footprints"
 ---
 
 In [Lesson 0003](./0003-world-to-screen-transforms-pan-and-zoom.html), we transformed physical millimetre coordinates into screen space, but our traces were still individual hardcoded lines inside `paint_board`. Real KiCad files, on the other hand, contain thousands of segments across multiple layers—and they can appear in whatever order the router happened to save them.

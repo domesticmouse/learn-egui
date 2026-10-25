@@ -3,6 +3,14 @@ title: "Lesson 0007: Split Viewports, `egui::Scene` & Borrow-Checker State Split
 subtitle: Cross-probing from a Schematic Symbol Bar into the 2D PCB camera using `TopBottomPanel`, `egui::Scene`, and disjoint struct borrowing (`&BoardModel` + `&mut ViewState`)
 lesson_num: "0007"
 act_badge: "Act II: Schematic Views, Layout & egui_kittest"
+card:
+  num: "Lesson 0007"
+  mutants: "40 / 40 Mutants Caught"
+  title: "Split Viewports, `egui::Scene` & Schematic-to-PCB Cross-Probing"
+  summary: "Add a top schematic symbol bar with `TopBottomPanel`, wrap the 2D board in `egui::Scene`, and cross-probe schematic components to centre the PCB camera rectangle."
+  egui_skill: "`TopBottomPanel`, `egui::Scene`, camera focusing"
+  rust_concept: "Disjoint struct borrows (`&BoardModel` vs. `&mut ViewState`)"
+  app_dir: "apps/0007-split-viewports-and-egui-scene"
 ---
 
 When you are debugging a real hardware board, you almost always have **two synchronised views** open side by side: a **Schematic View** showing logical symbols and a **PCB Layout View** showing physical footprints. Click `U1` in the schematic, and you want the PCB viewport to immediately highlight `U1`'s electrical net _and_ pan the PCB camera straight to `U1`'s physical coordinates.

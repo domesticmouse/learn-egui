@@ -5,7 +5,7 @@ lesson_num: "0010"
 act_badge: "Act III: Design Review Workflows"
 card:
   num: "Lesson 0010"
-  mutants: "72 / 72 Caught"
+  mutants: "72 / 72 Mutants Caught"
   title: "Review Pins, `HashMap` Entry API & Callouts"
   summary: "Drop engineering review pins anchored to `(x, y)` board coordinates (mm), guard against duplicate IDs with `HashMap::entry`, and inspect notes in floating `egui::Window` callouts."
   egui_skill: "`egui::Window`, `egui::Id::new` & `Key::P` tool"

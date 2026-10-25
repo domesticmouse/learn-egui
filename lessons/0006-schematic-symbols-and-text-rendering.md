@@ -3,6 +3,14 @@ title: "Lesson 0006: Schematic Symbols, Text Rendering & Headless UI Testing (`e
 subtitle: Drawing IC reference designators (`U1`, `R12`, `J1`) with `Painter::text`, mastering `String` vs. `&str`, and un-skipping `eframe::App::update` with `egui_kittest::Harness`
 lesson_num: "0006"
 act_badge: "Act II: Schematic Views, Layout & egui_kittest"
+card:
+  num: "Lesson 0006"
+  mutants: "35 / 35 Mutants Caught"
+  title: "Schematic Symbols, Text Rendering & Headless UI Verification (`egui_kittest`)"
+  summary: "Render silkscreen IC reference designators (`U1`, `R12`, `J1`) and net names using `Painter::text`, `FontId`, and `Align2`, and boot your app headlessly with `egui_kittest::Harness`."
+  egui_skill: "`Painter::text`, `FontId`, `Align2`, `egui_kittest`"
+  rust_concept: "Owned `String` vs. borrowed `&str` & `format!(...)`"
+  app_dir: "apps/0006-schematic-symbols-and-text-rendering"
 ---
 
 Welcome to **Act II**! In [Lesson 0005](./0005-hit-testing-and-net-cross-probing.html), we built interactive pad hit-testing and net highlighting. But, staring at anonymous red and blue rectangles gets old fast—when you are reviewing a real board or schematic, you navigate by **reference designators** (`U1`, `R12`, `J1`), component values (`LDO_3V3`, `10k`), and human-readable net names (`VCC_3V3`, `SPI_CLK`).

@@ -3,6 +3,14 @@ title: "Lesson 0003: World-to-Screen Transforms, Pan & Cursor Zoom"
 subtitle: Mapping physical PCB millimetres (`mm`) to screen pixels with `TSTransform`, `Sense::drag()`, and `ui.input`
 lesson_num: "0003"
 act_badge: "Act I: The 2D CAD Canvas & Viewport"
+card:
+  num: "Lesson 0003"
+  mutants: "14 / 14 Mutants Caught"
+  title: "World-to-Screen Transforms, Drag Panning & Cursor-Centred Zoom"
+  summary: "Map physical board millimetres to screen points using `TSTransform`, pan with `Sense::drag()`, and zoom smoothly around the cursor position."
+  egui_skill: "`TSTransform`, `Sense::drag()`, `ctx.input`"
+  rust_concept: "Encapsulating maths on `BoardViewport` & `f32::clamp`"
+  app_dir: "apps/0003-world-to-screen-transforms-pan-and-zoom"
 ---
 
 Hardcoding PCB pads in screen pixels works fine for a static demo, right up until you try to inspect a real board.

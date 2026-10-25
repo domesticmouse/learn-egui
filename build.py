@@ -1540,10 +1540,15 @@ def render_full_page(
 ) -> str:
     """Wrap compiled article content in the shared dark-mode Tufte HTML5 document shell."""
     page_title = html.escape(
-        meta.get("page_title", meta.get("title", "Learn Rust & egui"))
+        str(meta.get("page_title", meta.get("title", "Learn Rust & egui"))).replace(
+            "`", ""
+        )
     )
     badge_text = str(
-        meta.get("badge", "Mission: Schematic & PCB Design Review System")
+        meta.get(
+            "badge",
+            meta.get("act_badge", "Mission: Schematic & PCB Design Review System"),
+        )
     )
     h1_html = render_inline_md(meta.get("title", ""))
     subtitle_html = render_inline_md(meta.get("subtitle", meta.get("lead", "")))
@@ -1642,6 +1647,12 @@ def build_site(out_dir: Path, *, check: bool = False) -> int:
     for md_path in sorted(lessons_dir.glob("[0-9][0-9][0-9][0-9]-*.md")):
         meta, body = parse_frontmatter(md_path)
         nav_id = str(meta.get("nav_id", md_path.stem.split("-", 1)[0]))
+        card = meta.get("card") or {}
+        for req_card_key in ("mutants", "egui_skill", "rust_concept"):
+            if not str(card.get(req_card_key, "")).strip():
+                errors.append(
+                    f"lessons/{md_path.name}: Missing required `card.{req_card_key}` in YAML frontmatter."
+                )
         lesson_records.append(
             {
                 "md_path": md_path,

@@ -3,6 +3,14 @@ title: "Lesson 0009: Keyboard Shortcuts, Data-Carrying Enums & Point-to-Point CA
 subtitle: Binding CAD hotkeys (`F`, `M`, `Esc`) via `ctx.input_mut` + `consume_key`, modelling tool state machines with data-carrying Rust enums, and simulating key presses in `egui_kittest`
 lesson_num: "0009"
 act_badge: "Act II Finale: Schematic Views, Layout & egui_kittest"
+card:
+  num: "Lesson 0009"
+  mutants: "59 / 59 Mutants Caught"
+  title: "Keyboard Shortcuts (`F`, `M`, `Esc`) & Point-to-Point CAD Ruler"
+  summary: "Consume single-key CAD shortcuts with `ctx.input_mut` and `consume_key`, model tool states with data-carrying enums, and render a live Δx / Δy distance ruler."
+  egui_skill: "`InputState::consume_key`, `Key`, CAD ruler overlay"
+  rust_concept: "Data-carrying enums (`enum ActiveTool`) & pattern matching"
+  app_dir: "apps/0009-keyboard-shortcuts-and-point-to-point-ruler"
 ---
 
 Watch anyone who spends all day in KiCad or Altium: their left hand never leaves the keyboard. Reaching for a toolbar button every time you want to measure a pad pitch or reset the camera is slow; tapping `M`, `F`, or `Esc` is instant.

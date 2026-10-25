@@ -3,6 +3,14 @@ title: "Lesson 0002: Custom 2D Canvas & `egui::Painter`"
 subtitle: Turning the empty `CentralPanel` into a multi-layer PCB viewport with `Pos2`, `Vec2`, `Rect`, and `Copy` semantics
 lesson_num: "0002"
 act_badge: "Act I: The 2D CAD Canvas & Viewport"
+card:
+  num: "Lesson 0002"
+  mutants: "23 / 23 Mutants Caught"
+  title: "Custom 2D Canvas & Drawing Primitives with `Painter`"
+  summary: "Reserve an interactive 2D CAD viewport with `ui.allocate_painter` and render PCB substrate outlines, SMD pads, copper traces, and drill vias."
+  egui_skill: "`ui.allocate_painter`, `Rect`, `Pos2`, `Stroke`"
+  rust_concept: "Value semantics (`Copy`) & pure geometry helpers"
+  app_dir: "apps/0002-custom-2d-canvas-and-painter"
 ---
 
 Printing `"Rendering Top Copper..."` as a text label in [Lesson 0001](./0001-the-immediate-mode-loop.html) proved our checkboxes were wired up, but it is a pretty underwhelming way to inspect a circuit board.

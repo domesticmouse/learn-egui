@@ -3,6 +3,14 @@ title: "Lesson 0001: The Immediate-Mode Loop & Mutable State (`&mut`)"
 subtitle: Building the PCB Layer Visibility Inspector inside your `eframe::App`
 lesson_num: "0001"
 act_badge: "Mission: Schematic & PCB Design Review System"
+card:
+  num: "Lesson 0001"
+  mutants: "3 / 3 Mutants Caught"
+  title: "The Immediate-Mode Loop & Mutable State (`&mut`)"
+  summary: "Drive a PCB Layer Inspector sidebar with `SidePanel`, `CentralPanel`, `ui.checkbox`, and pure state-transition methods verified by unit and mutation tests."
+  egui_skill: "`App::update`, `SidePanel`, `ui.checkbox`"
+  rust_concept: "Mutable borrows (`&mut self`) & closures (`|ui|`)"
+  app_dir: "apps/0001-the-immediate-mode-loop"
 ---
 
 If you have spent years building UIs in HTML/React, Qt, or Flutter, your muscle memory is wired for [retained-mode](../reference/glossary.html) widgets: you construct a checkbox object once, wire up an `onChange` callback, and spend the rest of the afternoon keeping its internal state synchronised with your data model.{{sidenote:See Emil Ernerfeldt's official [Understanding Immediate Mode](https://docs.rs/egui/latest/egui/#understanding-immediate-mode) section in the `egui` documentation for why eliminating widget callbacks prevents out-of-sync UI bugs.}}
