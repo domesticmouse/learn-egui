@@ -36,9 +36,10 @@
 <h1>Lesson 0002: Custom 2D Canvas &amp; <code>egui::Painter</code></h1>
 <p class="subtitle">Turning the empty <code>CentralPanel</code> into a multi-layer PCB viewport with <code>Pos2</code>, <code>Vec2</code>, <code>Rect</code>, and <code>Copy</code> semantics</p>
 
-<p>In <a href="./0001-the-immediate-mode-loop.html">Lesson 0001</a>, our <code>CentralPanel</code> only printed placeholder text labels (<code>&quot;Rendering Top Copper...&quot;</code>) when a layer checkbox was toggled. Now we begin <strong>Act I: The 2D CAD Canvas &amp; Viewport</strong> by replacing those text placeholders with an actual 2D vector canvas that draws an FR4 PCB substrate, Top and Bottom Copper traces, rectangular SMD pads, plated through-hole vias, Silkscreen courtyards, and unrouted Ratsnest airwires.</p>
+<p>Printing <code>&quot;Rendering Top Copper...&quot;</code> as a text label in <a href="./0001-the-immediate-mode-loop.html">Lesson 0001</a> proved our checkboxes were wired up, but it is a pretty underwhelming way to inspect a circuit board.</p>
+<p>So, welcome to <strong>Act I: The 2D CAD Canvas &amp; Viewport</strong>. We are going to replace those text placeholders with a real 2D vector canvas that draws an FR4 PCB substrate, Top and Bottom Copper traces, rectangular SMD pads, plated through-hole vias, Silkscreen courtyards, and unrouted Ratsnest airwires.</p>
 <h2>1. Reserving Canvas Space with <code>ui.allocate_painter</code></h2>
-<p>Unlike standard widgets (<code>ui.checkbox</code>, <code>ui.button</code>) that compute their own size, a 2D CAD viewport needs you to explicitly tell <code>egui</code> how much rectangle space to claim and what mouse interactions to listen for.<span class="sidenote-number"></span><span class="sidenote">See <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.allocate_painter"><code>Ui::allocate_painter</code></a> in the official <code>egui</code> docs: it returns a two-element Rust tuple <code>(Response, Painter)</code> clipped to the allocated rectangle.</span></p>
+<p>Unlike standard widgets (<code>ui.checkbox</code>, <code>ui.button</code>) that know their own size, a 2D CAD viewport needs you to explicitly tell <code>egui</code> how much rectangular space to claim and what mouse interactions to listen for.<span class="sidenote-number"></span><span class="sidenote">See <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.allocate_painter"><code>Ui::allocate_painter</code></a> in the official <code>egui</code> docs: it returns a two-element Rust tuple <code>(Response, Painter)</code> clipped to the allocated rectangle.</span></p>
 <pre><code class="language-rust">egui::CentralPanel::default().show(ctx, |ui| {
     let (response, painter) =
         ui.allocate_painter(ui.available_size(), egui::Sense::hover());
@@ -62,15 +63,16 @@ flowchart LR
 </figure>
 <p><em>Figure 2.1: <code>ui.allocate_painter</code> reserves a screen-space <code>Rect</code> and returns a clipped <code>Painter</code> for drawing PCB layers.</em></p>
 <h2>2. Screen-Space Primitives &amp; Rust's <code>Copy</code> Trait</h2>
-<p>In <code>egui</code>, screen coordinates are measured in logical points from the top-left corner of the window (<code>(0.0, 0.0)</code>), where <code>+x</code> points right and <code>+y</code> points down. Five lightweight types power all 2D CAD drawing:<span class="sidenote-number"></span><span class="sidenote">In Rust (<a href="https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy">Rust Book §4.1</a>), small stack-only types like <code>Pos2</code> (8 bytes), <code>Vec2</code> (8 bytes), <code>Rect</code> (16 bytes), <code>Color32</code> (4 bytes), and <code>Stroke</code> (8 bytes) implement the <code>Copy</code> trait. Passing <code>f_cu_stroke</code> into three <code>painter.line_segment(...)</code> calls copies 8 bytes on the stack each time—ownership never moves!</span></p>
+<p>In <code>egui</code>, screen coordinates are measured in logical points from the top-left corner of the window (<code>(0.0, 0.0)</code>), where <code>+x</code> points right and <code>+y</code> points down. Five lightweight types power all of our 2D CAD drawing:<span class="sidenote-number"></span><span class="sidenote">In Rust (<a href="https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy">Rust Book §4.1</a>), small stack-only types like <code>Pos2</code> (8 bytes), <code>Vec2</code> (8 bytes), <code>Rect</code> (16 bytes), <code>Color32</code> (4 bytes), and <code>Stroke</code> (8 bytes) implement the <code>Copy</code> trait. Passing <code>f_cu_stroke</code> into three <code>painter.line_segment(...)</code> calls copies 8 bytes on the stack each time—ownership never moves!</span></p>
 <ol>
-<li><strong>Position (<code>Pos2</code> / <code>pos2(x, y)</code>):</strong> A specific 2D coordinate point (e.g. a via center or pad center). Adding a displacement vector to a point yields a new point: <code>origin + vec2(80.0, 90.0)</code>.</li>
+<li><strong>Position (<code>Pos2</code> / <code>pos2(x, y)</code>):</strong> A specific 2D coordinate point (e.g. a via centre or pad centre). Adding a displacement vector to a point yields a new point: <code>origin + vec2(80.0, 90.0)</code>.</li>
 <li><strong>Displacement / Size (<code>Vec2</code> / <code>vec2(w, h)</code>):</strong> A 2D offset or width/height pair (e.g. <code>vec2(20.0, 12.0)</code> for an SMD pad's dimensions).</li>
 <li><strong>Bounding Box (<code>Rect</code>):</strong> Defined by its top-left <code>min: Pos2</code> and bottom-right <code>max: Pos2</code> corners.</li>
-<li><strong>Color &amp; Outline (<code>Color32</code> &amp; <code>Stroke</code>):</strong> <code>Color32::from_rgb(r, g, b)</code> specifies a color, and <code>Stroke::new(width_f32, color)</code> bundles line thickness and color for traces and component outlines.</li>
+<li><strong>Colour &amp; Outline (<code>Color32</code> &amp; <code>Stroke</code>):</strong> <code>Color32::from_rgb(r, g, b)</code> specifies an RGB colour, and <code>Stroke::new(width_f32, color)</code> bundles line thickness and colour for traces and component outlines.</li>
 </ol>
 <h2>3. Extracting Pure Geometry Functions for <code>cargo mutants</code></h2>
-<p>If you bury all coordinate math directly inside <code>paint_static_board</code>, you cannot unit-test your pad or board bounds without spinning up a full UI frame. Instead, extract pure geometry helpers that take <code>Copy</code> inputs (<code>Rect</code>, <code>Pos2</code>, <code>Vec2</code>) and return a <code>Rect</code>:<span class="sidenote-number"></span><span class="sidenote">Notice why we write <code>Stroke::new(5.0_f32, ...)</code> with an explicit <code>_f32</code> suffix: <code>Stroke::new</code> accepts generic <code>impl Into&lt;f32&gt;</code>, and Rust 1.97+ warns if an untyped float literal falls back to <code>f32</code> through a generic trait bound.</span></p>
+<p>Now, if you bury all of your coordinate maths directly inside <code>paint_static_board</code>, you cannot unit-test your pad or board bounds without spinning up a full UI frame.</p>
+<p>Instead, let's extract pure geometry helpers that take <code>Copy</code> inputs (<code>Rect</code>, <code>Pos2</code>, <code>Vec2</code>) and return a <code>Rect</code>:<span class="sidenote-number"></span><span class="sidenote">Turns out, writing <code>Stroke::new(5.0_f32, ...)</code> with an explicit <code>_f32</code> suffix saves you a compiler warning: <code>Stroke::new</code> accepts generic <code>impl Into&lt;f32&gt;</code>, and Rust 1.97+ warns if an untyped float literal falls back to <code>f32</code> through a generic trait bound.</span></p>
 <pre><code class="language-rust">/// Computes the inset FR4 board outline `Rect` inside the allocated `canvas_rect`
 /// by shrinking all four edges inward by `margin` screen points.
 pub fn centered_board_rect(canvas_rect: Rect, margin: f32) -&gt; Rect {
@@ -80,7 +82,7 @@ pub fn centered_board_rect(canvas_rect: Rect, margin: f32) -&gt; Rect {
     )
 }
 
-/// Computes the bounding `Rect` for a rectangular SMD pad centered at `center`
+/// Computes the bounding `Rect` for a rectangular SMD pad centred at `center`
 /// with width `size.x` and height `size.y`.
 pub fn smd_pad_rect(center: Pos2, size: Vec2) -&gt; Rect {
     let half_w = size.x / 2.0;
@@ -172,7 +174,7 @@ egui::CentralPanel::default().show(ctx, |ui| {
     <span class="panel-title">Interactive Lab 3: Catching Arithmetic Sign &amp; Factor Mutants</span>
     <span class="panel-badge">cargo test + cargo mutants</span>
   </div>
-  <p>When <code>cargo mutants</code> inspects <code>centered_board_rect</code> and <code>smd_pad_rect</code>, it systematically mutates every <code>+</code> to <code>-</code> and <code>*</code>, every <code>-</code> to <code>+</code> and <code>/</code>, and every <code>/</code> to <code>*</code> and <code>%</code> (25 total mutants across the file!). Notice why our test uses non-zero, asymmetric coordinates like <code>pos2(100.0, 60.0)</code> and <code>vec2(16.0, 10.0)</code>—if you tested at <code>pos2(0.0, 0.0)</code>, then <code>0.0 - half_w</code> mutated to <code>0.0 / half_w</code> would both evaluate to <code>0.0</code> when <code>half_w == 0.0</code>!</p>
+  <p>When <code>cargo mutants</code> inspects <code>centered_board_rect</code> and <code>smd_pad_rect</code>, it systematically mutates every <code>+</code> to <code>-</code> and <code>*</code>, every <code>-</code> to <code>+</code> and <code>/</code>, and every <code>/</code> to <code>*</code> and <code>%</code> (25 total mutants across the file!). The reason our test uses non-zero, asymmetric coordinates like <code>pos2(100.0, 60.0)</code> and <code>vec2(16.0, 10.0)</code> is interesting: if you tested at <code>pos2(0.0, 0.0)</code>, then <code>0.0 - half_w</code> mutated to <code>0.0 / half_w</code> would both evaluate to <code>0.0</code> when <code>half_w == 0.0</code>!</p>
 <pre><code class="language-rust">#[test]
 fn centered_board_rect_insets_all_four_edges_by_margin() {
     let canvas = Rect::from_min_max(pos2(10.0, 20.0), pos2(310.0, 220.0));
@@ -234,7 +236,7 @@ fn smd_pad_rect_computes_symmetric_bounds_around_center() {
 Compare how <code>allocate_painter</code> reserves a <code>Rect</code> and clips all shapes drawn within that region.
 </div>
 <div class="teacher-prompt-box">
-  <strong>Next Step:</strong> Right now our board coordinates are hardcoded in screen pixels relative to <code>board_rect.min</code>. Ready to express the board in real physical millimeters (<code>mm</code>) and add smooth pan and cursor-anchored zoom in <a href="./0003-world-to-screen-transforms-pan-and-zoom.html"><strong>Lesson 0003: World-to-Screen Transforms, Pan, and Zoom (<code>TSTransform</code>)</strong></a>?
+  <strong>Next Step:</strong> Right now our board coordinates are hardcoded in screen pixels relative to <code>board_rect.min</code>. Ready to express the board in real physical millimetres (<code>mm</code>) and add smooth pan and cursor-anchored zoom in <a href="./0003-world-to-screen-transforms-pan-and-zoom.html"><strong>Lesson 0003: World-to-Screen Transforms, Pan, and Zoom (<code>TSTransform</code>)</strong></a>?
 </div>
 </div>
     </article>

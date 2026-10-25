@@ -5,7 +5,9 @@ lesson_num: "0005"
 act_badge: "Act I Finale: The 2D CAD Canvas & Viewport"
 ---
 
-In [Lesson 0004](./0004-modeling-layers-traces-and-footprints.html), we rendered our PCB traces in deterministic back-to-front Z-order. Now we complete **Act I** by making the 2D board interactive: when an engineer hovers over or clicks an SMD pad on the canvas, our application converts the mouse pointer from screen pixels back into physical millimeters (`screen_to_world`), checks which visible pad contains that coordinate, highlights every trace and pad belonging to that electrical net across all layers, and displays the net's details in the left `SidePanel`.
+Drawing a PCB in physical millimetres is a great start. Being able to hover over an SMD pad, see which electrical net it belongs to, and watch every connected trace light up across the board is when it starts feeling like a real CAD tool.
+
+In [Lesson 0004](./0004-modeling-layers-traces-and-footprints.html), we rendered our PCB traces in deterministic back-to-front Z-order. Now, we complete **Act I** by making the 2D board interactive: when you hover over or click an SMD pad on the canvas, our app converts the mouse pointer from screen pixels back into physical millimetres (`screen_to_world`), checks which visible pad contains that coordinate, highlights every trace and pad on that net across all layers, and updates the left `SidePanel`.
 
 ```mermaid
 flowchart LR
@@ -15,11 +17,11 @@ flowchart LR
     Sel --> Active["active_net()<br/>self.selected_net.or(self.hovered_net)"]
     Active --> Highlight["Highlights NET_1 pads & traces on canvas<br/>+ Updates SidePanel Net Inspector"]
 ```
-_Figure 5.1: Pointer screen coordinates are inverted into physical millimeters, hit-tested against visible pads in Z-order, and stored as `Option<NetId>`_
+_Figure 5.1: Pointer screen coordinates are inverted into physical millimetres, hit-tested against visible pads in Z-order, and stored as `Option<NetId>`_
 
-## 1. Modeling Optional Selection with `Option<NetId>`
+## 1. Modelling Optional Selection with `Option<NetId>`
 
-When the mouse cursor sits over empty FR4 fiberglass, _no electrical net is hovered_. Languages with `null` pointers often represent this with `null` or magic numbers like `-1`. Rust eliminates null-pointer bugs at compile time using the standard library enum [`Option<T>`](https://doc.rust-lang.org/std/option/enum.Option.html):{{sidenote:Notice how `pub struct NetId(pub u32);` is a **tuple struct** ([Rust Book §5.1](https://doc.rust-lang.org/book/ch05-01-defining-structs.html#using-tuple-structs-without-named-fields-to-create-different-types))—a zero-cost wrapper around `u32` so you can never accidentally pass a pin count or layer rank where a `NetId` is expected!}}
+Most of the time, your mouse cursor is sitting over empty FR4 fibreglass—meaning _no electrical net is hovered_. Languages with `null` pointers usually reach for `null` or a magic number like `-1`. Rust eliminates null-pointer bugs at compile time using the standard library enum [`Option<T>`](https://doc.rust-lang.org/std/option/enum.Option.html):{{sidenote:Notice how `pub struct NetId(pub u32);` is a **tuple struct** ([Rust Book §5.1](https://doc.rust-lang.org/book/ch05-01-defining-structs.html#using-tuple-structs-without-named-fields-to-create-different-types))—a zero-cost wrapper around `u32` so you can never accidentally pass a pin count or layer rank where a `NetId` is expected!}}
 
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,7 +34,7 @@ pub struct PcbReviewerApp {
 }
 ```
 
-What if the user has clicked to lock `selected_net = Some(NetId(1))`, while also moving their mouse over `hovered_net = Some(NetId(2))`? Using [`Option::or`](https://doc.rust-lang.org/std/option/enum.Option.html#method.or) expresses the priority rule in a single expression:
+But, what if you have clicked a pad to lock `selected_net = Some(NetId(1))`, and then move your mouse across `hovered_net = Some(NetId(2))`? Turns out, [`Option::or`](https://doc.rust-lang.org/std/option/enum.Option.html#method.or) expresses that exact priority rule in a single one-liner:
 
 ```rust
 /// Returns `selected_net` if a net is locked by click, otherwise falls back to `hovered_net`.
@@ -43,7 +45,7 @@ pub fn active_net(&self) -> Option<NetId> {
 
 ## 2. World-Space Hit-Testing Respecting Visibility & Z-Order
 
-Each SMD pad on the board knows its physical center (`center_mm`), dimensions (`size_mm`), layer (`PcbLayer`), and electrical net (`NetId`). Look at how `hit_test_net_at_mm` combines three rules:{{sidenote:Why check `self.is_layer_visible(p.layer)` during hit-testing? If an engineer hides `TopCopper` to inspect `BottomCopper` routing underneath an IC, clicking where a hidden `TopCopper` pad used to be must _not_ select the hidden layer!}}
+Each SMD pad on the board knows its physical centre (`center_mm`), dimensions (`size_mm`), layer (`PcbLayer`), and electrical net (`NetId`). Look at how `hit_test_net_at_mm` combines three rules:{{sidenote:The reason we check `self.is_layer_visible(p.layer)` during hit-testing is easy to overlook until it bites you: if you hide `TopCopper` to inspect `BottomCopper` routing underneath an IC, clicking where a hidden `TopCopper` pad used to be must _not_ select the hidden layer!}}
 
 1. Only pads on **currently visible layers** (`self.is_layer_visible(p.layer)`) can be hit.
 2. The world coordinate must fall inside `p.bounds_mm().contains(world_mm)`.
@@ -76,7 +78,7 @@ impl PcbReviewerApp {
 
 ## 3. Unpacking `Option<NetId>` with `if let Some(...)`
 
-Inside the left `SidePanel`, we use [`if let Some(net) = self.active_net()`](https://doc.rust-lang.org/book/ch06-03-if-let.html) to display the active net's name and a **"Clear Selection"** button only when a net is actually hovered or selected:
+So, inside the left `SidePanel`, we use [`if let Some(net) = self.active_net()`](https://doc.rust-lang.org/book/ch06-03-if-let.html) to display the active net's name and a **"Clear Selection"** button only when a net is actually hovered or selected:
 
 ```rust
 ui.heading("Net Inspector");
@@ -93,7 +95,7 @@ if let Some(net) = self.active_net() {
 {{widget:hittest-sim}}
 
 :::exercise title="Interactive Lab 2: Complete the Hit-Tester & `Option` Combinator" badge="Skill Practice • Tight Feedback Loop"
-Fill in the three blanks below so that (1) `active_net` prioritizes `self.selected_net` over `self.hovered_net` using `.or(...)`, (2) the canvas allocates pointer sensing for both clicks and drags, and (3) clicking the canvas locks `self.selected_net`:
+Fill in the three blanks below so that (1) `active_net` prioritises `self.selected_net` over `self.hovered_net` using `.or(...)`, (2) the canvas allocates pointer sensing for both clicks and drags, and (3) clicking the canvas locks `self.selected_net`:
 
 ```rust
 pub fn active_net(&self) -> Option<NetId> {
@@ -114,12 +116,12 @@ if let Some(hover_pos) = response.hover_pos() {
 ```
 :::prompts
 hint: **Hints:** (1) `or(self.hovered_net)`. (2) `click_and_drag()`. (3) `clicked()`.
-success: **Bravo!** Your Net Inspector prioritizes locked selections with `.or(self.hovered_net)`, senses both clicks and drags on the 2D canvas, and locks `self.selected_net` on click.
+success: **Bravo!** Your Net Inspector prioritises locked selections with `.or(self.hovered_net)`, senses both clicks and drags on the 2D canvas, and locks `self.selected_net` on click.
 :::
 :::
 
 :::verify title="Interactive Lab 3: Catching `&&` vs. `||` Hit-Test Mutants" badge="cargo test + cargo mutants" tier="Tier 2: Hit-Test & Net Logic" caught="25 Caught (10 Unviable)" missed="0 Missed"
-In `hit_test_net_at_mm`, look at the filter condition `self.is_layer_visible(p.layer) && p.contains_world_point(world_mm)`. When `cargo mutants` flips `&&` to `||`, any test that only checks hitting a visible pad would still pass! By also testing (a) a point in empty space while layers are visible and (b) a point inside a pad whose layer is hidden, our unit test suite catches all 25 viable mutants across the entire Act I application!
+In `hit_test_net_at_mm`, look at the filter condition `self.is_layer_visible(p.layer) && p.contains_world_point(world_mm)`. When `cargo mutants` flips `&&` to `||`, any test that only checks hitting a visible pad will still pass! By also testing (a) a point in empty space while layers are visible and (b) a point inside a pad whose layer is hidden, our unit test suite catches all 25 viable mutants across the entire Act I application.
 
 ```rust
 #[test]
@@ -160,11 +162,11 @@ why: `Option::or` returns the first `Option` (`self.selected_net`) if it is `Som
 hint: Check which `Option` appears on the left-hand side of `.or(...)`.
 
 Q: Why must we convert `hover_pos` via `self.viewport.screen_to_world(hover_pos)` before calling `hit_test_net_at_mm`?
-- [ ] Pointer events arrive scaled in meters first
+- [ ] Pointer events arrive scaled in metres first
 - [ ] Screen points vanish after panel closure run
 - [ ] Painter resets pointer coords on every frame
-- [x] Pad bounds live in physical millimeter space
-why: `response.hover_pos()` is reported in window screen pixels, whereas `SmdPad::bounds_mm()` is stored in physical board millimeters (`world_mm`).
+- [x] Pad bounds live in physical millimetre space
+why: `response.hover_pos()` is reported in window screen pixels, whereas `SmdPad::bounds_mm()` is stored in physical board millimetres (`world_mm`).
 hint: Compare the coordinate units of `response.hover_pos()` with `SmdPad.center_mm`.
 :::
 
@@ -175,5 +177,5 @@ hint: Compare the coordinate units of `response.hover_pos()` with `SmdPad.center
 :::
 
 :::teacher-prompt
-**Act I Complete!** You have built a pan/zoomable, multi-layer 2D PCB viewport in physical millimeters with Z-ordered rendering, interactive pad hit-testing, and net cross-probing—backed by 11 unit tests and 100% caught mutants (`25 caught, 0 missed`). Continue to [**Lesson 0006: Schematic Symbols, Text Rendering & Headless UI Verification (`egui_kittest`)**](./0006-schematic-symbols-and-text-rendering.html)!
+**Act I Complete!** You have built a pan/zoomable, multi-layer 2D PCB viewport in physical millimetres with Z-ordered rendering, interactive pad hit-testing, and net cross-probing—backed by 11 unit tests and 100% caught mutants (`25 caught, 0 missed`). Continue to [**Lesson 0006: Schematic Symbols, Text Rendering & Headless UI Verification (`egui_kittest`)**](./0006-schematic-symbols-and-text-rendering.html)!
 :::

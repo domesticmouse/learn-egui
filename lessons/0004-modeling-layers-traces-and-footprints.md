@@ -1,13 +1,13 @@
 ---
-title: "Lesson 0004: Modeling Layers, Traces & Deterministic Z-Order"
+title: "Lesson 0004: Modelling Layers, Traces & Deterministic Z-Order"
 subtitle: Structuring PCB geometry with `enum PcbLayer`, `Vec<TraceSegment>`, exhaustive `match`, and shared loop borrowing
 lesson_num: "0004"
 act_badge: "Act I: The 2D CAD Canvas & Viewport"
 ---
 
-In [Lesson 0003](./0003-world-to-screen-transforms-pan-and-zoom.html), we transformed physical millimeter coordinates into screen space, but our traces were still individual hardcoded lines inside `paint_board`. Real KiCad boards contain thousands of segments across multiple layers that may appear in any order inside the file.
+In [Lesson 0003](./0003-world-to-screen-transforms-pan-and-zoom.html), we transformed physical millimetre coordinates into screen space, but our traces were still individual hardcoded lines inside `paint_board`. Real KiCad files, on the other hand, contain thousands of segments across multiple layers—and they can appear in whatever order the router happened to save them.
 
-Because `egui::Painter` uses the classic **painter's algorithm**—every shape you emit is drawn directly on top of earlier shapes—drawing traces in arbitrary file order would cause a `BottomCopper` trace to paint right over a `TopCopper` pad or `Silkscreen` reference designator!
+Now, because `egui::Painter` uses the classic **painter's algorithm** (every shape you emit is drawn directly on top of earlier shapes), drawing traces in raw file order means a `BottomCopper` ground trace can paint right over the top of a `TopCopper` pad or `Silkscreen` label. Not ideal when you are trying to debug a board.
 
 ```mermaid
 flowchart LR
@@ -18,9 +18,9 @@ flowchart LR
 ```
 _Figure 4.1: Filtering visible segments and sorting by `PcbLayer::z_rank()` guarantees deterministic back-to-front CAD rendering every frame._
 
-## 1. Exhaustive Layer Modeling with `enum PcbLayer`
+## 1. Exhaustive Layer Modelling with `enum PcbLayer`
 
-Instead of scattering four separate boolean `if` blocks across our renderer, we represent a PCB layer as a Rust [`enum`](https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html) and attach pure methods using exhaustive [`match`](https://doc.rust-lang.org/book/ch06-02-match.html) expressions:{{sidenote:Because Rust's `match` is exhaustive at compile time, if you add an inner layer like `PcbLayer::In1Cu` later, `rustc` immediately flags every `match` block (`z_rank`, `color`, `is_layer_visible`) that needs updating.}}
+So, instead of scattering four separate boolean `if` blocks across our renderer, let's model a PCB layer as a proper Rust [`enum`](https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html) and attach pure methods using exhaustive [`match`](https://doc.rust-lang.org/book/ch06-02-match.html) expressions:{{sidenote:Because Rust's `match` is exhaustive at compile time, if you add an inner copper layer like `PcbLayer::In1Cu` later, `rustc` immediately flags every `match` block (`z_rank`, `color`, `is_layer_visible`) that needs updating.}}
 
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,7 +55,7 @@ impl PcbLayer {
 
 ## 2. Dynamic Collections (`Vec<T>`) & Shared Loop Borrowing
 
-We store our board's segments in a growable heap vector [`Vec<TraceSegment>`](https://doc.rust-lang.org/book/ch08-01-vectors.html) on `PcbReviewerApp`.{{sidenote:Why write `for seg in &self.traces` (or `self.traces.iter()`) instead of `for seg in self.traces`? Iterating over a `Vec` by value _moves and consumes_ the vector on Frame #1! Borrowing with `&` lets you read all segments 60 times a second while `self.traces` retains ownership.}}
+Next, we store our board's segments in a growable heap vector [`Vec<TraceSegment>`](https://doc.rust-lang.org/book/ch08-01-vectors.html) on `PcbReviewerApp`.{{sidenote:Turns out, writing `for seg in self.traces` without an `&` is a rite-of-passage error in Rust: iterating over a `Vec` by value _moves and consumes_ the vector on Frame #1! Borrowing with `&self.traces` (or `self.traces.iter()`) lets you read all segments 60 times a second while `self.traces` keeps ownership.}}
 
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -122,7 +122,7 @@ success: **All correct!** Your exhaustive `match` checks `PcbLayer::Silkscreen`,
 :::
 
 :::verify title="Interactive Lab 3: Eliminating Match-Arm Mutants" badge="cargo test + cargo mutants" tier="Tier 2: Domain & Z-Order Tests" caught="20 Caught (7 Unviable)" missed="0 Missed"
-One of `cargo-mutants`'s superpowers is **match-arm mutation**: it tries replacing individual `match` arms or return values inside `z_rank()`, `color()`, and `is_layer_visible()`. By asserting each variant's exact rank, color, and visibility toggle in isolation, our 9 unit tests catch all 20 viable mutants!
+One of `cargo-mutants`'s best tricks is **match-arm mutation**: it tries deleting or swapping individual `match` arms inside `z_rank()`, `color()`, and `is_layer_visible()`. By asserting each variant's exact rank, colour, and visibility toggle in isolation, our 9 unit tests catch all 20 viable mutants!
 
 ```rust
 #[test]

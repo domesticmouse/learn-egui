@@ -6,9 +6,9 @@ page_type: reference
 
 ## 1. Why Mutation Testing Beats Line Coverage in `egui`
 
-Traditional line coverage only tells you whether a line of Rust code _executed_ during a test—not whether your test would fail if that line were wrong. In an immediate-mode GUI, calling `app.update(...)` executes almost every line of your panel layout even if your test contains zero assertions!
+Traditional line coverage only tells you whether a line of Rust code _executed_ during a test—not whether your test would fail if that line were wrong. Turns out, in an immediate-mode GUI, calling `app.update(...)` executes almost every line of your panel layout even if your test contains zero assertions!
 
-[`cargo-mutants`](https://mutants.rs/) tests your tests: it copies your project to a scratch directory, systematically injects small faults (**mutants**—such as flipping `true` to `false`, replacing `+` with `-`, or emptying a method body), and runs `cargo test` against each mutant.
+So, we use Martin Pool's [`cargo-mutants`](https://mutants.rs/) to test our tests: it copies your project to a scratch directory, systematically injects small faults (**mutants**—such as flipping `true` to `false`, replacing `+` with `-`, or emptying a method body), and runs `cargo test` against each mutant.
 
 ```mermaid
 flowchart LR
@@ -37,7 +37,7 @@ cargo mutants -f src/main.rs
 
 | Outcome | Meaning | Action to Take |
 | --- | --- | --- |
-| **Caught** | `cargo test` failed when this mutation was injected. Your test suite actively guards this line of code. | Celebrate—this behavior is locked down. |
+| **Caught** | `cargo test` failed when this mutation was injected. Your test suite actively guards this line of code. | Celebrate—this behaviour is locked down. |
 | **Missed** | `cargo test` still passed even with the mutated code! Either no test exercises this path or an assertion is missing. | Add a unit/harness assertion that fails under the mutated value. |
 | **Unviable** | The mutated code failed to type-check or compile (Rust's type system caught it before tests even ran). | Ignored automatically by `cargo mutants`. |
 | **Timeout** | The mutation caused an infinite loop in a test. | Inspect loop termination bounds. |
@@ -63,7 +63,7 @@ exclude_re = [
 
 | Curriculum Stage | Testing Mechanism Introduced | What `cargo test` + `cargo mutants` Verifies |
 | --- | --- | --- |
-| **Lessons 0000–0001 & Act I (0002–0005)** | `#[cfg(test)]`, `#[test]`, `assert_eq!`, pure domain/math methods | Default layer visibility flags, preset state transitions, `Rect` bounds, `TSTransform` pan/zoom round-trips, layer Z-ordering, and net hit-testing. |
+| **Lessons 0000–0001 & Act I (0002–0005)** | `#[cfg(test)]`, `#[test]`, `assert_eq!`, pure domain/maths methods | Default layer visibility flags, preset state transitions, `Rect` bounds, `TSTransform` pan/zoom round-trips, layer Z-ordering, and net hit-testing. |
 | **Act II (0006–0009)** | `egui_kittest::Harness` (headless UI queries & simulated key presses) | Un-skips `eframe::App::update`! Verifies rendered schematic labels, dual-viewport cross-probing, BOM filtering, and `F` / `M` / `Esc` hotkeys. |
 | **Act III (0010–0013)** | Workflow state-machine tests & `Harness::new_ui` widget mounts | Review pin CRUD in `HashMap`, `Open` → `Resolved` → `Verified` triage rules, DRC clearance bounds, and custom `egui::Widget` layer swatches. |
 | **Act IV (0014–0017)** | Workspace layer gates, panic-free lints & `proptest!` | `#![deny(clippy::unwrap_used)]`, sub-second `cargo mutants -p pcb-doc`, corrupt JSON rejection, and `Arc::make_mut` undo/redo snapshot invariants. |

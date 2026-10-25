@@ -34,16 +34,17 @@
     <article class="tufte-article">
 <div class="prose-col">
 <h1>Lesson 0003: World-to-Screen Transforms, Pan &amp; Cursor Zoom</h1>
-<p class="subtitle">Mapping physical PCB millimeters (<code>mm</code>) to screen pixels with <code>TSTransform</code>, <code>Sense::drag()</code>, and <code>ui.input</code></p>
+<p class="subtitle">Mapping physical PCB millimetres (<code>mm</code>) to screen pixels with <code>TSTransform</code>, <code>Sense::drag()</code>, and <code>ui.input</code></p>
 
-<p>In <a href="./0002-custom-2d-canvas-and-painter.html">Lesson 0002</a>, our PCB pads and traces were drawn at fixed pixel offsets from the top-left corner of the window. Real KiCad boards are authored in <strong>physical millimeters (<code>mm</code>)</strong>—a <code>100 mm × 70 mm</code> board with a <code>0.8 mm</code> power trace and a <code>4.0 mm × 2.2 mm</code> SMD pad—and engineers need to pan across the board and zoom smoothly into dense pin pitches around their mouse cursor.</p>
+<p>Hardcoding PCB pads in screen pixels works fine for a static demo, right up until you try to inspect a real board.</p>
+<p>In <a href="./0002-custom-2d-canvas-and-painter.html">Lesson 0002</a>, our pads and traces were drawn at fixed pixel offsets from the top-left corner of the window. Real KiCad boards, however, live in <strong>physical millimetres (<code>mm</code>)</strong>—say, a <code>100 mm × 70 mm</code> board with a <code>0.8 mm</code> power trace and a <code>4.0 mm × 2.2 mm</code> SMD pad—and you need to pan across the board and zoom smoothly into dense pin pitches around your mouse cursor.</p>
 <h2>1. Two Coordinate Spaces: World (<code>mm</code>) vs. Screen (<code>px</code>)</h2>
-<p>Every 2D CAD viewport maintains a mathematical camera that converts between two coordinate systems:<span class="sidenote-number"></span><span class="sidenote"><code>egui</code>'s math crate (<code>emath</code>) provides <a href="https://docs.rs/emath/latest/emath/struct.TSTransform.html"><code>egui::emath::TSTransform</code></a> (&quot;Translation + Scaling Transform&quot;) out of the box, complete with operator overloading (<code>transform * pos</code>) and <code>.inverse()</code>!</span></p>
+<p>So, every 2D CAD viewport maintains a mathematical camera that converts between two coordinate systems:<span class="sidenote-number"></span><span class="sidenote">Turns out, <code>egui</code>'s maths crate (<code>emath</code>) provides <a href="https://docs.rs/emath/latest/emath/struct.TSTransform.html"><code>egui::emath::TSTransform</code></a> (&quot;Translation + Scaling Transform&quot;) out of the box, complete with operator overloading (<code>transform * pos</code>) and <code>.inverse()</code>.</span></p>
 <ul>
-<li><strong>World Space (<code>world_mm: Pos2</code>):</strong> Physical board coordinates in millimeters. A pad at <code>pos2(20.0, 22.0)</code> stays at <code>(20.0 mm, 22.0 mm)</code> forever, regardless of window size or zoom level.</li>
+<li><strong>World Space (<code>world_mm: Pos2</code>):</strong> Physical board coordinates in millimetres. A pad at <code>pos2(20.0, 22.0)</code> stays at <code>(20.0 mm, 22.0 mm)</code> forever, regardless of window size or zoom level.</li>
 <li><strong>Screen Space (<code>screen_pt: Pos2</code>):</strong> Logical window points passed to <code>egui::Painter</code>.</li>
 </ul>
-<p>The forward mapping (<strong>World → Screen</strong>) scales the millimeter coordinate by <code>scaling</code> (pixels per millimeter) and adds the camera offset <code>translation</code>:</p>
+<p>The forward mapping (<strong>World → Screen</strong>) scales the millimetre coordinate by <code>scaling</code> (pixels per millimetre) and adds the camera offset <code>translation</code>:</p>
 <p>$$\text{screen_pt} = \text{scaling} \cdot \text{world_mm} + \text{translation}$$</p>
 <p>And the inverse mapping (<strong>Screen → World</strong>, implemented by <code>self.transform.inverse() * screen_pt</code>) subtracts <code>translation</code> and divides by <code>scaling</code>:</p>
 <p>$$\text{world_mm} = \frac{\text{screen_pt} - \text{translation}}{\text{scaling}}$$</p>
@@ -56,9 +57,9 @@ flowchart LR
     Wheel["Scroll Wheel at Cursor&lt;br/&gt;ui.input(|i| i.smooth_scroll_delta.y)"] --&gt;|"zoom_around(cursor, factor)"| Trans
   </pre>
 </figure>
-<p><em>Figure 3.1: <code>BoardViewport</code> wraps <code>TSTransform</code> to convert bi-directionally between physical millimeters and screen pixels.</em></p>
+<p><em>Figure 3.1: <code>BoardViewport</code> wraps <code>TSTransform</code> to convert bi-directionally between physical millimetres and screen pixels.</em></p>
 <h2>2. Encapsulating the Camera in <code>struct BoardViewport</code></h2>
-<p>Let's wrap <code>TSTransform</code> inside a dedicated <code>BoardViewport</code> struct with four testable methods:<span class="sidenote-number"></span><span class="sidenote">Look closely at <code>zoom_around</code>: if you simply multiplied <code>self.transform.scaling *= zoom_factor</code> without adjusting <code>translation</code>, the board would zoom toward <code>(0, 0)</code> in the top-left corner and fly away from your mouse cursor! Recording <code>world_anchor = self.screen_to_world(screen_anchor)</code> before scaling and solving $\text{translation} = \text{screen_anchor} - \text{world_anchor} \cdot \text{new_scale}$ keeps the exact PCB pad under your cursor pinned in place.</span></p>
+<p>Let's wrap <code>TSTransform</code> inside a dedicated <code>BoardViewport</code> struct with four testable methods:<span class="sidenote-number"></span><span class="sidenote">The reason <code>zoom_around</code> adjusts <code>translation</code> is a classic CAD rite of passage: if you simply multiply <code>self.transform.scaling *= zoom_factor</code> on its own, the board zooms toward <code>(0, 0)</code> in the top-left corner and flies right away from your mouse cursor! Recording <code>world_anchor = self.screen_to_world(screen_anchor)</code> before scaling and solving $\text{translation} = \text{screen_anchor} - \text{world_anchor} \cdot \text{new_scale}$ keeps the exact PCB pad under your cursor pinned in place.</span></p>
 <pre><code class="language-rust">pub const MIN_ZOOM: f32 = 1.5;
 pub const MAX_ZOOM: f32 = 60.0;
 
@@ -97,7 +98,7 @@ impl BoardViewport {
     }
 }</code></pre>
 <h2>3. Wiring Drag-to-Pan &amp; Scroll-to-Zoom in <code>CentralPanel</code></h2>
-<p>In <code>PcbReviewerApp::update</code>, we upgrade our canvas allocation from <code>Sense::hover()</code> to <a href="https://docs.rs/egui/latest/egui/struct.Sense.html#method.drag"><code>Sense::drag()</code></a> and inspect both <code>response.dragged()</code> and <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.input"><code>ui.input(|i| i.smooth_scroll_delta.y)</code></a>:</p>
+<p>Now, inside <code>PcbReviewerApp::update</code>, we upgrade our canvas allocation from <code>Sense::hover()</code> to <a href="https://docs.rs/egui/latest/egui/struct.Sense.html#method.drag"><code>Sense::drag()</code></a> and inspect both <code>response.dragged()</code> and <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.input"><code>ui.input(|i| i.smooth_scroll_delta.y)</code></a>:</p>
 <pre><code class="language-rust">let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::drag());
 
 if response.dragged() {
@@ -298,7 +299,7 @@ Inspect how <code>TSTransform::inverse()</code> and <code>Mul&lt;Pos2&gt;</code>
         }
       ],
       hintMessage: "<strong>Hints:</strong> (1) <code>inverse()</code>. (2) <code>clamp(MIN_ZOOM, MAX_ZOOM)</code>. (3) <code>drag_delta()</code>.",
-      successMessage: "<strong>Spot on!</strong> <code>self.transform.inverse()</code> maps screen points back to physical millimeters, <code>.clamp(MIN_ZOOM, MAX_ZOOM)</code> prevents zoom underflow/overflow, and <code>response.drag_delta()</code> drives panning.",
+      successMessage: "<strong>Spot on!</strong> <code>self.transform.inverse()</code> maps screen points back to physical millimetres, <code>.clamp(MIN_ZOOM, MAX_ZOOM)</code> prevents zoom underflow/overflow, and <code>response.drag_delta()</code> drives panning.",
     });
 
     initQuiz("quiz-container", [
@@ -306,12 +307,12 @@ Inspect how <code>TSTransform::inverse()</code> and <code>Mul&lt;Pos2&gt;</code>
             "question": "How does `TSTransform` map a physical board coordinate `world_mm` into screen space (`self.transform * world_mm`)?",
             "options": [
                   "It divides world points by four translations",
-                  "It rotates world points around window center",
+                  "It rotates world points around window centre",
                   "It scales world points then adds translation",
                   "It clamps world points inside screen margins"
             ],
             "correctIndex": 2,
-            "explanation": "`TSTransform` multiplies the input point by `scaling` (pixels per millimeter) and adds the 2D `translation` offset vector.",
+            "explanation": "`TSTransform` multiplies the input point by `scaling` (pixels per millimetre) and adds the 2D `translation` offset vector.",
             "wrongHint": "Recall what the 'T' and 'S' in `TSTransform` stand for: Translation and Scaling."
       },
       {

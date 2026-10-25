@@ -1,11 +1,13 @@
 ---
 title: "Lesson 0009: Keyboard Shortcuts, Data-Carrying Enums & Point-to-Point CAD Ruler"
-subtitle: Binding CAD hotkeys (`F`, `M`, `Esc`) via `ctx.input_mut` + `consume_key`, modeling tool state machines with data-carrying Rust enums, and simulating key presses in `egui_kittest`
+subtitle: Binding CAD hotkeys (`F`, `M`, `Esc`) via `ctx.input_mut` + `consume_key`, modelling tool state machines with data-carrying Rust enums, and simulating key presses in `egui_kittest`
 lesson_num: "0009"
 act_badge: "Act II Finale: Schematic Views, Layout & egui_kittest"
 ---
 
-In [Lesson 0008](./0008-searchable-netlist-and-bom-inspector.html), we built a searchable, virtualized BOM table. Now we complete **Act II** by adding two essential CAD ergonomics features: single-key shortcuts (`F` to fit/reset the board camera, `M` to activate the point-to-point measurement ruler, and `Esc` to cancel/clear) and a live **Euclidean distance ruler overlay** reporting $\Delta x$, $\Delta y$, and $\text{distance} = \sqrt{\Delta x^2 + \Delta y^2}$ in physical millimeters.
+Watch anyone who spends all day in KiCad or Altium: their left hand never leaves the keyboard. Reaching for a toolbar button every time you want to measure a pad pitch or reset the camera is slow; tapping `M`, `F`, or `Esc` is instant.
+
+In [Lesson 0008](./0008-searchable-netlist-and-bom-inspector.html), we built a searchable, virtualised BOM table. Now, we wrap up **Act II** by adding two essential CAD ergonomics features: single-key shortcuts (`F` to fit/reset the board camera, `M` to activate the point-to-point measurement ruler, and `Esc` to cancel/clear) and a live **Euclidean distance ruler overlay** reporting $\Delta x$, $\Delta y$, and $\text{distance} = \sqrt{\Delta x^2 + \Delta y^2}$ in physical millimetres.
 
 ```mermaid
 stateDiagram-v2
@@ -15,11 +17,13 @@ stateDiagram-v2
     Measure --> Select: Key::Escape (cancel_tool_and_selection)
     Select --> Select: Key::F (fit_board_in_viewport)
 ```
-_Figure 9.1: Tool state machine modeled with a data-carrying Rust `enum ActiveTool` so ruler coordinates only exist while in `Measure` mode._
+_Figure 9.1: Tool state machine modelled with a data-carrying Rust `enum ActiveTool` so ruler coordinates only exist while in `Measure` mode._
 
 ## 1. Just-in-Time Rust: State Machines with Data-Carrying Enums
 
-Unlike C or Java enums that are just integer constants, each variant of a Rust `enum` can carry its own typed payload ([Rust Book §6.1](https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html)). By modeling our CAD tool as `ActiveTool`, it is impossible for stale ruler coordinates to linger when the user is in `Select` mode:{{sidenote:Making illegal states unrepresentable is a cornerstone of idiomatic Rust: instead of maintaining separate `is_measuring: bool` and `ruler_start: Option<Pos2>` fields that can get out of sync, the `ActiveTool::Measure` variant owns its endpoints directly.}}
+Unlike C or Java enums that are glorified integer constants, each variant of a Rust `enum` can carry its own typed payload ([Rust Book §6.1](https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html)).
+
+So, by modelling our CAD tool as `ActiveTool`, it becomes impossible for stale ruler coordinates to hang around when the user switches back to `Select` mode:{{sidenote:Making illegal states unrepresentable is one of Rust's best party tricks: instead of juggling separate `is_measuring: bool` and `ruler_start: Option<Pos2>` fields that inevitably get out of sync, the `ActiveTool::Measure` variant owns its endpoints directly.}}
 
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -54,7 +58,9 @@ impl RulerMeasurement {
 
 ## 2. Consuming Keyboard Shortcuts with `ctx.input_mut` & `consume_key`
 
-When no text box has keyboard focus (`!ctx.wants_keyboard_input()`), we check for CAD hotkeys using [`InputState::consume_key`](https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key). Calling `consume_key` both returns `true` when the key was pressed and removes the key event from the frame's queue so no other widget reacts to it twice:
+Now, what happens if the user is typing `"m"` into the BOM search box from Lesson 0008? You definitely don't want that keystroke switching tools mid-search!
+
+So, we first check `!ctx.wants_keyboard_input()` to make sure no text box has keyboard focus, and then match our CAD hotkeys using [`InputState::consume_key`](https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key). Calling `consume_key` both returns `true` when the key was pressed and removes the key event from the frame's queue so no other widget reacts to it twice:
 
 ```rust
 pub fn handle_hotkeys(&mut self, ctx: &egui::Context) {
@@ -177,5 +183,5 @@ hint: Think about how `egui_kittest::Harness` simulates keyboard input without a
 :::
 
 :::teacher-prompt
-**Act II Complete!** You have expanded the PCB Design Reviewer with schematic component symbols, `Painter::text` reference designators, split-viewport cross-probing with `egui::Scene`, virtualized BOM search tables, CAD keyboard shortcuts, and a point-to-point measurement ruler—all verified headlessly with `egui_kittest::Harness` and 100% caught mutants. Ask any questions about Act II in chat, or let me know when you are ready for **Act III (`0010`–`0013`): Design Review Workflows, Sticky-Note Callout Pins, DRC Overlays & Custom `egui::Widget` Layer Swatches**!
+**Act II Complete!** You have expanded the PCB Design Reviewer with schematic component symbols, `Painter::text` reference designators, split-viewport cross-probing with `egui::Scene`, virtualised BOM search tables, CAD keyboard shortcuts, and a point-to-point measurement ruler—all verified headlessly with `egui_kittest::Harness` and 100% caught mutants. Ask any questions about Act II in chat, or let me know when you are ready for **Act III (`0010`–`0013`): Design Review Workflows, Sticky-Note Callout Pins, DRC Overlays & Custom `egui::Widget` Layer Swatches**!
 :::

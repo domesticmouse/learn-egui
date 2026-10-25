@@ -36,8 +36,8 @@
 <h1>Lesson 0006: Schematic Symbols, Text Rendering &amp; Headless UI Testing (<code>egui_kittest</code>)</h1>
 <p class="subtitle">Drawing IC reference designators (<code>U1</code>, <code>R12</code>, <code>J1</code>) with <code>Painter::text</code>, mastering <code>String</code> vs. <code>&amp;str</code>, and un-skipping <code>eframe::App::update</code> with <code>egui_kittest::Harness</code></p>
 
-<p>Welcome to <strong>Act II</strong>! In <a href="./0005-hit-testing-and-net-cross-probing.html">Lesson 0005</a>, we built interactive pad hit-testing and net highlighting. However, an engineer inspecting a board or schematic cannot navigate by anonymous red and blue rectangles alone—they need <strong>reference designators</strong> (<code>U1</code>, <code>R12</code>, <code>J1</code>), component values (<code>LDO_3V3</code>, <code>10k</code>), and human-readable net names (<code>VCC_3V3</code>, <code>SPI_CLK</code>).</p>
-<p>Even more importantly, Lesson 0006 marks a milestone in our verification architecture: we add <a href="https://docs.rs/egui_kittest/latest/egui_kittest/"><code>egui_kittest</code></a> to <code>[dev-dependencies]</code>, boot our <code>PcbReviewerApp</code> headlessly inside <code>cargo test</code>, and <strong>remove <code>&lt;impl eframe::App for PcbReviewerApp&gt;::update</code> from <code>.cargo/mutants.toml</code></strong> so mutation testing actively guards our rendered UI panels!</p>
+<p>Welcome to <strong>Act II</strong>! In <a href="./0005-hit-testing-and-net-cross-probing.html">Lesson 0005</a>, we built interactive pad hit-testing and net highlighting. But, staring at anonymous red and blue rectangles gets old fast—when you are reviewing a real board or schematic, you navigate by <strong>reference designators</strong> (<code>U1</code>, <code>R12</code>, <code>J1</code>), component values (<code>LDO_3V3</code>, <code>10k</code>), and human-readable net names (<code>VCC_3V3</code>, <code>SPI_CLK</code>).</p>
+<p>Or, moreover, Lesson 0006 marks a huge milestone in our testing story. Remember how we excluded <code>&lt;impl eframe::App for PcbReviewerApp&gt;::update</code> in <code>.cargo/mutants.toml</code> back in Lesson 0000? Today, we add <a href="https://docs.rs/egui_kittest/latest/egui_kittest/"><code>egui_kittest</code></a> to <code>[dev-dependencies]</code>, boot our <code>PcbReviewerApp</code> headlessly inside <code>cargo test</code>, and <strong>take <code>eframe::App::update</code> off the exclusion list</strong> so <code>cargo-mutants</code> actively guards our rendered UI panels.</p>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 flowchart LR
@@ -48,7 +48,7 @@ flowchart LR
 </figure>
 <p><em>Figure 6.1: Component metadata feeds both <code>Painter::text</code> on the 2D canvas and semantic <code>ui.label</code> nodes verified headlessly by <code>egui_kittest::Harness</code>.</em></p>
 <h2>1. Just-in-Time Rust: Owned <code>String</code> vs. Borrowed <code>&amp;str</code> &amp; <code>format!()</code></h2>
-<p>When modeling a component symbol or net label in Rust, you will immediately encounter two string types (<a href="https://doc.rust-lang.org/book/ch08-02-strings.html">Rust Book §8.2</a>):<span class="sidenote-number"></span><span class="sidenote">Because <code>&amp;String</code> automatically coerces to <code>&amp;str</code> (via the <code>Deref</code> trait), a function that accepts <code>&amp;str</code> can take both string literals like <code>&quot;U1&quot;</code> and borrowed heap strings like <code>&amp;comp.ref_des</code> without copying a single byte!</span></p>
+<p>When modelling a component symbol or net label in Rust, you will immediately run into two string types (<a href="https://doc.rust-lang.org/book/ch08-02-strings.html">Rust Book §8.2</a>):<span class="sidenote-number"></span><span class="sidenote">Because <code>&amp;String</code> automatically coerces to <code>&amp;str</code> (via the <code>Deref</code> trait), a function that accepts <code>&amp;str</code> can take both string literals like <code>&quot;U1&quot;</code> and borrowed heap strings like <code>&amp;comp.ref_des</code> without copying a single byte!</span></p>
 <ul>
 <li><strong><code>&amp;str</code> (String Slice):</strong> An immutable, fat-pointer view (<code>ptr + len</code>) borrowing existing UTF-8 bytes in memory (such as a compile-time string literal <code>&quot;Top Copper (F.Cu)&quot;</code> or a slice of a <code>String</code>). It is <code>Copy</code> and does not own heap memory.</li>
 <li><strong><code>String</code> (Owned UTF-8 Buffer):</strong> A growable, heap-allocated UTF-8 buffer (backed by <code>Vec&lt;u8&gt;</code>) owned by a struct field (like <code>pub ref_des: String</code>) or freshly constructed at runtime with the <a href="https://doc.rust-lang.org/std/macro.format.html"><code>format!()</code></a> macro.</li>
@@ -69,7 +69,7 @@ impl ComponentSymbol {
     }
 }</code></pre>
 <h2>2. Drawing Silkscreen Reference Designators with <code>Painter::text</code></h2>
-<p>On the 2D canvas, <a href="https://docs.rs/egui/latest/egui/struct.Painter.html#method.text"><code>Painter::text</code></a> renders crisp vector-rasterized glyphs anchored to any screen-space <code>Pos2</code> using <a href="https://docs.rs/egui/latest/egui/enum.Align2.html"><code>Align2</code></a> and <a href="https://docs.rs/egui/latest/egui/struct.FontId.html"><code>FontId</code></a>:<span class="sidenote-number"></span><span class="sidenote">Using <code>Align2::CENTER_CENTER</code> places the exact geometric center of the rendered glyph bounding box at <code>center_px</code>, keeping <code>U1</code> centered inside its IC body at any zoom level.</span></p>
+<p>On the 2D canvas, <a href="https://docs.rs/egui/latest/egui/struct.Painter.html#method.text"><code>Painter::text</code></a> renders crisp vector-rasterised glyphs anchored to any screen-space <code>Pos2</code> using <a href="https://docs.rs/egui/latest/egui/enum.Align2.html"><code>Align2</code></a> and <a href="https://docs.rs/egui/latest/egui/struct.FontId.html"><code>FontId</code></a>:<span class="sidenote-number"></span><span class="sidenote">Using <code>Align2::CENTER_CENTER</code> places the exact geometric centre of the rendered glyph bounding box at <code>center_px</code>, keeping <code>U1</code> centred inside its IC body at any zoom level.</span></p>
 <pre><code class="language-rust">let center_px = self.viewport.world_to_screen(comp.center_mm);
 painter.text(
     center_px,
@@ -79,7 +79,8 @@ painter.text(
     PcbLayer::Silkscreen.color(),
 );</code></pre>
 <h2>3. Headless UI Verification with <code>egui_kittest::Harness</code></h2>
-<p>In Acts 0–I, we excluded <code>&lt;impl eframe::App for PcbReviewerApp&gt;::update</code> in <code>.cargo/mutants.toml</code> because we only had pure domain unit tests. By adding <code>egui_kittest = { version = &quot;0.33&quot;, features = [&quot;eframe&quot;] }</code> under <code>[dev-dependencies]</code>, we can spin up our entire <code>eframe::App</code> headlessly in milliseconds using AccessKit's semantic node tree:</p>
+<p>So, how do you test a GUI without opening a real OS window and hijacking your mouse cursor?</p>
+<p>Turns out, <code>egui_kittest</code> solves this cleanly by tapping into AccessKit's semantic accessibility node tree. By adding <code>egui_kittest = { version = &quot;0.33&quot;, features = [&quot;eframe&quot;] }</code> under <code>[dev-dependencies]</code>, we can spin up our entire <code>eframe::App</code> headlessly in milliseconds, query widgets by their label, and click buttons directly from <code>cargo test</code>:</p>
 <pre><code class="language-rust">use egui_kittest::{Harness, kittest::Queryable};
 
 #[test]
@@ -166,7 +167,7 @@ fn headless_ui_renders_component_labels_and_toggles_layers() {
     <span class="panel-title">Interactive Lab 2: Complete <code>inspector_label</code> &amp; the <code>egui_kittest</code> Assertion</span>
     <span class="panel-badge">format!() • Align2 • Queryable</span>
   </div>
-  <p>Fill in the three blanks below to (1) format an owned <code>String</code> in <code>inspector_label</code>, (2) center-align the reference designator glyph on the canvas, and (3) click the <code>&quot;Isolate Top Copper&quot;</code> button inside our headless <code>egui_kittest</code> test:</p>
+  <p>Fill in the three blanks below to (1) format an owned <code>String</code> in <code>inspector_label</code>, (2) centre-align the reference designator glyph on the canvas, and (3) click the <code>&quot;Isolate Top Copper&quot;</code> button inside our headless <code>egui_kittest</code> test:</p>
 <pre class="keep-markup"><code class="language-rust">impl ComponentSymbol {
     pub fn inspector_label(&amp;self) -&gt; String {
         <input id="ex-blank-1" class="code-challenge-input" style="width:110px;" placeholder="/* 1: macro */" autocomplete="off">("{}: {} ({})", self.ref_des, self.value, self.package_name)
@@ -198,7 +199,7 @@ harness.run();</code></pre>
     <span class="panel-title">Interactive Lab 3: Un-Skipping <code>eframe::App::update</code> with <code>egui_kittest</code></span>
     <span class="panel-badge">cargo test + cargo mutants</span>
   </div>
-  <p>Look at <code>apps/0006-schematic-symbols-and-text-rendering/.cargo/mutants.toml</code>: we have removed <code>&quot;&lt;impl eframe::App for PcbReviewerApp&gt;::update&quot;</code> from <code>exclude_re</code>! Because our <code>egui_kittest::Harness</code> test queries the rendered <code>SidePanel</code> labels and clicks its buttons, <code>cargo mutants</code> now mutates <code>update()</code> and <code>render_side_panel()</code>—and catches every single mutant!</p>
+  <p>Look at <code>apps/0006-schematic-symbols-and-text-rendering/.cargo/mutants.toml</code>: we have removed <code>&quot;&lt;impl eframe::App for PcbReviewerApp&gt;::update&quot;</code> from <code>exclude_re</code>! Because our <code>egui_kittest::Harness</code> test queries the rendered <code>SidePanel</code> labels and clicks its buttons, <code>cargo mutants</code> now mutates <code>update()</code> and <code>render_side_panel()</code>—and catches every single mutant.</p>
 <pre><code class="language-toml"># apps/0006-schematic-symbols-and-text-rendering/.cargo/mutants.toml
 copy_target = true
 
@@ -284,7 +285,7 @@ exclude_re = [
           inputId: "ex-blank-2",
           accepted: ["CENTER_CENTER"],
           getErrorHint: (val) =>
-            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Use the <code>Align2</code> constant that centers horizontally and vertically (<code>CENTER_CENTER</code>).",
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Use the <code>Align2</code> constant that centres horizontally and vertically (<code>CENTER_CENTER</code>).",
         },
         {
           inputId: "ex-blank-3",
@@ -314,12 +315,12 @@ exclude_re = [
             "question": "What does `Align2::CENTER_CENTER` do when passed to `painter.text(anchor_px, ...)`?",
             "options": [
                   "It scales font glyphs around board edges",
-                  "It centers text bounds over anchor point",
+                  "It centres text bounds over anchor point",
                   "It rotates text labels along copper nets",
                   "It clamps font sizes inside panel frames"
             ],
             "correctIndex": 1,
-            "explanation": "`Align2::CENTER_CENTER` positions the geometric center of the rendered text bounding box directly on `anchor_px`.",
+            "explanation": "`Align2::CENTER_CENTER` positions the geometric centre of the rendered text bounding box directly on `anchor_px`.",
             "wrongHint": "Think about which point of the text's bounding rectangle is placed at `anchor_px`."
       },
       {

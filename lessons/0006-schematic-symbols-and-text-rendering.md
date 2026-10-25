@@ -5,9 +5,9 @@ lesson_num: "0006"
 act_badge: "Act II: Schematic Views, Layout & egui_kittest"
 ---
 
-Welcome to **Act II**! In [Lesson 0005](./0005-hit-testing-and-net-cross-probing.html), we built interactive pad hit-testing and net highlighting. However, an engineer inspecting a board or schematic cannot navigate by anonymous red and blue rectangles alone—they need **reference designators** (`U1`, `R12`, `J1`), component values (`LDO_3V3`, `10k`), and human-readable net names (`VCC_3V3`, `SPI_CLK`).
+Welcome to **Act II**! In [Lesson 0005](./0005-hit-testing-and-net-cross-probing.html), we built interactive pad hit-testing and net highlighting. But, staring at anonymous red and blue rectangles gets old fast—when you are reviewing a real board or schematic, you navigate by **reference designators** (`U1`, `R12`, `J1`), component values (`LDO_3V3`, `10k`), and human-readable net names (`VCC_3V3`, `SPI_CLK`).
 
-Even more importantly, Lesson 0006 marks a milestone in our verification architecture: we add [`egui_kittest`](https://docs.rs/egui_kittest/latest/egui_kittest/) to `[dev-dependencies]`, boot our `PcbReviewerApp` headlessly inside `cargo test`, and **remove `<impl eframe::App for PcbReviewerApp>::update` from `.cargo/mutants.toml`** so mutation testing actively guards our rendered UI panels!
+Or, moreover, Lesson 0006 marks a huge milestone in our testing story. Remember how we excluded `<impl eframe::App for PcbReviewerApp>::update` in `.cargo/mutants.toml` back in Lesson 0000? Today, we add [`egui_kittest`](https://docs.rs/egui_kittest/latest/egui_kittest/) to `[dev-dependencies]`, boot our `PcbReviewerApp` headlessly inside `cargo test`, and **take `eframe::App::update` off the exclusion list** so `cargo-mutants` actively guards our rendered UI panels.
 
 ```mermaid
 flowchart LR
@@ -19,7 +19,7 @@ _Figure 6.1: Component metadata feeds both `Painter::text` on the 2D canvas and 
 
 ## 1. Just-in-Time Rust: Owned `String` vs. Borrowed `&str` & `format!()`
 
-When modeling a component symbol or net label in Rust, you will immediately encounter two string types ([Rust Book §8.2](https://doc.rust-lang.org/book/ch08-02-strings.html)):{{sidenote:Because `&String` automatically coerces to `&str` (via the `Deref` trait), a function that accepts `&str` can take both string literals like `"U1"` and borrowed heap strings like `&comp.ref_des` without copying a single byte!}}
+When modelling a component symbol or net label in Rust, you will immediately run into two string types ([Rust Book §8.2](https://doc.rust-lang.org/book/ch08-02-strings.html)):{{sidenote:Because `&String` automatically coerces to `&str` (via the `Deref` trait), a function that accepts `&str` can take both string literals like `"U1"` and borrowed heap strings like `&comp.ref_des` without copying a single byte!}}
 
 - **`&str` (String Slice):** An immutable, fat-pointer view (`ptr + len`) borrowing existing UTF-8 bytes in memory (such as a compile-time string literal `"Top Copper (F.Cu)"` or a slice of a `String`). It is `Copy` and does not own heap memory.
 - **`String` (Owned UTF-8 Buffer):** A growable, heap-allocated UTF-8 buffer (backed by `Vec<u8>`) owned by a struct field (like `pub ref_des: String`) or freshly constructed at runtime with the [`format!()`](https://doc.rust-lang.org/std/macro.format.html) macro.
@@ -44,7 +44,7 @@ impl ComponentSymbol {
 
 ## 2. Drawing Silkscreen Reference Designators with `Painter::text`
 
-On the 2D canvas, [`Painter::text`](https://docs.rs/egui/latest/egui/struct.Painter.html#method.text) renders crisp vector-rasterized glyphs anchored to any screen-space `Pos2` using [`Align2`](https://docs.rs/egui/latest/egui/enum.Align2.html) and [`FontId`](https://docs.rs/egui/latest/egui/struct.FontId.html):{{sidenote:Using `Align2::CENTER_CENTER` places the exact geometric center of the rendered glyph bounding box at `center_px`, keeping `U1` centered inside its IC body at any zoom level.}}
+On the 2D canvas, [`Painter::text`](https://docs.rs/egui/latest/egui/struct.Painter.html#method.text) renders crisp vector-rasterised glyphs anchored to any screen-space `Pos2` using [`Align2`](https://docs.rs/egui/latest/egui/enum.Align2.html) and [`FontId`](https://docs.rs/egui/latest/egui/struct.FontId.html):{{sidenote:Using `Align2::CENTER_CENTER` places the exact geometric centre of the rendered glyph bounding box at `center_px`, keeping `U1` centred inside its IC body at any zoom level.}}
 
 ```rust
 let center_px = self.viewport.world_to_screen(comp.center_mm);
@@ -59,7 +59,9 @@ painter.text(
 
 ## 3. Headless UI Verification with `egui_kittest::Harness`
 
-In Acts 0–I, we excluded `<impl eframe::App for PcbReviewerApp>::update` in `.cargo/mutants.toml` because we only had pure domain unit tests. By adding `egui_kittest = { version = "0.33", features = ["eframe"] }` under `[dev-dependencies]`, we can spin up our entire `eframe::App` headlessly in milliseconds using AccessKit's semantic node tree:
+So, how do you test a GUI without opening a real OS window and hijacking your mouse cursor?
+
+Turns out, `egui_kittest` solves this cleanly by tapping into AccessKit's semantic accessibility node tree. By adding `egui_kittest = { version = "0.33", features = ["eframe"] }` under `[dev-dependencies]`, we can spin up our entire `eframe::App` headlessly in milliseconds, query widgets by their label, and click buttons directly from `cargo test`:
 
 ```rust
 use egui_kittest::{Harness, kittest::Queryable};
@@ -84,7 +86,7 @@ fn headless_ui_renders_component_labels_and_toggles_layers() {
 {{widget:sch-text-sim}}
 
 :::exercise title="Interactive Lab 2: Complete `inspector_label` & the `egui_kittest` Assertion" badge="format!() • Align2 • Queryable"
-Fill in the three blanks below to (1) format an owned `String` in `inspector_label`, (2) center-align the reference designator glyph on the canvas, and (3) click the `"Isolate Top Copper"` button inside our headless `egui_kittest` test:
+Fill in the three blanks below to (1) format an owned `String` in `inspector_label`, (2) centre-align the reference designator glyph on the canvas, and (3) click the `"Isolate Top Copper"` button inside our headless `egui_kittest` test:
 
 ```rust
 impl ComponentSymbol {
@@ -96,7 +98,7 @@ impl ComponentSymbol {
 // Inside paint_board():
 painter.text(
     center_px,
-    Align2::{{blank:CENTER_CENTER|Use the `Align2` constant that centers horizontally and vertically (`CENTER_CENTER`).|/* 2: center anchor */|155px}},
+    Align2::{{blank:CENTER_CENTER|Use the `Align2` constant that centres horizontally and vertically (`CENTER_CENTER`).|/* 2: center anchor */|155px}},
     &comp.ref_des,
     FontId::monospace(12.0),
     PcbLayer::Silkscreen.color(),
@@ -114,7 +116,7 @@ success: **Spot on!** `format!` builds the owned `String` summary, `Align2::CENT
 :::
 
 :::verify title="Interactive Lab 3: Un-Skipping `eframe::App::update` with `egui_kittest`" badge="cargo test + cargo mutants" tier="Tier 6: Headless UI (egui_kittest)" caught="35 Caught (10 Unviable)" missed="0 Missed"
-Look at `apps/0006-schematic-symbols-and-text-rendering/.cargo/mutants.toml`: we have removed `"<impl eframe::App for PcbReviewerApp>::update"` from `exclude_re`! Because our `egui_kittest::Harness` test queries the rendered `SidePanel` labels and clicks its buttons, `cargo mutants` now mutates `update()` and `render_side_panel()`—and catches every single mutant!
+Look at `apps/0006-schematic-symbols-and-text-rendering/.cargo/mutants.toml`: we have removed `"<impl eframe::App for PcbReviewerApp>::update"` from `exclude_re`! Because our `egui_kittest::Harness` test queries the rendered `SidePanel` labels and clicks its buttons, `cargo mutants` now mutates `update()` and `render_side_panel()`—and catches every single mutant.
 
 ```toml
 # apps/0006-schematic-symbols-and-text-rendering/.cargo/mutants.toml
@@ -147,10 +149,10 @@ hint: Compare borrowing existing bytes (`&str`) with constructing new formatted 
 
 Q: What does `Align2::CENTER_CENTER` do when passed to `painter.text(anchor_px, ...)`?
 - [ ] It scales font glyphs around board edges
-- [x] It centers text bounds over anchor point
+- [x] It centres text bounds over anchor point
 - [ ] It rotates text labels along copper nets
 - [ ] It clamps font sizes inside panel frames
-why: `Align2::CENTER_CENTER` positions the geometric center of the rendered text bounding box directly on `anchor_px`.
+why: `Align2::CENTER_CENTER` positions the geometric centre of the rendered text bounding box directly on `anchor_px`.
 hint: Think about which point of the text's bounding rectangle is placed at `anchor_px`.
 
 Q: How does `egui_kittest::Harness` let us remove `eframe::App::update` from `.cargo/mutants.toml`?

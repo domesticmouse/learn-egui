@@ -5,11 +5,13 @@ lesson_num: "0001"
 act_badge: "Mission: Schematic & PCB Design Review System"
 ---
 
-In [Lesson 0000](./0000-project-setup-and-eframe-boot.html), we created our `pcb-reviewer` Cargo crate and booted a native window with `eframe::run_native`. Now we will fill in the heart of that file—`PcbReviewerApp::update`—to build the **Layer Visibility Inspector**: toggling _Top Copper (`F.Cu`)_, _Bottom Copper (`B.Cu`)_, _Silkscreen (`F.SilkS`)_, and the unrouted _Ratsnest_ on and off.
+If you have spent years building UIs in HTML/React, Qt, or Flutter, your muscle memory is wired for [retained-mode](../reference/glossary.html) widgets: you construct a checkbox object once, wire up an `onChange` callback, and spend the rest of the afternoon keeping its internal state synchronised with your data model.{{sidenote:See Emil Ernerfeldt's official [Understanding Immediate Mode](https://docs.rs/egui/latest/egui/#understanding-immediate-mode) section in the `egui` documentation for why eliminating widget callbacks prevents out-of-sync UI bugs.}}
 
-In traditional [retained-mode](../reference/glossary.html) GUI frameworks (like HTML/React, Qt, or Flutter), you create checkbox widget objects once, attach event callbacks (`onChange`), and synchronize their internal state with your board renderer.{{sidenote:See Emil Ernerfeldt's official [Understanding Immediate Mode](https://docs.rs/egui/latest/egui/#understanding-immediate-mode) section in the `egui` documentation for why eliminating widget callbacks prevents out-of-sync UI bugs.}}
+Turns out, `egui` throws all of that out the window.
 
-`egui` works completely differently. In `egui`, **there are no persistent checkbox or button objects**. Instead, your Rust [`struct`](../reference/glossary.html) holds the single source of truth, and on every frame, your [`eframe::App::update`](../reference/glossary.html) method runs from top to bottom.
+In [Lesson 0000](./0000-project-setup-and-eframe-boot.html), we created our `pcb-reviewer` Cargo crate and booted a native window with `eframe::run_native`. Now, we are going to fill in the heart of that file—`PcbReviewerApp::update`—to build our **Layer Visibility Inspector**: toggling _Top Copper (`F.Cu`)_, _Bottom Copper (`B.Cu`)_, _Silkscreen (`F.SilkS`)_, and the unrouted _Ratsnest_ on and off.
+
+In `egui`, **there are no persistent checkbox or button objects**. Instead, your plain Rust [`struct`](../reference/glossary.html) holds the single source of truth, and on every frame, your [`eframe::App::update`](../reference/glossary.html) method runs straight from top to bottom.
 
 ```mermaid
 flowchart TD
@@ -24,7 +26,7 @@ _Figure 1.1: Inside a single call to `update(&mut self, ctx, frame)`, `SidePanel
 
 ## 1. Your Rust `struct` Is the Only State
 
-Recall the `PcbReviewerApp` struct we initialized in [Lesson 0000](./0000-project-setup-and-eframe-boot.html). Four `bool` fields track which PCB layers are currently visible:
+Recall the `PcbReviewerApp` struct we initialised in [Lesson 0000](./0000-project-setup-and-eframe-boot.html). Four `bool` fields track which PCB layers are currently visible:
 
 ```rust
 pub struct PcbReviewerApp {
@@ -43,7 +45,7 @@ When `eframe` redraws your window, it calls:{{sidenote:In [`eframe::App::update`
 fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame)
 ```
 
-Inside `update`, we place a left [`egui::SidePanel`](https://docs.rs/egui/latest/egui/containers/panel/struct.SidePanel.html) for our layer controls, followed by an [`egui::CentralPanel`](https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html) for our 2D PCB canvas. Look closely at what we pass into [`ui.checkbox`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.checkbox):
+So, inside `update`, we place a left [`egui::SidePanel`](https://docs.rs/egui/latest/egui/containers/panel/struct.SidePanel.html) for our layer controls, followed by an [`egui::CentralPanel`](https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html) for our 2D PCB canvas. Look closely at what we pass into [`ui.checkbox`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.checkbox):
 
 ```rust
 egui::SidePanel::left("layer_panel").show(ctx, |ui| {
@@ -58,11 +60,13 @@ egui::SidePanel::left("layer_panel").show(ctx, |ui| {
 Two Rust mechanics make those six lines work without a single callback:{{sidenote:Always declare `SidePanel` and `TopBottomPanel` **before** `CentralPanel`. According to the [`CentralPanel` docs](https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html), it claims all remaining space in `ctx` after outer panels have been laid out.}}
 
 1. **The Closure (`|ui| { ... }`):** `.show(ctx, |ui| { ... })` takes an inline anonymous function ([Rust Book §13.1](https://doc.rust-lang.org/book/ch13-01-closures.html)) receiving a temporary [`&mut egui::Ui`](../reference/glossary.html) region. When the closure ends, `ui` is dropped—only your `self` struct persists to the next frame.
-2. **The Mutable Borrow (`&mut self.show_top_copper`):** Passing `&mut` grants `ui.checkbox` temporary read-write access to that single `bool` field. In one function call, `ui.checkbox` _reads_ the boolean to draw the checkmark, checks whether the mouse clicked that rectangle this frame, and if so, _flips the boolean in place_ before returning!
+2. **The Mutable Borrow (`&mut self.show_top_copper`):** Passing `&mut` grants `ui.checkbox` temporary read-write access to that single `bool` field. In one function call, `ui.checkbox` _reads_ the boolean to draw the tick mark, checks whether the mouse clicked that rectangle this frame, and if so, _flips the boolean in place_ before returning. No listeners, no state-sync plumbing.
 
 ## 3. Making Button Actions Testable & Mutant-Proof
 
-What about preset buttons like **"Isolate Top Copper"** or **"Show All Layers"**? When you click a button, `ui.button("...").clicked()` returns `true` for that single frame. If you extract the state transition into a method on `PcbReviewerApp` that takes `&mut self`, your `update()` loop stays clean _and_ you can test and mutate every state transition with `cargo test` and [`cargo mutants`](https://mutants.rs/) ([Testing & Mutation Cheat Sheet](../reference/testing-and-mutation-cheatsheet.html)):{{sidenote:Watch what happens if a test starts from a state where `show_top_copper` is _already_ `true` and the other layers are already `false`, and then calls `app.isolate_top_copper()`: when `cargo mutants` replaces the body of `isolate_top_copper` with an empty no-op `()`, the test would still pass unless the starting state actually requires `isolate_top_copper()` to flip the fields!}}
+Now, what about preset buttons like **"Isolate Top Copper"** or **"Show All Layers"**? When you click a button, `ui.button("...").clicked()` returns `true` for that single frame.
+
+It is tempting to inline the boolean assignments right inside the `if ui.button(...).clicked()` block. But, if you extract that state transition into a method on `PcbReviewerApp` taking `&mut self`, your `update()` loop stays clean _and_ you can test and mutate every state transition with `cargo test` and [`cargo mutants`](https://mutants.rs/) ([Testing & Mutation Cheat Sheet](../reference/testing-and-mutation-cheatsheet.html)):{{sidenote:The reason our unit test setup matters here is interesting: if a test starts from a state where `show_top_copper` is _already_ `true` and the other layers are already `false`, and then calls `app.isolate_top_copper()`, `cargo mutants` can replace the body of `isolate_top_copper` with an empty no-op `()` and the test will still pass! Starting from the opposite state forces the method to actually flip every field.}}
 
 ```rust
 impl PcbReviewerApp {
@@ -218,7 +222,7 @@ Q: Why must `egui::SidePanel` be declared before `egui::CentralPanel` inside `up
 - [ ] CentralPanel clears all previous panel widgets
 - [ ] SidePanels cannot use mutable struct variables
 - [x] CentralPanel claims all remaining window space
-why: `SidePanel` and `TopBottomPanel` carve out their widths/heights from the available `Context` rect first; `CentralPanel` then consumes whatever space remains in the center.
+why: `SidePanel` and `TopBottomPanel` carve out their widths/heights from the available `Context` rect first; `CentralPanel` then consumes whatever space remains in the centre.
 hint: Check the panel layout order rule in the Immediate-Mode Cheat Sheet: how does `CentralPanel` decide how large it should be?
 
 Q: What happens to the local `ui` handle inside `|ui| { ... }` when a panel closure finishes?

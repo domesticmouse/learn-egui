@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
-  <title>Lesson 0004: Modeling Layers, Traces &amp; Deterministic Z-Order</title>
+  <title>Lesson 0004: Modelling Layers, Traces &amp; Deterministic Z-Order</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
@@ -33,11 +33,11 @@
   <main>
     <article class="tufte-article">
 <div class="prose-col">
-<h1>Lesson 0004: Modeling Layers, Traces &amp; Deterministic Z-Order</h1>
+<h1>Lesson 0004: Modelling Layers, Traces &amp; Deterministic Z-Order</h1>
 <p class="subtitle">Structuring PCB geometry with <code>enum PcbLayer</code>, <code>Vec&lt;TraceSegment&gt;</code>, exhaustive <code>match</code>, and shared loop borrowing</p>
 
-<p>In <a href="./0003-world-to-screen-transforms-pan-and-zoom.html">Lesson 0003</a>, we transformed physical millimeter coordinates into screen space, but our traces were still individual hardcoded lines inside <code>paint_board</code>. Real KiCad boards contain thousands of segments across multiple layers that may appear in any order inside the file.</p>
-<p>Because <code>egui::Painter</code> uses the classic <strong>painter's algorithm</strong>—every shape you emit is drawn directly on top of earlier shapes—drawing traces in arbitrary file order would cause a <code>BottomCopper</code> trace to paint right over a <code>TopCopper</code> pad or <code>Silkscreen</code> reference designator!</p>
+<p>In <a href="./0003-world-to-screen-transforms-pan-and-zoom.html">Lesson 0003</a>, we transformed physical millimetre coordinates into screen space, but our traces were still individual hardcoded lines inside <code>paint_board</code>. Real KiCad files, on the other hand, contain thousands of segments across multiple layers—and they can appear in whatever order the router happened to save them.</p>
+<p>Now, because <code>egui::Painter</code> uses the classic <strong>painter's algorithm</strong> (every shape you emit is drawn directly on top of earlier shapes), drawing traces in raw file order means a <code>BottomCopper</code> ground trace can paint right over the top of a <code>TopCopper</code> pad or <code>Silkscreen</code> label. Not ideal when you are trying to debug a board.</p>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 flowchart LR
@@ -48,8 +48,8 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 4.1: Filtering visible segments and sorting by <code>PcbLayer::z_rank()</code> guarantees deterministic back-to-front CAD rendering every frame.</em></p>
-<h2>1. Exhaustive Layer Modeling with <code>enum PcbLayer</code></h2>
-<p>Instead of scattering four separate boolean <code>if</code> blocks across our renderer, we represent a PCB layer as a Rust <a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"><code>enum</code></a> and attach pure methods using exhaustive <a href="https://doc.rust-lang.org/book/ch06-02-match.html"><code>match</code></a> expressions:<span class="sidenote-number"></span><span class="sidenote">Because Rust's <code>match</code> is exhaustive at compile time, if you add an inner layer like <code>PcbLayer::In1Cu</code> later, <code>rustc</code> immediately flags every <code>match</code> block (<code>z_rank</code>, <code>color</code>, <code>is_layer_visible</code>) that needs updating.</span></p>
+<h2>1. Exhaustive Layer Modelling with <code>enum PcbLayer</code></h2>
+<p>So, instead of scattering four separate boolean <code>if</code> blocks across our renderer, let's model a PCB layer as a proper Rust <a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html"><code>enum</code></a> and attach pure methods using exhaustive <a href="https://doc.rust-lang.org/book/ch06-02-match.html"><code>match</code></a> expressions:<span class="sidenote-number"></span><span class="sidenote">Because Rust's <code>match</code> is exhaustive at compile time, if you add an inner copper layer like <code>PcbLayer::In1Cu</code> later, <code>rustc</code> immediately flags every <code>match</code> block (<code>z_rank</code>, <code>color</code>, <code>is_layer_visible</code>) that needs updating.</span></p>
 <pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PcbLayer {
     BottomCopper,
@@ -79,7 +79,7 @@ impl PcbLayer {
     }
 }</code></pre>
 <h2>2. Dynamic Collections (<code>Vec&lt;T&gt;</code>) &amp; Shared Loop Borrowing</h2>
-<p>We store our board's segments in a growable heap vector <a href="https://doc.rust-lang.org/book/ch08-01-vectors.html"><code>Vec&lt;TraceSegment&gt;</code></a> on <code>PcbReviewerApp</code>.<span class="sidenote-number"></span><span class="sidenote">Why write <code>for seg in &amp;self.traces</code> (or <code>self.traces.iter()</code>) instead of <code>for seg in self.traces</code>? Iterating over a <code>Vec</code> by value <em>moves and consumes</em> the vector on Frame #1! Borrowing with <code>&amp;</code> lets you read all segments 60 times a second while <code>self.traces</code> retains ownership.</span></p>
+<p>Next, we store our board's segments in a growable heap vector <a href="https://doc.rust-lang.org/book/ch08-01-vectors.html"><code>Vec&lt;TraceSegment&gt;</code></a> on <code>PcbReviewerApp</code>.<span class="sidenote-number"></span><span class="sidenote">Turns out, writing <code>for seg in self.traces</code> without an <code>&amp;</code> is a rite-of-passage error in Rust: iterating over a <code>Vec</code> by value <em>moves and consumes</em> the vector on Frame #1! Borrowing with <code>&amp;self.traces</code> (or <code>self.traces.iter()</code>) lets you read all segments 60 times a second while <code>self.traces</code> keeps ownership.</span></p>
 <pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TraceSegment {
     pub start: Pos2,
@@ -197,7 +197,7 @@ pub fn visible_traces_in_z_order(&amp;self) -&gt; Vec&lt;TraceSegment&gt; {
     <span class="panel-title">Interactive Lab 3: Eliminating Match-Arm Mutants</span>
     <span class="panel-badge">cargo test + cargo mutants</span>
   </div>
-  <p>One of <code>cargo-mutants</code>'s superpowers is <strong>match-arm mutation</strong>: it tries replacing individual <code>match</code> arms or return values inside <code>z_rank()</code>, <code>color()</code>, and <code>is_layer_visible()</code>. By asserting each variant's exact rank, color, and visibility toggle in isolation, our 9 unit tests catch all 20 viable mutants!</p>
+  <p>One of <code>cargo-mutants</code>'s best tricks is <strong>match-arm mutation</strong>: it tries deleting or swapping individual <code>match</code> arms inside <code>z_rank()</code>, <code>color()</code>, and <code>is_layer_visible()</code>. By asserting each variant's exact rank, colour, and visibility toggle in isolation, our 9 unit tests catch all 20 viable mutants!</p>
 <pre><code class="language-rust">#[test]
 fn visible_traces_in_z_order_filters_hidden_layers_and_sorts_back_to_front() {
     let mut app = PcbReviewerApp::default();

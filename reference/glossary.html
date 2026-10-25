@@ -53,18 +53,18 @@
     </tr>
     <tr>
       <td><strong>Retained-Mode GUI</strong></td>
-      <td>A traditional UI paradigm (DOM, Qt, Flutter widget trees) where the framework stores a persistent graph of widget objects with their own internal state that must be synchronized with application state via callbacks or listeners.</td>
+      <td>A traditional UI paradigm (DOM, Qt, Flutter widget trees) where the framework stores a persistent graph of widget objects with their own internal state that must be synchronised with application state via callbacks or listeners.</td>
       <td><em>Avoid:</em> &quot;stateful UI&quot; (both immediate-mode and retained-mode UIs manage state; they differ in whether widgets retain a separate copy of it).</td>
     </tr>
     <tr>
       <td><strong>Manifest (<code>Cargo.toml</code>)</strong></td>
-      <td>The configuration file for a Rust package defining its metadata, external dependencies (like <code>eframe</code>), and compiler optimization profiles (<a href="https://doc.rust-lang.org/cargo/reference/manifest.html">Cargo Book</a>).</td>
+      <td>The configuration file for a Rust package defining its metadata, external dependencies (like <code>eframe</code>), and compiler optimisation profiles (<a href="https://doc.rust-lang.org/cargo/reference/manifest.html">Cargo Book</a>).</td>
       <td><em>Avoid:</em> &quot;package.json&quot; or &quot;build script&quot; (<code>Cargo.toml</code> is declarative metadata; <code>build.rs</code> is a build script).</td>
     </tr>
     <tr>
       <td><strong>Struct (<code>struct</code>)</strong></td>
       <td>A composite Rust data type that groups named fields together into a single unit of ownership (<a href="https://doc.rust-lang.org/book/ch05-01-defining-structs.html">Rust Book §5.1</a>), such as <code>struct PcbReviewerApp</code>.</td>
-      <td><em>Avoid:</em> &quot;class&quot; or &quot;object&quot; (Rust structs have no inheritance hierarchy and separate data layout from <code>impl</code> behavior blocks).</td>
+      <td><em>Avoid:</em> &quot;class&quot; or &quot;object&quot; (Rust structs have no inheritance hierarchy and separate data layout from <code>impl</code> behaviour blocks).</td>
     </tr>
     <tr>
       <td><strong>Default Trait (<code>Default</code>)</strong></td>
@@ -84,7 +84,7 @@
     <tr>
       <td><strong>Mutable Borrow (<code>&amp;mut T</code>)</strong></td>
       <td>An exclusive, read-write reference to a value of type <code>T</code> that allows a called function (such as <code>ui.checkbox(&amp;mut self.show_top_copper, &quot;Top Cu&quot;)</code>) to read and modify a value in place without taking ownership (<a href="https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html">Rust Book §4.2</a>).</td>
-      <td><em>Avoid:</em> &quot;mutable pointer&quot; or &quot;pass by reference&quot; (emphasize exclusivity: no other <code>&amp;T</code> or <code>&amp;mut T</code> to the same data may overlap).</td>
+      <td><em>Avoid:</em> &quot;mutable pointer&quot; or &quot;pass by reference&quot; (emphasise exclusivity: no other <code>&amp;T</code> or <code>&amp;mut T</code> to the same data may overlap).</td>
     </tr>
     <tr>
       <td><strong>Closure (<code>|ui| { ... }</code>)</strong></td>
@@ -148,13 +148,13 @@
     </tr>
     <tr>
       <td><strong><code>egui::emath::TSTransform</code></strong></td>
-      <td>A 2D translation plus uniform scaling transform (<code>scaling * pt + translation</code>) with <code>.inverse()</code> for mapping between physical board millimeters (world space) and window points (screen space) (<a href="https://docs.rs/emath/latest/emath/struct.TSTransform.html">docs.rs/emath</a>).</td>
-      <td><em>Avoid:</em> manually mixing unscaled millimeters and screen pixels without a typed coordinate transform.</td>
+      <td>A 2D translation plus uniform scaling transform (<code>scaling * pt + translation</code>) with <code>.inverse()</code> for mapping between physical board millimetres (world space) and window points (screen space) (<a href="https://docs.rs/emath/latest/emath/struct.TSTransform.html">docs.rs/emath</a>).</td>
+      <td><em>Avoid:</em> manually mixing unscaled millimetres and screen pixels without a typed coordinate transform.</td>
     </tr>
     <tr>
       <td><strong>Mutation Testing (<code>cargo-mutants</code>)</strong></td>
       <td>A verification technique that injects small deliberate faults (<em>mutants</em>, such as flipping <code>true</code> to <code>false</code>, replacing <code>+</code> with <code>-</code>, or emptying a method body) and verifies that <code>cargo test</code> fails for every injected fault (<a href="https://mutants.rs/">mutants.rs</a>).</td>
-      <td><em>Avoid:</em> equating &quot;100% line coverage&quot; with verified behavior (line coverage only proves code ran, whereas caught mutants prove assertions fail when logic breaks).</td>
+      <td><em>Avoid:</em> equating &quot;100% line coverage&quot; with verified behaviour (line coverage only proves code ran, whereas caught mutants prove assertions fail when logic breaks).</td>
     </tr>
     <tr>
       <td><strong>Headless UI Harness (<code>egui_kittest</code>)</strong></td>

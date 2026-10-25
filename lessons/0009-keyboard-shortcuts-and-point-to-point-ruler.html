@@ -34,9 +34,10 @@
     <article class="tufte-article">
 <div class="prose-col">
 <h1>Lesson 0009: Keyboard Shortcuts, Data-Carrying Enums &amp; Point-to-Point CAD Ruler</h1>
-<p class="subtitle">Binding CAD hotkeys (<code>F</code>, <code>M</code>, <code>Esc</code>) via <code>ctx.input_mut</code> + <code>consume_key</code>, modeling tool state machines with data-carrying Rust enums, and simulating key presses in <code>egui_kittest</code></p>
+<p class="subtitle">Binding CAD hotkeys (<code>F</code>, <code>M</code>, <code>Esc</code>) via <code>ctx.input_mut</code> + <code>consume_key</code>, modelling tool state machines with data-carrying Rust enums, and simulating key presses in <code>egui_kittest</code></p>
 
-<p>In <a href="./0008-searchable-netlist-and-bom-inspector.html">Lesson 0008</a>, we built a searchable, virtualized BOM table. Now we complete <strong>Act II</strong> by adding two essential CAD ergonomics features: single-key shortcuts (<code>F</code> to fit/reset the board camera, <code>M</code> to activate the point-to-point measurement ruler, and <code>Esc</code> to cancel/clear) and a live <strong>Euclidean distance ruler overlay</strong> reporting $\Delta x$, $\Delta y$, and $\text{distance} = \sqrt{\Delta x^2 + \Delta y^2}$ in physical millimeters.</p>
+<p>Watch anyone who spends all day in KiCad or Altium: their left hand never leaves the keyboard. Reaching for a toolbar button every time you want to measure a pad pitch or reset the camera is slow; tapping <code>M</code>, <code>F</code>, or <code>Esc</code> is instant.</p>
+<p>In <a href="./0008-searchable-netlist-and-bom-inspector.html">Lesson 0008</a>, we built a searchable, virtualised BOM table. Now, we wrap up <strong>Act II</strong> by adding two essential CAD ergonomics features: single-key shortcuts (<code>F</code> to fit/reset the board camera, <code>M</code> to activate the point-to-point measurement ruler, and <code>Esc</code> to cancel/clear) and a live <strong>Euclidean distance ruler overlay</strong> reporting $\Delta x$, $\Delta y$, and $\text{distance} = \sqrt{\Delta x^2 + \Delta y^2}$ in physical millimetres.</p>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 stateDiagram-v2
@@ -47,9 +48,10 @@ stateDiagram-v2
     Select --&gt; Select: Key::F (fit_board_in_viewport)
   </pre>
 </figure>
-<p><em>Figure 9.1: Tool state machine modeled with a data-carrying Rust <code>enum ActiveTool</code> so ruler coordinates only exist while in <code>Measure</code> mode.</em></p>
+<p><em>Figure 9.1: Tool state machine modelled with a data-carrying Rust <code>enum ActiveTool</code> so ruler coordinates only exist while in <code>Measure</code> mode.</em></p>
 <h2>1. Just-in-Time Rust: State Machines with Data-Carrying Enums</h2>
-<p>Unlike C or Java enums that are just integer constants, each variant of a Rust <code>enum</code> can carry its own typed payload (<a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html">Rust Book §6.1</a>). By modeling our CAD tool as <code>ActiveTool</code>, it is impossible for stale ruler coordinates to linger when the user is in <code>Select</code> mode:<span class="sidenote-number"></span><span class="sidenote">Making illegal states unrepresentable is a cornerstone of idiomatic Rust: instead of maintaining separate <code>is_measuring: bool</code> and <code>ruler_start: Option&lt;Pos2&gt;</code> fields that can get out of sync, the <code>ActiveTool::Measure</code> variant owns its endpoints directly.</span></p>
+<p>Unlike C or Java enums that are glorified integer constants, each variant of a Rust <code>enum</code> can carry its own typed payload (<a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html">Rust Book §6.1</a>).</p>
+<p>So, by modelling our CAD tool as <code>ActiveTool</code>, it becomes impossible for stale ruler coordinates to hang around when the user switches back to <code>Select</code> mode:<span class="sidenote-number"></span><span class="sidenote">Making illegal states unrepresentable is one of Rust's best party tricks: instead of juggling separate <code>is_measuring: bool</code> and <code>ruler_start: Option&lt;Pos2&gt;</code> fields that inevitably get out of sync, the <code>ActiveTool::Measure</code> variant owns its endpoints directly.</span></p>
 <pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ActiveTool {
     Select,
@@ -79,7 +81,8 @@ impl RulerMeasurement {
     }
 }</code></pre>
 <h2>2. Consuming Keyboard Shortcuts with <code>ctx.input_mut</code> &amp; <code>consume_key</code></h2>
-<p>When no text box has keyboard focus (<code>!ctx.wants_keyboard_input()</code>), we check for CAD hotkeys using <a href="https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key"><code>InputState::consume_key</code></a>. Calling <code>consume_key</code> both returns <code>true</code> when the key was pressed and removes the key event from the frame's queue so no other widget reacts to it twice:</p>
+<p>Now, what happens if the user is typing <code>&quot;m&quot;</code> into the BOM search box from Lesson 0008? You definitely don't want that keystroke switching tools mid-search!</p>
+<p>So, we first check <code>!ctx.wants_keyboard_input()</code> to make sure no text box has keyboard focus, and then match our CAD hotkeys using <a href="https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key"><code>InputState::consume_key</code></a>. Calling <code>consume_key</code> both returns <code>true</code> when the key was pressed and removes the key event from the frame's queue so no other widget reacts to it twice:</p>
 <pre><code class="language-rust">pub fn handle_hotkeys(&amp;mut self, ctx: &amp;egui::Context) {
     if ctx.wants_keyboard_input() {
         return;
@@ -106,7 +109,7 @@ impl RulerMeasurement {
     <span class="panel-badge">consume_key • ActiveTool::Measure • hypot()</span>
   </div>
   <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-    Click the simulated hotkey buttons (<code>Key::M</code>, <code>Key::Escape</code>, <code>Key::F</code>) or select different measurement target pads below to inspect how <code>ActiveTool</code> and <code>RulerMeasurement::between</code> compute Δx, Δy, and Euclidean distance in millimeters:
+    Click the simulated hotkey buttons (<code>Key::M</code>, <code>Key::Escape</code>, <code>Key::F</code>) or select different measurement target pads below to inspect how <code>ActiveTool</code> and <code>RulerMeasurement::between</code> compute Δx, Δy, and Euclidean distance in millimetres:
   </p>
 
   <div class="sim-grid">
@@ -261,7 +264,7 @@ fn headless_hotkeys_switch_tools_and_fit_viewport() {
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key"><code>egui::InputState::consume_key</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html">The Rust Programming Language — §6.1 &quot;Defining an Enum&quot;</a>.
 </div>
 <div class="teacher-prompt-box">
-  <strong>Act II Complete!</strong> You have expanded the PCB Design Reviewer with schematic component symbols, <code>Painter::text</code> reference designators, split-viewport cross-probing with <code>egui::Scene</code>, virtualized BOM search tables, CAD keyboard shortcuts, and a point-to-point measurement ruler—all verified headlessly with <code>egui_kittest::Harness</code> and 100% caught mutants. Ask any questions about Act II in chat, or let me know when you are ready for <strong>Act III (<code>0010</code>–<code>0013</code>): Design Review Workflows, Sticky-Note Callout Pins, DRC Overlays &amp; Custom <code>egui::Widget</code> Layer Swatches</strong>!
+  <strong>Act II Complete!</strong> You have expanded the PCB Design Reviewer with schematic component symbols, <code>Painter::text</code> reference designators, split-viewport cross-probing with <code>egui::Scene</code>, virtualised BOM search tables, CAD keyboard shortcuts, and a point-to-point measurement ruler—all verified headlessly with <code>egui_kittest::Harness</code> and 100% caught mutants. Ask any questions about Act II in chat, or let me know when you are ready for <strong>Act III (<code>0010</code>–<code>0013</code>): Design Review Workflows, Sticky-Note Callout Pins, DRC Overlays &amp; Custom <code>egui::Widget</code> Layer Swatches</strong>!
 </div>
 </div>
     </article>

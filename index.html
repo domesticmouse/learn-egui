@@ -36,7 +36,8 @@
 <h1>Learn Rust &amp; <code>egui</code> by Building a Schematic &amp; PCB Design Reviewer</h1>
 <p class="subtitle">A hands-on, mutation-tested engineering course from immediate-mode fundamentals to an engine-first CAD architecture</p>
 
-<p>Welcome to the interactive course index.<span class="sidenote-number"></span><span class="sidenote">Every lesson in this repository pairs an interactive HTML tutorial (with live in-browser simulators, code-completion labs, and retrieval quizzes) with a real, runnable Cargo project under <code>./apps/&lt;NNNN-slug&gt;/</code>.</span> Each lesson introduces <strong>one focused <code>egui</code> capability</strong> alongside <strong>one just-in-time Rust concept</strong> and verifies assertion strength continuously using <code>cargo test</code> and <a href="https://mutants.rs/"><code>cargo-mutants</code></a>.</p>
+<p>Learning a new GUI framework from toy counter apps is easy. Building a real tool with a 2D CAD canvas, spatial hit-testing, and undo history is where things get interesting.</p>
+<p>So, in this course, we are going to learn Rust and Emil Ernerfeldt's <a href="https://github.com/emilk/egui"><code>egui</code></a> by building a <strong>Schematic &amp; PCB Design Reviewer</strong> from scratch.<span class="sidenote-number"></span><span class="sidenote">Every lesson in this repository pairs an interactive HTML tutorial (with live in-browser simulators, code-completion labs, and retrieval quizzes) with a real, runnable Cargo project under <code>./apps/&lt;NNNN-slug&gt;/</code>.</span> Each lesson introduces <strong>one focused <code>egui</code> capability</strong> alongside <strong>one just-in-time Rust concept</strong>—and because we like keeping our sanity as the codebase grows, we verify our assertions continuously with <code>cargo test</code> and Martin Pool's <a href="https://mutants.rs/"><code>cargo-mutants</code></a>.</p>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 flowchart LR
@@ -49,7 +50,7 @@ flowchart LR
 </figure>
 <p><em>Five-Act Curriculum Progression: Every lesson builds toward a production Schematic &amp; PCB Design Review System verified with unit tests and mutation coverage.</em></p>
 <h2>Published Interactive Lessons (<code>0000</code>–<code>0009</code>)</h2>
-<p>Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a> to set up your Cargo project and mutation-testing harness, or jump directly to any completed module below:</p>
+<p>Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a> to set up your Cargo project and mutation-testing harness, or jump straight into any completed module below:</p>
 </div>
 
 <section class="lesson-grid" aria-label="Published lessons">
@@ -108,7 +109,7 @@ flowchart LR
         <span class="lesson-card-mutants"></span>
       </div>
       <h3><a href="./lessons/0003-world-to-screen-transforms-pan-and-zoom.html">Lesson 0003: World-to-Screen Transforms, Pan &amp; Cursor Zoom</a></h3>
-      <p>Mapping physical PCB millimeters (<code>mm</code>) to screen pixels with <code>TSTransform</code>, <code>Sense::drag()</code>, and <code>ui.input</code></p>
+      <p>Mapping physical PCB millimetres (<code>mm</code>) to screen pixels with <code>TSTransform</code>, <code>Sense::drag()</code>, and <code>ui.input</code></p>
     </div>
     <div class="lesson-card-meta">
       <span><strong><code>egui</code> Skill:</strong> </span>
@@ -123,7 +124,7 @@ flowchart LR
         <span class="lesson-card-num">Lesson 0004</span>
         <span class="lesson-card-mutants"></span>
       </div>
-      <h3><a href="./lessons/0004-modeling-layers-traces-and-footprints.html">Lesson 0004: Modeling Layers, Traces &amp; Deterministic Z-Order</a></h3>
+      <h3><a href="./lessons/0004-modeling-layers-traces-and-footprints.html">Lesson 0004: Modelling Layers, Traces &amp; Deterministic Z-Order</a></h3>
       <p>Structuring PCB geometry with <code>enum PcbLayer</code>, <code>Vec&lt;TraceSegment&gt;</code>, exhaustive <code>match</code>, and shared loop borrowing</p>
     </div>
     <div class="lesson-card-meta">
@@ -187,8 +188,8 @@ flowchart LR
         <span class="lesson-card-num">Lesson 0008</span>
         <span class="lesson-card-mutants"></span>
       </div>
-      <h3><a href="./lessons/0008-searchable-netlist-and-bom-inspector.html">Lesson 0008: Searchable Netlist, Virtualized BOM &amp; Iterator Adapters</a></h3>
-      <p>Filtering components and nets with <code>TextEdit::singleline</code>, <code>.filter()</code>, and virtualized scrolling via <code>ScrollArea::vertical().show_rows(...)</code></p>
+      <h3><a href="./lessons/0008-searchable-netlist-and-bom-inspector.html">Lesson 0008: Searchable Netlist, Virtualised BOM &amp; Iterator Adapters</a></h3>
+      <p>Filtering components and nets with <code>TextEdit::singleline</code>, <code>.filter()</code>, and virtualised scrolling via <code>ScrollArea::vertical().show_rows(...)</code></p>
     </div>
     <div class="lesson-card-meta">
       <span><strong><code>egui</code> Skill:</strong> </span>
@@ -204,7 +205,7 @@ flowchart LR
         <span class="lesson-card-mutants"></span>
       </div>
       <h3><a href="./lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html">Lesson 0009: Keyboard Shortcuts, Data-Carrying Enums &amp; Point-to-Point CAD Ruler</a></h3>
-      <p>Binding CAD hotkeys (<code>F</code>, <code>M</code>, <code>Esc</code>) via <code>ctx.input_mut</code> + <code>consume_key</code>, modeling tool state machines with data-carrying Rust enums, and simulating key presses in <code>egui_kittest</code></p>
+      <p>Binding CAD hotkeys (<code>F</code>, <code>M</code>, <code>Esc</code>) via <code>ctx.input_mut</code> + <code>consume_key</code>, modelling tool state machines with data-carrying Rust enums, and simulating key presses in <code>egui_kittest</code></p>
     </div>
     <div class="lesson-card-meta">
       <span><strong><code>egui</code> Skill:</strong> </span>
@@ -216,7 +217,7 @@ flowchart LR
 
 <div class="prose-col">
 <h2>Reference Sheets &amp; Printable Cheat Sheets</h2>
-<p>These reference documents compress the core Rust, immediate-mode GUI, and mutation-testing mechanics into quick-lookup tables designed for both screen review and clean paper printing:</p>
+<p>Turns out, having a one-page cheat sheet next to your editor saves a lot of tab-switching. These reference documents compress the core Rust, immediate-mode GUI, and mutation-testing mechanics into quick-lookup tables designed for both screen review and clean paper printing:</p>
 <table class="ref-table">
 <thead>
 <tr>
@@ -240,7 +241,7 @@ flowchart LR
 </tbody>
 </table>
 <h2>Running the Companion Rust Apps Locally</h2>
-<p>Every lesson is backed by a standalone, runnable Cargo package under <code>./apps/&lt;NNNN-lesson-slug&gt;/</code> that is verified to compile with zero warnings and pass both <code>cargo test</code> and <code>cargo mutants</code>:</p>
+<p>Every lesson is backed by a standalone, runnable Cargo package under <code>./apps/&lt;NNNN-lesson-slug&gt;/</code> that compiles with zero warnings and passes both <code>cargo test</code> and <code>cargo mutants</code>:</p>
 <pre><code class="language-bash"># Launch Lesson 0005's interactive PCB Reviewer desktop window
 cargo run --manifest-path ./apps/0005-hit-testing-and-net-cross-probing/Cargo.toml
 
@@ -248,7 +249,7 @@ cargo run --manifest-path ./apps/0005-hit-testing-and-net-cross-probing/Cargo.to
 cargo test --manifest-path ./apps/0005-hit-testing-and-net-cross-probing/Cargo.toml
 cargo mutants -d ./apps/0005-hit-testing-and-net-cross-probing</code></pre>
 <div class="teacher-prompt-box">
-  <strong>Ready to begin?</strong> Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html"><strong>Lesson 0000: Bootstrapping Your Rust &amp; <code>eframe</code> Project</strong></a> or jump to <a href="./lessons/0005-hit-testing-and-net-cross-probing.html"><strong>Lesson 0005: Spatial Hit-Testing &amp; Net Cross-Probing</strong></a>.
+  <strong>Ready to dive in?</strong> Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html"><strong>Lesson 0000: Bootstrapping Your Rust &amp; <code>eframe</code> Project</strong></a> or jump straight to <a href="./lessons/0005-hit-testing-and-net-cross-probing.html"><strong>Lesson 0005: Spatial Hit-Testing &amp; Net Cross-Probing</strong></a>.
 </div>
 </div>
     </article>

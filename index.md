@@ -4,7 +4,9 @@ subtitle: A hands-on, mutation-tested engineering course from immediate-mode fun
 page_type: index
 ---
 
-Welcome to the interactive course index.{{sidenote:Every lesson in this repository pairs an interactive HTML tutorial (with live in-browser simulators, code-completion labs, and retrieval quizzes) with a real, runnable Cargo project under `./apps/<NNNN-slug>/`.}} Each lesson introduces **one focused `egui` capability** alongside **one just-in-time Rust concept** and verifies assertion strength continuously using `cargo test` and [`cargo-mutants`](https://mutants.rs/).
+Learning a new GUI framework from toy counter apps is easy. Building a real tool with a 2D CAD canvas, spatial hit-testing, and undo history is where things get interesting.
+
+So, in this course, we are going to learn Rust and Emil Ernerfeldt's [`egui`](https://github.com/emilk/egui) by building a **Schematic & PCB Design Reviewer** from scratch.{{sidenote:Every lesson in this repository pairs an interactive HTML tutorial (with live in-browser simulators, code-completion labs, and retrieval quizzes) with a real, runnable Cargo project under `./apps/<NNNN-slug>/`.}} Each lesson introduces **one focused `egui` capability** alongside **one just-in-time Rust concept**—and because we like keeping our sanity as the codebase grows, we verify our assertions continuously with `cargo test` and Martin Pool's [`cargo-mutants`](https://mutants.rs/).
 
 ```mermaid
 flowchart LR
@@ -18,13 +20,13 @@ _Five-Act Curriculum Progression: Every lesson builds toward a production Schema
 
 ## Published Interactive Lessons (`0000`–`0009`)
 
-Start with [Lesson 0000](./lessons/0000-project-setup-and-eframe-boot.html) to set up your Cargo project and mutation-testing harness, or jump directly to any completed module below:
+Start with [Lesson 0000](./lessons/0000-project-setup-and-eframe-boot.html) to set up your Cargo project and mutation-testing harness, or jump straight into any completed module below:
 
 {{widget:lesson-cards}}
 
 ## Reference Sheets & Printable Cheat Sheets
 
-These reference documents compress the core Rust, immediate-mode GUI, and mutation-testing mechanics into quick-lookup tables designed for both screen review and clean paper printing:
+Turns out, having a one-page cheat sheet next to your editor saves a lot of tab-switching. These reference documents compress the core Rust, immediate-mode GUI, and mutation-testing mechanics into quick-lookup tables designed for both screen review and clean paper printing:
 
 | Reference Sheet | What It Covers |
 | --- | --- |
@@ -34,7 +36,7 @@ These reference documents compress the core Rust, immediate-mode GUI, and mutati
 
 ## Running the Companion Rust Apps Locally
 
-Every lesson is backed by a standalone, runnable Cargo package under `./apps/<NNNN-lesson-slug>/` that is verified to compile with zero warnings and pass both `cargo test` and `cargo mutants`:
+Every lesson is backed by a standalone, runnable Cargo package under `./apps/<NNNN-lesson-slug>/` that compiles with zero warnings and passes both `cargo test` and `cargo mutants`:
 
 ```bash
 # Launch Lesson 0005's interactive PCB Reviewer desktop window
@@ -46,5 +48,5 @@ cargo mutants -d ./apps/0005-hit-testing-and-net-cross-probing
 ```
 
 :::teacher-prompt
-**Ready to begin?** Start with [**Lesson 0000: Bootstrapping Your Rust & `eframe` Project**](./lessons/0000-project-setup-and-eframe-boot.html) or jump to [**Lesson 0005: Spatial Hit-Testing & Net Cross-Probing**](./lessons/0005-hit-testing-and-net-cross-probing.html).
+**Ready to dive in?** Start with [**Lesson 0000: Bootstrapping Your Rust & `eframe` Project**](./lessons/0000-project-setup-and-eframe-boot.html) or jump straight to [**Lesson 0005: Spatial Hit-Testing & Net Cross-Probing**](./lessons/0005-hit-testing-and-net-cross-probing.html).
 :::

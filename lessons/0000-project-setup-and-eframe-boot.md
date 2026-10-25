@@ -5,24 +5,26 @@ lesson_num: "0000"
 act_badge: "Mission: Schematic & PCB Design Review System"
 ---
 
-Before we write the layer-visibility toggles and 2D board viewport in [Lesson 0001](./0001-the-immediate-mode-loop.html), that code needs a real, runnable Rust project to live in. In this lesson, you will learn how Cargo structures a Rust binary, how [`eframe`](../reference/glossary.html) and [`egui`](../reference/glossary.html) divide responsibilities, and how `fn main()` boots a native desktop window.
+The joy of building a custom hardware tool is getting your own PCB viewport up on screen. The first hurdle, though, is getting past a blank terminal and figuring out which crate actually opens the window.
+
+Before we wire up the layer-visibility toggles in [Lesson 0001](./0001-the-immediate-mode-loop.html), our code needs a real, runnable Rust project to live in. So, let's set up Cargo, sort out how [`eframe`](../reference/glossary.html) and [`egui`](../reference/glossary.html) divide the work, and get `fn main()` booting a native desktop window.
 
 ## 1. `egui` vs. `eframe`: Who Does What?
 
-A common surprise for newcomers is that the `egui` crate itself does not open OS windows or talk directly to Metal, Vulkan, or OpenGL.{{sidenote:Because [`egui`](https://docs.rs/egui/latest/egui/) only takes input events and outputs 2D triangles and textures, it can be embedded inside game engines, custom CAD renderers, or headless test runners.}}
+Turns out, Emil Ernerfeldt's `egui` crate doesn't actually open OS windows or talk directly to Metal, Vulkan, or OpenGL.{{sidenote:Because [`egui`](https://docs.rs/egui/latest/egui/) only takes input events and outputs 2D triangles and textures, it can be embedded inside game engines, custom CAD renderers, or headless test runners.}}
 
 - **`egui` (The UI Core):** Computes widget layouts, processes pointer/keyboard state, and generates 2D vector shapes for a single frame.
-- **`eframe` (The App Shell):** The official framework wrapper ([`docs.rs/eframe`](https://docs.rs/eframe/latest/eframe/)) that creates a native desktop window (or WebAssembly canvas), initializes the GPU painter, and calls your app's `update()` method on every repaint.
+- **`eframe` (The App Shell):** The official framework wrapper ([`docs.rs/eframe`](https://docs.rs/eframe/latest/eframe/)) that creates a native desktop window (or WebAssembly canvas), initialises the GPU painter, and calls your app's `update()` method on every repaint.
 
 ```mermaid
 flowchart LR
     Cargo["Cargo.toml<br/>(eframe = 0.33)"] --> Main["fn main()<br/>eframe::run_native(...)"]
-    Main -->|"Runs once at startup"| Init["PcbReviewerApp::default()<br/>(Initializes struct state)"]
+    Main -->|"Runs once at startup"| Init["PcbReviewerApp::default()<br/>(Initialises struct state)"]
     Init --> Loop["eframe Event & Render Loop"]
     Loop -->|"Calls every frame (~60 Hz)"| Update["impl eframe::App for PcbReviewerApp<br/>fn update(&mut self, ctx, frame)"]
     Update -->|"Emits 2D shapes"| Loop
 ```
-_Figure 0.1: How Cargo and `eframe::run_native` initialize your state once, then drive the Lesson 0001 `update()` loop every frame._
+_Figure 0.1: How Cargo and `eframe::run_native` initialise your state once, then drive the Lesson 0001 `update()` loop every frame._
 
 ## 2. Creating the Project & Configuring `Cargo.toml`
 
@@ -39,17 +41,17 @@ edition = "2024"
 [dependencies]
 eframe = "0.33"
 
-# Optimize dependencies (like egui/eframe) even in debug builds so our
+# Optimise dependencies (like egui/eframe) even in debug builds so our
 # 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
 [profile.dev.package."*"]
 opt-level = 2
 ```
 
-That final three-line block ([Cargo Profile Overrides](https://doc.rust-lang.org/cargo/reference/profiles.html#overrides)) is essential for graphics and CAD tools in Rust: unoptimized debug builds (`opt-level = 0`) make software rasterizing and tessellation sluggish, whereas `opt-level = 2` on `package."*"` compiles third-party crates once at near-release speed while compiling your own `src/main.rs` edits in sub-seconds.
+Now, those last three lines ([Cargo Profile Overrides](https://doc.rust-lang.org/cargo/reference/profiles.html#overrides)) are doing a lot of heavy lifting. If you run a 2D CAD canvas in a stock Rust debug build (`opt-level = 0`), software rasterising and tessellation can feel like wading through treacle. By setting `opt-level = 2` on `package."*"`, Cargo compiles third-party crates once at near-release speed so our viewport stays locked at 60 FPS, while our own edits in `src/main.rs` still recompile in under a second. Best of both worlds.
 
 ## 3. Anatomy of `src/main.rs`
 
-Now let's look at the complete, runnable `src/main.rs` that hosts our `PcbReviewerApp` struct:{{sidenote:In Rust, [`Result<T, E>`](https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html) represents an operation that either succeeds (`Ok(T)`) or fails (`Err(E)`). `eframe::Result` is a type alias for `Result<(), eframe::Error>`.}}
+So, let's look at the complete, runnable `src/main.rs` that hosts our `PcbReviewerApp` struct:{{sidenote:In Rust, [`Result<T, E>`](https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html) represents an operation that either succeeds (`Ok(T)`) or fails (`Err(E)`). `eframe::Result` is a type alias for `Result<(), eframe::Error>`.}}
 
 ```rust
 use eframe::egui;
@@ -121,19 +123,21 @@ mod tests {
 
 ### Three Rust Details Worth Unpacking
 
-1. **Builder Pattern on `ViewportBuilder`:** When configuring `eframe::NativeOptions::default()`, we customize `options.viewport` with `egui::ViewportBuilder::default().with_inner_size([1024.0, 720.0])` to request a `1024×720` logical-point window while keeping all other window options at their defaults.
-2. **Custom `impl Default` Delegating to `reset_layers(&mut self)`:** Rust lets you annotate a struct with `#[derive(Default)]`, which sets every `bool` field to `false`. Because an engineer opening a PCB wants copper and silkscreen visible immediately (`true`), we write an explicit `impl Default for PcbReviewerApp` block that calls `app.reset_layers()`. Putting the layer initialization in a dedicated `reset_layers(&mut self)` method also allows `cargo-mutants` (which skips `impl Default` blocks directly to avoid infinite recursion) to mutate and verify our initialization logic.
+1. **Builder Pattern on `ViewportBuilder`:** When configuring `eframe::NativeOptions::default()`, we customise `options.viewport` with `egui::ViewportBuilder::default().with_inner_size([1024.0, 720.0])` to request a `1024×720` logical-point window while keeping all other window options at their defaults.
+2. **Custom `impl Default` Delegating to `reset_layers(&mut self)`:** Rust lets you slap `#[derive(Default)]` on a struct, which happily sets every `bool` field to `false`. Problem is, opening a PCB viewer where every copper and silkscreen layer is switched off looks suspiciously like a broken app. So, we write an explicit `impl Default for PcbReviewerApp` block that calls `app.reset_layers()`. The reason we pull `reset_layers(&mut self)` out into its own method is also interesting: `cargo-mutants` skips `impl Default` blocks directly to avoid infinite recursion, so extracting a helper method lets our mutation runner actually verify our initialisation logic.
 3. **The App Creator Closure (`Box::new(|_cc| Ok(Box::new(...)))`):** [`eframe::run_native`](https://docs.rs/eframe/latest/eframe/fn.run_native.html) takes a factory closure that runs _once_ after the GPU context (`_cc: &CreationContext`) is ready, allocating your `PcbReviewerApp` on the heap ([`Box::new`](https://doc.rust-lang.org/book/ch15-01-box.html)) and handing ownership to `eframe`.
 
-## 4. Continuous Verification & Mutation Testing from Day 1
+## 4. Sanity-Saving Verification with `cargo-mutants`
 
-Across every lesson in this course, we don't just run the window—we prove our logic is tested with `cargo test` and monitor our assertion coverage using [`cargo-mutants`](https://mutants.rs/) ([Testing & Mutation Cheat Sheet](../reference/testing-and-mutation-cheatsheet.html)).{{sidenote:Why mutation testing? Standard line coverage only checks whether a line of code _ran_ during a test. [`cargo-mutants`](https://mutants.rs/) deliberately hollows out method bodies or flips operators/booleans in your code and verifies that `cargo test` actually fails (a **Caught Mutant**) rather than silently passing (a **Missed Mutant**).}}
+Writing unit tests feels great, right up until you realise a test can execute every line of a function without actually asserting anything useful.
+
+So, from Day 1, we pair `cargo test` with Martin Pool's [`cargo-mutants`](https://mutants.rs/) ([Testing & Mutation Cheat Sheet](../reference/testing-and-mutation-cheatsheet.html)).{{sidenote:Why mutation testing? Standard line coverage only checks whether a line of code _ran_ during a test. [`cargo-mutants`](https://mutants.rs/) deliberately hollows out method bodies or flips operators/booleans in your code and verifies that `cargo test` actually fails (a **Caught Mutant**) rather than silently passing (a **Missed Mutant**).}} It is a fantastic sanity-saver that keeps our tests honest as the reviewer grows.
 
 Look at the `#[cfg(test)] mod tests` block at the bottom of `src/main.rs` above. The attribute `#[cfg(test)]` tells `rustc` to compile that module only when you run `cargo test` ([Rust Book §11.1](https://doc.rust-lang.org/book/ch11-01-writing-tests.html)). When `cargo-mutants` replaces the body of `PcbReviewerApp::reset_layers` with an empty no-op `()`, `assert!(app.show_top_copper)` immediately fails and catches the mutant.
 
 ### Installing `cargo-mutants`
 
-`cargo-mutants` is a third-party Cargo subcommand that works directly with standard, stable Rust (no nightly toolchain required). Install it once globally with `cargo install`, then verify it is available on your `PATH`:
+`cargo-mutants` is a third-party Cargo subcommand that works directly with standard, stable Rust (no nightly toolchain required). Install it once globally with `cargo install`, then check it is on your `PATH`:
 
 ```bash
 # Install the cargo-mutants subcommand once (takes ~30s to compile)
@@ -167,7 +171,7 @@ Every lesson includes a **Cargo Verification & Mutation Coverage** gate. Check o
 :::
 
 :::exercise title="Interactive Lab 2: Complete the Boot Sequence" badge="Skill Practice • Tight Feedback Loop"
-Fill in the three blanks below so our project re-exports `egui` from `eframe`, initializes `PcbReviewerApp` with its default layer state, and implements the `eframe::App` trait:
+Fill in the three blanks below so our project re-exports `egui` from `eframe`, initialises `PcbReviewerApp` with its default layer state, and implements the `eframe::App` trait:
 
 ```rust
 use eframe::{{blank:egui|Which UI crate does `eframe` re-export at the top of `src/main.rs`?|/* 1: crate */|110px}};
@@ -208,15 +212,15 @@ Q: What does `[profile.dev.package."*"] opt-level = 2` in `Cargo.toml` achieve d
 - [x] Dependencies run fast while builds stay quick
 - [ ] Dependencies skip type checks during dev runs
 - [ ] Applications ship with fewer debug line items
-- [ ] Optimization cuts off borrow checks near main
-why: It compiles external dependencies (`eframe`, `egui`, renderer backends) with optimizations (`opt-level = 2`) once so your 2D canvas runs at 60 FPS, while your own crate still compiles incrementally in debug mode.
+- [ ] Optimisation cuts off borrow checks near main
+why: It compiles external dependencies (`eframe`, `egui`, renderer backends) with optimisations (`opt-level = 2`) once so your 2D canvas runs at 60 FPS, while your own crate still compiles incrementally in debug mode.
 hint: Notice that the selector targets `package."*"` (dependencies) under `profile.dev`.
 
 Q: When does the `Box::new(|_cc| Ok(Box::new(PcbReviewerApp::default())))` factory closure run?
 - [ ] During every single frame before panels draw
 - [ ] Whenever your window resizes across the desk
 - [ ] Moments after your native window closes down
-- [x] Once during startup to initialize root state
+- [x] Once during startup to initialise root state
 why: `eframe::run_native` invokes the creation closure once at startup after creating the window and GPU context, constructing your `PcbReviewerApp` state before the `update()` loop begins.
 hint: Contrast `PcbReviewerApp::default()` in `run_native` with `fn update(&mut self, ...)`.
 :::

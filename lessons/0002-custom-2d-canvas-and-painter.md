@@ -5,11 +5,13 @@ lesson_num: "0002"
 act_badge: "Act I: The 2D CAD Canvas & Viewport"
 ---
 
-In [Lesson 0001](./0001-the-immediate-mode-loop.html), our `CentralPanel` only printed placeholder text labels (`"Rendering Top Copper..."`) when a layer checkbox was toggled. Now we begin **Act I: The 2D CAD Canvas & Viewport** by replacing those text placeholders with an actual 2D vector canvas that draws an FR4 PCB substrate, Top and Bottom Copper traces, rectangular SMD pads, plated through-hole vias, Silkscreen courtyards, and unrouted Ratsnest airwires.
+Printing `"Rendering Top Copper..."` as a text label in [Lesson 0001](./0001-the-immediate-mode-loop.html) proved our checkboxes were wired up, but it is a pretty underwhelming way to inspect a circuit board.
+
+So, welcome to **Act I: The 2D CAD Canvas & Viewport**. We are going to replace those text placeholders with a real 2D vector canvas that draws an FR4 PCB substrate, Top and Bottom Copper traces, rectangular SMD pads, plated through-hole vias, Silkscreen courtyards, and unrouted Ratsnest airwires.
 
 ## 1. Reserving Canvas Space with `ui.allocate_painter`
 
-Unlike standard widgets (`ui.checkbox`, `ui.button`) that compute their own size, a 2D CAD viewport needs you to explicitly tell `egui` how much rectangle space to claim and what mouse interactions to listen for.{{sidenote:See [`Ui::allocate_painter`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.allocate_painter) in the official `egui` docs: it returns a two-element Rust tuple `(Response, Painter)` clipped to the allocated rectangle.}}
+Unlike standard widgets (`ui.checkbox`, `ui.button`) that know their own size, a 2D CAD viewport needs you to explicitly tell `egui` how much rectangular space to claim and what mouse interactions to listen for.{{sidenote:See [`Ui::allocate_painter`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.allocate_painter) in the official `egui` docs: it returns a two-element Rust tuple `(Response, Painter)` clipped to the allocated rectangle.}}
 
 ```rust
 egui::CentralPanel::default().show(ctx, |ui| {
@@ -37,16 +39,18 @@ _Figure 2.1: `ui.allocate_painter` reserves a screen-space `Rect` and returns a 
 
 ## 2. Screen-Space Primitives & Rust's `Copy` Trait
 
-In `egui`, screen coordinates are measured in logical points from the top-left corner of the window (`(0.0, 0.0)`), where `+x` points right and `+y` points down. Five lightweight types power all 2D CAD drawing:{{sidenote:In Rust ([Rust Book §4.1](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy)), small stack-only types like `Pos2` (8 bytes), `Vec2` (8 bytes), `Rect` (16 bytes), `Color32` (4 bytes), and `Stroke` (8 bytes) implement the `Copy` trait. Passing `f_cu_stroke` into three `painter.line_segment(...)` calls copies 8 bytes on the stack each time—ownership never moves!}}
+In `egui`, screen coordinates are measured in logical points from the top-left corner of the window (`(0.0, 0.0)`), where `+x` points right and `+y` points down. Five lightweight types power all of our 2D CAD drawing:{{sidenote:In Rust ([Rust Book §4.1](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy)), small stack-only types like `Pos2` (8 bytes), `Vec2` (8 bytes), `Rect` (16 bytes), `Color32` (4 bytes), and `Stroke` (8 bytes) implement the `Copy` trait. Passing `f_cu_stroke` into three `painter.line_segment(...)` calls copies 8 bytes on the stack each time—ownership never moves!}}
 
-1. **Position (`Pos2` / `pos2(x, y)`):** A specific 2D coordinate point (e.g. a via center or pad center). Adding a displacement vector to a point yields a new point: `origin + vec2(80.0, 90.0)`.
+1. **Position (`Pos2` / `pos2(x, y)`):** A specific 2D coordinate point (e.g. a via centre or pad centre). Adding a displacement vector to a point yields a new point: `origin + vec2(80.0, 90.0)`.
 2. **Displacement / Size (`Vec2` / `vec2(w, h)`):** A 2D offset or width/height pair (e.g. `vec2(20.0, 12.0)` for an SMD pad's dimensions).
 3. **Bounding Box (`Rect`):** Defined by its top-left `min: Pos2` and bottom-right `max: Pos2` corners.
-4. **Color & Outline (`Color32` & `Stroke`):** `Color32::from_rgb(r, g, b)` specifies a color, and `Stroke::new(width_f32, color)` bundles line thickness and color for traces and component outlines.
+4. **Colour & Outline (`Color32` & `Stroke`):** `Color32::from_rgb(r, g, b)` specifies an RGB colour, and `Stroke::new(width_f32, color)` bundles line thickness and colour for traces and component outlines.
 
 ## 3. Extracting Pure Geometry Functions for `cargo mutants`
 
-If you bury all coordinate math directly inside `paint_static_board`, you cannot unit-test your pad or board bounds without spinning up a full UI frame. Instead, extract pure geometry helpers that take `Copy` inputs (`Rect`, `Pos2`, `Vec2`) and return a `Rect`:{{sidenote:Notice why we write `Stroke::new(5.0_f32, ...)` with an explicit `_f32` suffix: `Stroke::new` accepts generic `impl Into<f32>`, and Rust 1.97+ warns if an untyped float literal falls back to `f32` through a generic trait bound.}}
+Now, if you bury all of your coordinate maths directly inside `paint_static_board`, you cannot unit-test your pad or board bounds without spinning up a full UI frame.
+
+Instead, let's extract pure geometry helpers that take `Copy` inputs (`Rect`, `Pos2`, `Vec2`) and return a `Rect`:{{sidenote:Turns out, writing `Stroke::new(5.0_f32, ...)` with an explicit `_f32` suffix saves you a compiler warning: `Stroke::new` accepts generic `impl Into<f32>`, and Rust 1.97+ warns if an untyped float literal falls back to `f32` through a generic trait bound.}}
 
 ```rust
 /// Computes the inset FR4 board outline `Rect` inside the allocated `canvas_rect`
@@ -58,7 +62,7 @@ pub fn centered_board_rect(canvas_rect: Rect, margin: f32) -> Rect {
     )
 }
 
-/// Computes the bounding `Rect` for a rectangular SMD pad centered at `center`
+/// Computes the bounding `Rect` for a rectangular SMD pad centred at `center`
 /// with width `size.x` and height `size.y`.
 pub fn smd_pad_rect(center: Pos2, size: Vec2) -> Rect {
     let half_w = size.x / 2.0;
@@ -98,7 +102,7 @@ success: **Nailed it!** Your helper computes symmetric pad bounds from `size.x /
 :::
 
 :::verify title="Interactive Lab 3: Catching Arithmetic Sign & Factor Mutants" badge="cargo test + cargo mutants" tier="Tier 2: Geometry Unit Tests" caught="23 Caught (2 Unviable)" missed="0 Missed"
-When `cargo mutants` inspects `centered_board_rect` and `smd_pad_rect`, it systematically mutates every `+` to `-` and `*`, every `-` to `+` and `/`, and every `/` to `*` and `%` (25 total mutants across the file!). Notice why our test uses non-zero, asymmetric coordinates like `pos2(100.0, 60.0)` and `vec2(16.0, 10.0)`—if you tested at `pos2(0.0, 0.0)`, then `0.0 - half_w` mutated to `0.0 / half_w` would both evaluate to `0.0` when `half_w == 0.0`!
+When `cargo mutants` inspects `centered_board_rect` and `smd_pad_rect`, it systematically mutates every `+` to `-` and `*`, every `-` to `+` and `/`, and every `/` to `*` and `%` (25 total mutants across the file!). The reason our test uses non-zero, asymmetric coordinates like `pos2(100.0, 60.0)` and `vec2(16.0, 10.0)` is interesting: if you tested at `pos2(0.0, 0.0)`, then `0.0 - half_w` mutated to `0.0 / half_w` would both evaluate to `0.0` when `half_w == 0.0`!
 
 ```rust
 #[test]
@@ -157,5 +161,5 @@ Compare how `allocate_painter` reserves a `Rect` and clips all shapes drawn with
 :::
 
 :::teacher-prompt
-**Next Step:** Right now our board coordinates are hardcoded in screen pixels relative to `board_rect.min`. Ready to express the board in real physical millimeters (`mm`) and add smooth pan and cursor-anchored zoom in [**Lesson 0003: World-to-Screen Transforms, Pan, and Zoom (`TSTransform`)**](./0003-world-to-screen-transforms-pan-and-zoom.html)?
+**Next Step:** Right now our board coordinates are hardcoded in screen pixels relative to `board_rect.min`. Ready to express the board in real physical millimetres (`mm`) and add smooth pan and cursor-anchored zoom in [**Lesson 0003: World-to-Screen Transforms, Pan, and Zoom (`TSTransform`)**](./0003-world-to-screen-transforms-pan-and-zoom.html)?
 :::

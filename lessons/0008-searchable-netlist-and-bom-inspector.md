@@ -1,11 +1,13 @@
 ---
-title: "Lesson 0008: Searchable Netlist, Virtualized BOM & Iterator Adapters"
-subtitle: Filtering components and nets with `TextEdit::singleline`, `.filter()`, and virtualized scrolling via `ScrollArea::vertical().show_rows(...)`
+title: "Lesson 0008: Searchable Netlist, Virtualised BOM & Iterator Adapters"
+subtitle: Filtering components and nets with `TextEdit::singleline`, `.filter()`, and virtualised scrolling via `ScrollArea::vertical().show_rows(...)`
 lesson_num: "0008"
 act_badge: "Act II: Schematic Views, Layout & egui_kittest"
 ---
 
-In [Lesson 0007](./0007-split-viewports-and-egui-scene.html), we wired schematic-to-PCB cross-probing across split viewports. On a production board with hundreds of passive components and ICs, engineers need a fast **Bill of Materials (BOM) & Netlist Inspector** where typing `"u1"`, `"10k"`, or `"spi_clk"` filters the component list in real time and clicking any matching row cross-probes that footprint on the canvas.
+A row of three buttons in a toolbar works fine for a tiny demo board. Try doing that on a synth voice card with 400 passives and ICs, though, and your toolbar will run right off the side of your monitor.
+
+In [Lesson 0007](./0007-split-viewports-and-egui-scene.html), we wired schematic-to-PCB cross-probing across split viewports. Now, let's build a proper **Bill of Materials (BOM) & Netlist Inspector** where typing `"u1"`, `"10k"`, or `"spi_clk"` filters the component list in real time and clicking any matching row cross-probes that footprint on the canvas.
 
 ```mermaid
 flowchart LR
@@ -14,11 +16,11 @@ flowchart LR
     Virt --> Slice["&matching[row_range]<br/>(Only visible rows laid out!)"]
     Slice --> Probe["Click BOM Row -> view.focus_component(&board, &comp.ref_des)"]
 ```
-_Figure 8.1: `TextEdit::singleline` mutates the query string in place, `.filter()` selects matching components, and `show_rows` virtualizes layout to only the visible slice `&matching[row_range]`._
+_Figure 8.1: `TextEdit::singleline` mutates the query string in place, `.filter()` selects matching components, and `show_rows` virtualises layout to only the visible slice `&matching[row_range]`._
 
 ## 1. Just-in-Time Rust: Iterator Adapters (`.filter()`, `.enumerate()`) & Slices (`&[T]`)
 
-To filter components case-insensitively across their reference designator (`U1`), value (`LDO_3V3`), package (`SOT-23`), or connected net name (`VCC_3V3`), we normalize the query with `.trim().to_ascii_lowercase()` and chain Rust's zero-cost iterator adapters ([Rust Book §13.2](https://doc.rust-lang.org/book/ch13-02-iterators.html)):{{sidenote:Why return `Vec<ComponentSymbol>` or slice indices via `&matching[row_range]`? A Rust slice `&matching[row_range]` (`Range<usize>`) is a bounds-checked window into the contiguous vector that lets us iterate over just the visible viewport rows with `.enumerate()`!}}
+To filter components case-insensitively across their reference designator (`U1`), value (`LDO_3V3`), package (`SOT-23`), or connected net name (`VCC_3V3`), we normalise the query with `.trim().to_ascii_lowercase()` and chain Rust's zero-cost iterator adapters ([Rust Book §13.2](https://doc.rust-lang.org/book/ch13-02-iterators.html)):{{sidenote:Why slice via `&matching[row_range]`? A Rust slice `&matching[row_range]` (`Range<usize>`) is a bounds-checked window into the contiguous vector that lets us iterate over just the visible viewport rows with `.enumerate()`.}}
 
 ```rust
 impl ComponentSymbol {
@@ -49,9 +51,11 @@ impl BoardModel {
 }
 ```
 
-## 2. Virtualized Scrolling with `ScrollArea::show_rows` & `Grid`
+## 2. Virtualised Scrolling with `ScrollArea::show_rows` & `Grid`
 
-Even in an immediate-mode GUI, laying out 10,000 offscreen table rows every frame would waste CPU time. [`ScrollArea::show_rows`](https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows) computes the exact `row_range: Range<usize>` currently visible inside the scroll viewport based on `row_height_sans_spacing` and calls your closure for _only those visible rows_:
+Now, even in an immediate-mode GUI, laying out 10,000 offscreen table rows on every 60 Hz frame is a great way to warm up your laptop fan for no reason.
+
+Turns out, [`ScrollArea::show_rows`](https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows) makes virtualised scrolling almost ridiculously simple: it calculates the exact `row_range: Range<usize>` currently visible inside the scroll viewport based on `row_height_sans_spacing` and calls your closure for _only those visible rows_:
 
 ```rust
 ui.horizontal(|ui| {
@@ -83,8 +87,8 @@ egui::ScrollArea::vertical()
 
 {{widget:bom-scroll-sim}}
 
-:::exercise title="Interactive Lab 2: Complete the BOM Filter & Virtualized Scroll Loop" badge=".filter() • text_edit_singleline • show_rows"
-Fill in the three blanks below to (1) filter components matching the query, (2) bind the search input to `&mut self.view.bom_search_query`, and (3) virtualize row rendering with `show_rows`:
+:::exercise title="Interactive Lab 2: Complete the BOM Filter & Virtualised Scroll Loop" badge=".filter() • text_edit_singleline • show_rows"
+Fill in the three blanks below to (1) filter components matching the query, (2) bind the search input to `&mut self.view.bom_search_query`, and (3) virtualise row rendering with `show_rows`:
 
 ```rust
 pub fn filter_components(&self, query: &str) -> Vec<ComponentSymbol> {
@@ -101,7 +105,7 @@ ui.{{blank:text_edit_singleline|Call the `Ui` convenience method for a single-li
 let matching = self.board.filter_components(&self.view.bom_search_query);
 egui::ScrollArea::vertical()
     .max_height(180.0)
-    .{{blank:show_rows|Call the `ScrollArea` method that virtualizes fixed-height rows (`show_rows`).|/* 3: virtual */|120px}}(ui, 22.0, matching.len(), |ui, row_range| {
+    .{{blank:show_rows|Call the `ScrollArea` method that virtualises fixed-height rows (`show_rows`).|/* 3: virtual */|120px}}(ui, 22.0, matching.len(), |ui, row_range| {
         for comp in &matching[row_range] {
             if ui.button(comp.inspector_label()).clicked() {
                 self.view.focus_component(&self.board, &comp.ref_des);
@@ -111,12 +115,12 @@ egui::ScrollArea::vertical()
 ```
 :::prompts
 hint: **Hints:** (1) `filter`. (2) `text_edit_singleline`. (3) `show_rows`.
-success: **Excellent!** Your BOM inspector filters components with `.filter()`, edits the query in place with `ui.text_edit_singleline(...)`, and virtualizes layout via `show_rows(...)`.
+success: **Excellent!** Your BOM inspector filters components with `.filter()`, edits the query in place with `ui.text_edit_singleline(...)`, and virtualises layout via `show_rows(...)`.
 :::
 :::
 
 :::verify title="Interactive Lab 3: Catching `!` and `||` → `&&` Filter Mutants" badge="cargo test + cargo mutants" tier="Tier 2 + 6: BOM Filter & UI" caught="47 Caught (12 Unviable)" missed="0 Missed"
-In `ComponentSymbol::matches_query`, four `||` branches test `ref_des`, `value`, `package_name`, and `primary_net.signal_name()`. When `cargo mutants` flips any single `||` into `&&`, a test that only searches for `"U1"` would miss the mutations on the other three branches! By asserting queries that match _exclusively_ each field (`"r12"`, `"ldo_3v3"`, `"header"`, `"spi_clk"`, plus an empty query and a non-matching query `"zz_nonexistent"`), our test suite catches every single boolean mutant!
+In `ComponentSymbol::matches_query`, four `||` branches test `ref_des`, `value`, `package_name`, and `primary_net.signal_name()`. When `cargo mutants` flips any single `||` into `&&`, a test that only searches for `"U1"` will miss the mutations on the other three branches! By asserting queries that match _exclusively_ each field (`"r12"`, `"ldo_3v3"`, `"header"`, `"spi_clk"`, plus an empty query and a non-matching query `"zz_missing"`), our test suite catches every single boolean mutant.
 
 ```rust
 #[test]
@@ -141,7 +145,7 @@ fn matches_query_checks_ref_des_value_package_and_net_case_insensitively() {
 - [ ] **2. Run `cargo mutants --in-place`:** Verify that all 47 viable mutants (including every `||` → `&&` and `!` mutation in `matches_query`) are **Caught** with **0 Missed**.
 :::
 
-:::quiz title="Retrieval Practice: Virtualized Scrolling, Iterators & Filter Mutants"
+:::quiz title="Retrieval Practice: Virtualised Scrolling, Iterators & Filter Mutants"
 Q: How does `ScrollArea::vertical().show_rows(ui, row_height, total_rows, ...)` stay fast on large BOMs?
 - [ ] Caching every row inside background thread
 - [x] Creating widgets only inside visible range

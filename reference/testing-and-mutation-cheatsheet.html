@@ -36,8 +36,8 @@
 <p class="subtitle">How we verify every PCB Reviewer feature with <code>cargo test</code> and measure real assertion coverage with <code>cargo mutants</code> across Acts I–VI.</p>
 
 <h2>1. Why Mutation Testing Beats Line Coverage in <code>egui</code></h2>
-<p>Traditional line coverage only tells you whether a line of Rust code <em>executed</em> during a test—not whether your test would fail if that line were wrong. In an immediate-mode GUI, calling <code>app.update(...)</code> executes almost every line of your panel layout even if your test contains zero assertions!</p>
-<p><a href="https://mutants.rs/"><code>cargo-mutants</code></a> tests your tests: it copies your project to a scratch directory, systematically injects small faults (<strong>mutants</strong>—such as flipping <code>true</code> to <code>false</code>, replacing <code>+</code> with <code>-</code>, or emptying a method body), and runs <code>cargo test</code> against each mutant.</p>
+<p>Traditional line coverage only tells you whether a line of Rust code <em>executed</em> during a test—not whether your test would fail if that line were wrong. Turns out, in an immediate-mode GUI, calling <code>app.update(...)</code> executes almost every line of your panel layout even if your test contains zero assertions!</p>
+<p>So, we use Martin Pool's <a href="https://mutants.rs/"><code>cargo-mutants</code></a> to test our tests: it copies your project to a scratch directory, systematically injects small faults (<strong>mutants</strong>—such as flipping <code>true</code> to <code>false</code>, replacing <code>+</code> with <code>-</code>, or emptying a method body), and runs <code>cargo test</code> against each mutant.</p>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 flowchart LR
@@ -72,7 +72,7 @@ cargo mutants -f src/main.rs</code></pre>
 <tr>
 <td><strong>Caught</strong></td>
 <td><code>cargo test</code> failed when this mutation was injected. Your test suite actively guards this line of code.</td>
-<td>Celebrate—this behavior is locked down.</td>
+<td>Celebrate—this behaviour is locked down.</td>
 </tr>
 <tr>
 <td><strong>Missed</strong></td>
@@ -115,7 +115,7 @@ exclude_re = [
 <tbody>
 <tr>
 <td><strong>Lessons 0000–0001 &amp; Act I (0002–0005)</strong></td>
-<td><code>#[cfg(test)]</code>, <code>#[test]</code>, <code>assert_eq!</code>, pure domain/math methods</td>
+<td><code>#[cfg(test)]</code>, <code>#[test]</code>, <code>assert_eq!</code>, pure domain/maths methods</td>
 <td>Default layer visibility flags, preset state transitions, <code>Rect</code> bounds, <code>TSTransform</code> pan/zoom round-trips, layer Z-ordering, and net hit-testing.</td>
 </tr>
 <tr>

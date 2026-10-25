@@ -870,7 +870,7 @@ def widget_dual_scene_sim(scripts_out: list[str]) -> str:
     <span class="panel-badge">TopBottomPanel • egui::Scene • &amp;BoardModel + &amp;mut ViewState</span>
   </div>
   <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-    Click any schematic symbol button (<strong>Probe U1</strong>, <strong>Probe R12</strong>, or <strong>Probe J1</strong>) below. Watch how <code>self.view.focus_component(&amp;self.board, ref_des)</code> reads the component's physical coordinates from <code>&amp;self.board</code> and updates <code>self.view.pcb_scene_rect</code> to center the PCB camera on that footprint.
+    Click any schematic symbol button (<strong>Probe U1</strong>, <strong>Probe R12</strong>, or <strong>Probe J1</strong>) below. Watch how <code>self.view.focus_component(&amp;self.board, ref_des)</code> reads the component's physical coordinates from <code>&amp;self.board</code> and updates <code>self.view.pcb_scene_rect</code> to centre the PCB camera on that footprint.
   </p>
 
   <div class="sim-grid">
@@ -922,11 +922,11 @@ def widget_bom_scroll_sim(scripts_out: list[str]) -> str:
     scripts_out.append('    initBomVirtualScrollSimulator("bom-scroll-sim");')
     return """<section class="full-width-panel" id="bom-scroll-sim">
   <div class="panel-header">
-    <span class="panel-title">Interactive Lab 1: Live BOM Filter &amp; Virtualized <code>show_rows</code> Inspector</span>
+    <span class="panel-title">Interactive Lab 1: Live BOM Filter &amp; Virtualised <code>show_rows</code> Inspector</span>
     <span class="panel-badge">TextEdit::singleline • .filter() • ScrollArea::show_rows</span>
   </div>
   <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-    Type a query like <code>u1</code>, <code>0603</code>, <code>vcc</code>, or <code>spi</code> into the simulated <code>TextEdit::singleline</code> box below, and click any row in the virtualized <code>Grid</code> to cross-probe that component:
+    Type a query like <code>u1</code>, <code>0603</code>, <code>vcc</code>, or <code>spi</code> into the simulated <code>TextEdit::singleline</code> box below, and click any row in the virtualised <code>Grid</code> to cross-probe that component:
   </p>
 
   <div class="sim-grid">
@@ -940,7 +940,7 @@ def widget_bom_scroll_sim(scripts_out: list[str]) -> str:
     </div>
 
     <div class="sim-box" style="overflow-x:auto;">
-      <h4>2. Virtualized <code>egui::Grid</code> (<code>&amp;matching[row_range]</code>)</h4>
+      <h4>2. Virtualised <code>egui::Grid</code> (<code>&amp;matching[row_range]</code>)</h4>
       <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
         <thead>
           <tr style="border-bottom:1px solid var(--border-strong); color:var(--text-muted); text-align:left;">
@@ -970,7 +970,7 @@ def widget_hotkey_ruler_sim(scripts_out: list[str]) -> str:
     <span class="panel-badge">consume_key • ActiveTool::Measure • hypot()</span>
   </div>
   <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-    Click the simulated hotkey buttons (<code>Key::M</code>, <code>Key::Escape</code>, <code>Key::F</code>) or select different measurement target pads below to inspect how <code>ActiveTool</code> and <code>RulerMeasurement::between</code> compute Δx, Δy, and Euclidean distance in millimeters:
+    Click the simulated hotkey buttons (<code>Key::M</code>, <code>Key::Escape</code>, <code>Key::F</code>) or select different measurement target pads below to inspect how <code>ActiveTool</code> and <code>RulerMeasurement::between</code> compute Δx, Δy, and Euclidean distance in millimetres:
   </p>
 
   <div class="sim-grid">

@@ -36,7 +36,8 @@
 <h1>Lesson 0007: Split Viewports, <code>egui::Scene</code> &amp; Borrow-Checker State Splits</h1>
 <p class="subtitle">Cross-probing from a Schematic Symbol Bar into the 2D PCB camera using <code>TopBottomPanel</code>, <code>egui::Scene</code>, and disjoint struct borrowing (<code>&amp;BoardModel</code> + <code>&amp;mut ViewState</code>)</p>
 
-<p>In <a href="./0006-schematic-symbols-and-text-rendering.html">Lesson 0006</a>, we added reference designators (<code>U1</code>, <code>R12</code>, <code>J1</code>) and verified our UI panels headlessly with <code>egui_kittest::Harness</code>. In a real PCB design review workflow, engineers work with <strong>two synchronized views</strong>: a <strong>Schematic View</strong> showing logical symbols and a <strong>PCB Layout View</strong> showing physical footprints. When you click <code>U1</code> in the schematic, the PCB viewport should immediately highlight <code>U1</code>'s electrical net <em>and</em> pan/zoom the PCB camera straight to <code>U1</code>'s physical coordinates!</p>
+<p>When you are debugging a real hardware board, you almost always have <strong>two synchronised views</strong> open side by side: a <strong>Schematic View</strong> showing logical symbols and a <strong>PCB Layout View</strong> showing physical footprints. Click <code>U1</code> in the schematic, and you want the PCB viewport to immediately highlight <code>U1</code>'s electrical net <em>and</em> pan the PCB camera straight to <code>U1</code>'s physical coordinates.</p>
+<p>In <a href="./0006-schematic-symbols-and-text-rendering.html">Lesson 0006</a>, we added reference designators (<code>U1</code>, <code>R12</code>, <code>J1</code>) and verified our UI panels headlessly with <code>egui_kittest::Harness</code>. Now, let's build that schematic-to-PCB cross-prober—and solve one of the most classic Rust borrow-checker puzzles you will hit in <code>egui</code> along the way.</p>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 flowchart LR
@@ -49,14 +50,15 @@ flowchart LR
 </figure>
 <p><em>Figure 7.1: Splitting immutable domain data (<code>BoardModel</code>) from mutable camera state (<code>ViewState</code>) allows simultaneous shared + mutable borrows across split viewports.</em></p>
 <h2>1. Just-in-Time Rust: Disjoint Field Borrowing (<code>&amp;BoardModel</code> vs. <code>&amp;mut ViewState</code>)</h2>
-<p>Suppose you iterate over components in your app while trying to call a <code>&amp;mut self</code> method to recenter the camera:<span class="sidenote-number"></span><span class="sidenote">This pattern—separating read-only domain data from mutable UI/camera state—also prepares our code for Act IV (Lesson 0014), where <code>BoardModel</code> moves into its own standalone <code>pcb-doc</code> crate!</span></p>
+<p>Suppose you iterate over <code>self.components</code> to draw a row of schematic symbol buttons, and inside that loop you call a <code>&amp;mut self</code> method to recentre the camera:<span class="sidenote-number"></span><span class="sidenote">Which leads to a nice architectural bonus: separating read-only domain data from mutable UI/camera state prepares our code for Act IV (Lesson 0014), where <code>BoardModel</code> moves into its own standalone <code>pcb-doc</code> crate!</span></p>
 <pre><code class="language-rust">// ❌ COMPILER ERROR: cannot borrow `*self` as mutable because `self.components` is borrowed as immutable!
 for comp in &amp;self.components {
     if ui.button(&amp;comp.ref_des).clicked() {
         self.focus_on_component(&amp;comp.ref_des); // Borrows all of `&amp;mut self`!
     }
 }</code></pre>
-<p>Rust's borrow checker tracks borrows at the <strong>struct field level</strong>. When we group immutable board data into <code>pub board: BoardModel</code> and mutable UI/camera state into <code>pub view: ViewState</code>, Rust knows that <code>&amp;self.board</code> and <code>&amp;mut self.view</code> never alias in memory!</p>
+<p>If you have written Rust for more than ten minutes, you have probably met that exact error (<code>E0502</code>).</p>
+<p>Turns out, Rust's borrow checker is smarter than it looks at first glance: it tracks borrows at the <strong>individual struct field level</strong>. When we group our read-only board data into <code>pub board: BoardModel</code> and our mutable UI/camera state into <code>pub view: ViewState</code>, <code>rustc</code> can see that <code>&amp;self.board</code> and <code>&amp;mut self.view</code> are completely disjoint in memory!</p>
 <pre><code class="language-rust">pub struct BoardModel {
     pub traces: Vec&lt;TraceSegment&gt;,
     pub pads: Vec&lt;SmdPad&gt;,
@@ -85,7 +87,7 @@ impl ViewState {
     }
 }</code></pre>
 <h2>2. Multi-Panel Layouts with <code>TopBottomPanel</code> &amp; <code>egui::Scene</code></h2>
-<p>Alongside our custom <code>TSTransform</code> canvas from Lesson 0003, <code>egui</code> provides a built-in pan-and-zoom container called <a href="https://docs.rs/egui/latest/egui/containers/scene/struct.Scene.html"><code>egui::Scene</code></a>. You pass <code>&amp;mut self.view.pcb_scene_rect</code> into <code>Scene::new().show(...)</code>, and <code>Scene</code> automatically updates that <code>Rect</code> whenever the user drags or scrolls—or whenever our schematic cross-probe overwrites <code>pcb_scene_rect</code> to jump the camera to a component!</p>
+<p>Alongside our custom <code>TSTransform</code> canvas from Lesson 0003, <code>egui</code> also ships a built-in pan-and-zoom container called <a href="https://docs.rs/egui/latest/egui/containers/scene/struct.Scene.html"><code>egui::Scene</code></a>. You pass <code>&amp;mut self.view.pcb_scene_rect</code> into <code>Scene::new().show(...)</code>, and <code>Scene</code> automatically updates that <code>Rect</code> whenever the user drags or scrolls—or whenever our schematic cross-probe overwrites <code>pcb_scene_rect</code> to jump the camera straight to a component:</p>
 <pre><code class="language-rust">egui::TopBottomPanel::top("schematic_cross_probe_bar").show(ctx, |ui| {
     ui.horizontal(|ui| {
         ui.label("Schematic Symbols (Click to Cross-Probe):");
@@ -105,7 +107,7 @@ impl ViewState {
     <span class="panel-badge">TopBottomPanel • egui::Scene • &amp;BoardModel + &amp;mut ViewState</span>
   </div>
   <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-    Click any schematic symbol button (<strong>Probe U1</strong>, <strong>Probe R12</strong>, or <strong>Probe J1</strong>) below. Watch how <code>self.view.focus_component(&amp;self.board, ref_des)</code> reads the component's physical coordinates from <code>&amp;self.board</code> and updates <code>self.view.pcb_scene_rect</code> to center the PCB camera on that footprint.
+    Click any schematic symbol button (<strong>Probe U1</strong>, <strong>Probe R12</strong>, or <strong>Probe J1</strong>) below. Watch how <code>self.view.focus_component(&amp;self.board, ref_des)</code> reads the component's physical coordinates from <code>&amp;self.board</code> and updates <code>self.view.pcb_scene_rect</code> to centre the PCB camera on that footprint.
   </p>
 
   <div class="sim-grid">
@@ -157,7 +159,7 @@ impl ViewState {
     <span class="panel-title">Interactive Lab 2: Complete the Split-Borrow Cross-Probe Call</span>
     <span class="panel-badge">Borrow Checker • TopBottomPanel • Rect::from_center_size</span>
   </div>
-  <p>Fill in the three blanks below so that (1) <code>focus_component</code> borrows <code>board</code> immutably, (2) centers <code>self.pcb_scene_rect</code> around <code>comp.center_mm</code>, and (3) the top schematic bar passes <code>&amp;self.board</code> while mutating <code>self.view</code>:</p>
+  <p>Fill in the three blanks below so that (1) <code>focus_component</code> borrows <code>board</code> immutably, (2) centres <code>self.pcb_scene_rect</code> around <code>comp.center_mm</code>, and (3) the top schematic bar passes <code>&amp;self.board</code> while mutating <code>self.view</code>:</p>
 <pre class="keep-markup"><code class="language-rust">impl ViewState {
     pub fn focus_component(&amp;mut self, board: <input id="ex-blank-1" class="code-challenge-input" style="width:140px;" placeholder="/* 1: shared ref */" autocomplete="off">, ref_des: &amp;str) -&gt; bool {
         if let Some(comp) = board.find_component(ref_des) {
@@ -187,7 +189,7 @@ for comp in &amp;self.board.components {
 
 <section class="full-width-panel">
   <div class="panel-header">
-    <span class="panel-title">Interactive Lab 3: Verifying Cross-Probe Camera Synchronization in <code>egui_kittest</code></span>
+    <span class="panel-title">Interactive Lab 3: Verifying Cross-Probe Camera Synchronisation in <code>egui_kittest</code></span>
     <span class="panel-badge">cargo test + cargo mutants</span>
   </div>
   <p>In <code>apps/0007-split-viewports-and-egui-scene</code>, our headless <code>egui_kittest</code> test clicks <code>&quot;Probe R12 (10k)&quot;</code> in the top schematic bar and asserts that <code>harness.state().view.pcb_scene_rect.center()</code> jumps to <code>pos2(52.0, 35.0)</code> and <code>selected_net</code> updates to <code>Some(NetId(2))</code>. If <code>cargo mutants</code> deletes the button handler or replaces <code>focus_component</code> with <code>true</code> or <code>false</code>, the test fails immediately!</p>
@@ -252,7 +254,7 @@ fn clicking_schematic_probe_button_updates_pcb_camera_rect_and_net() {
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/containers/scene/struct.Scene.html"><code>egui::Scene</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/nomicon/borrow-splitting.html">The Rustonomicon — &quot;Splitting Borrows&quot;</a>.
 </div>
 <div class="teacher-prompt-box">
-  <strong>Up Next (Lesson 0008):</strong> What happens when a real board has 2,000 components instead of 3? Head to <a href="./0008-searchable-netlist-and-bom-inspector.html"><strong>Lesson 0008: Searchable Netlist, Virtualized BOM &amp; Iterator Adapters</strong></a> to build a filterable, virtualized BOM table using <code>TextEdit::singleline</code> and <code>ScrollArea::show_rows</code>!
+  <strong>Up Next (Lesson 0008):</strong> What happens when a real board has 2,000 components instead of 3? Head to <a href="./0008-searchable-netlist-and-bom-inspector.html"><strong>Lesson 0008: Searchable Netlist, Virtualised BOM &amp; Iterator Adapters</strong></a> to build a filterable, virtualised BOM table using <code>TextEdit::singleline</code> and <code>ScrollArea::show_rows</code>!
 </div>
 </div>
     </article>
@@ -280,7 +282,7 @@ fn clicking_schematic_probe_button_updates_pcb_camera_rect_and_net() {
           inputId: "ex-blank-2",
           accepted: ["from_center_size"],
           getErrorHint: (val) =>
-            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Construct the camera <code>Rect</code> from a center point and size vector (<code>from_center_size</code>).",
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Construct the camera <code>Rect</code> from a centre point and size vector (<code>from_center_size</code>).",
         },
         {
           inputId: "ex-blank-3",
@@ -304,7 +306,7 @@ fn clicking_schematic_probe_button_updates_pcb_camera_rect_and_net() {
             ],
             "correctIndex": 2,
             "explanation": "Rust's borrow checker tracks borrows per struct field, so an immutable borrow of `self.board` can coexist with a mutable borrow of `self.view`.",
-            "wrongHint": "Think about how `rustc` analyzes borrows of two separate fields (`self.board` vs. `self.view`) on the same struct."
+            "wrongHint": "Think about how `rustc` analyses borrows of two separate fields (`self.board` vs. `self.view`) on the same struct."
       },
       {
             "question": "How does `egui::Scene::new().show(ui, &mut self.view.pcb_scene_rect, ...)` persist pan and zoom across frames?",
@@ -315,19 +317,19 @@ fn clicking_schematic_probe_button_updates_pcb_camera_rect_and_net() {
                   "It blocks pointer events inside containers"
             ],
             "correctIndex": 0,
-            "explanation": "`egui::Scene` takes `&mut Rect` (`scene_rect`) and mutates that rectangle in-place whenever the user pans/zooms, or reads it when your code recenters the camera.",
+            "explanation": "`egui::Scene` takes `&mut Rect` (`scene_rect`) and mutates that rectangle in-place whenever the user pans/zooms, or reads it when your code recentres the camera.",
             "wrongHint": "Look at the `&mut self.view.pcb_scene_rect` parameter passed into `Scene::show`."
       },
       {
             "question": "What two view updates does `focus_component` perform when an engineer clicks a schematic symbol?",
             "options": [
                   "Disabling copper layers while panning views",
-                  "Highlighting nets while centering the board",
+                  "Highlighting nets while centring the board",
                   "Allocating new painters while locking state",
                   "Rebuilding font atlases while sorting trace"
             ],
             "correctIndex": 1,
-            "explanation": "`focus_component` sets `selected_net` (highlighting connected pads and traces) and updates `pcb_scene_rect` around `comp.center_mm` (centering the camera).",
+            "explanation": "`focus_component` sets `selected_net` (highlighting connected pads and traces) and updates `pcb_scene_rect` around `comp.center_mm` (centring the camera).",
             "wrongHint": "Check which fields on `ViewState` are updated inside `focus_component`."
       }
 ]);
