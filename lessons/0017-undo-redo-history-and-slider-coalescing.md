@@ -100,7 +100,7 @@ Complete `BoardHistory::record_edit`, `BoardHistory::undo`, and the `egui::Slide
 ```rust
 pub fn record_edit(&mut self, label: &str, before: BoardModel, coalesce_key: Option<&str>) {
     let should_coalesce =
-        self.active_coalesce_key.as_deref() == coalesce_key && coalesce_key.[[is_some()|Coalesce only when coalesce_key is Some(...)|is_some()|115px]];
+        self.active_coalesce_key.as_deref() == coalesce_key && coalesce_key.{{blank:is_some()|Coalesce only when coalesce_key is Some(...)|is_some()|115px}};
 
     if !should_coalesce {
         if self.undo_stack.len() >= self.max_entries {
@@ -120,7 +120,7 @@ pub fn undo(&mut self, current: &mut BoardModel) -> Option<String> {
     let entry = self.undo_stack.pop_back()?;
     self.active_coalesce_key = None;
     let label = entry.label.clone();
-    let prev = std::mem::[[replace(current, entry.doc);;replace(current,entry.doc)|Swap entry.doc into current and return the outgoing BoardModel|replace(...)|245px]];
+    let prev = std::mem::{{blank:replace(current, entry.doc);;replace(current,entry.doc)|Swap entry.doc into current and return the outgoing BoardModel|replace(...)|245px}};
     self.redo_stack.push(HistoryEntry { label: entry.label, doc: prev });
     self.revision += 1;
     Some(label)
@@ -131,7 +131,7 @@ let slider_resp = ui.add(egui::Slider::new(&mut x_mm, 5.0..=95.0).text("Pin X (m
 if slider_resp.changed() {
     self.drag_review_pin_x(pin.id, x_mm);
 }
-if slider_resp.[[drag_stopped()|Commit the coalesce gesture when the slider drag finishes|drag_stopped()|145px]] {
+if slider_resp.{{blank:drag_stopped()|Commit the coalesce gesture when the slider drag finishes|drag_stopped()|145px}} {
     self.commit_drag_gesture();
 }
 ```

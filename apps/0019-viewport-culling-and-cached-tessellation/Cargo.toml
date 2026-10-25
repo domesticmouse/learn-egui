@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = ["crates/pcb-doc"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[package]
+name = "pcb-reviewer"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+eframe = "0.33"
+pcb-doc = { path = "crates/pcb-doc" }
+
+[dev-dependencies]
+egui_kittest = { version = "0.33", features = ["eframe"] }
+
+# Optimize dependencies (like egui/eframe) even in debug builds so our
+# 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
+[profile.dev.package."*"]
+opt-level = 2

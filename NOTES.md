@@ -24,7 +24,7 @@
 
 ## Curriculum Arc (`0000`–`0025`) with Continuous Verification & Mutation Testing
 
-### Completed Lessons (`0000`–`0017`: Foundation + Act I + Act II + Act III + Act IV)
+### Completed Lessons (`0000`–`0021`: Foundation + Act I + Act II + Act III + Act IV + Act V)
 - `0000-project-setup-and-eframe-boot.html` (App: `apps/0000-project-setup-and-eframe-boot`)
   - **`egui` Skill & PCB Feature**: Creating the Cargo crate (`Cargo.toml`, `eframe = "0.33"`, dev-profile optimization) and booting the native window with `eframe::run_native`.
   - **Just-in-Time Rust**: `impl Default` delegating to `reset_layers(&mut self)`, `ViewportBuilder` method chaining, `Box::new`, and `#[cfg(test)]` / `#[test]` / `assert!`.
@@ -110,24 +110,24 @@
   - **Just-in-Time Rust**: Bounded `VecDeque<HistoryEntry>` ring buffer, `std::mem::replace` zero-clone state swaps, and randomized drag-sequence `proptest!`.
   - **Cargo Verification & Mutation Coverage**: 16 workspace tests (including `prop_coalesced_drag_restores_exact_initial_state_in_single_undo`) verifying coalescing, `commit_coalesce()`, redo clearing, and ring-buffer eviction (`217 / 217 viable mutants caught, 22 unviable, 0 missed`).
 
-### Act V: Command Engine, Performance & Polish (`0018`–`0021`)
+### Act V: Command Engine, Performance & Polish (`0018`–`0021`) — *Completed*
 *Goal: Unify menus/shortcuts/CLI into a Command Engine (`egui-command-engine` & `egui-app-runner`), add `panic_hunt` command fuzzing, enforce performance budgets, and run offscreen GPU visual snapshot tests.*
-- `0018-the-command-pattern-and-command-palette.html`
-  - **`egui` Skill & PCB Feature**: Route menu items, toolbar buttons, and a fuzzy-searchable `Cmd+K` modal through a single `CommandSpec` registry (`layer.toggle`, `review.addPin`).
-  - **Just-in-Time Rust**: Function pointers (`fn(&mut Session, &Value) -> Result<Value>`), static registries, and dynamic dispatch.
-  - **Cargo Verification & Mutation Coverage**: Build the Tier 5 `panic_hunt` adversarial command fuzzer (feeding arbitrary/malformed JSON params into every registered `CommandSpec` and asserting zero panics or hangs) + menu parity ratchet (`parity::FLOOR`), verified with `cargo mutants -p pcb-engine`.
-- `0019-viewport-culling-and-cached-tessellation.html`
-  - **`egui` Skill & PCB Feature**: Keep 60 FPS on dense boards (50,000+ pads/segments) by spatial viewport culling (`Rect::intersects`) and batching geometry into `Vec<egui::Shape>`.
-  - **Just-in-Time Rust**: Spatial grid indexing, pre-allocation (`Vec::with_capacity`), and profiling hot loops.
-  - **Cargo Verification & Mutation Coverage**: Prove spatial-index equivalence (`culled_query(rect) == brute_force_filter(rect)`) with `proptest!`, add a Tier 7 frame-time performance budget check (`p50`/`p95` ms), and run `cargo mutants` on the spatial grid.
-- `0020-non-blocking-file-import-and-progress-ui.html`
-  - **`egui` Skill & PCB Feature**: Parse large board files on a background worker while keeping the `egui` window responsive with a live progress bar and `ctx.request_repaint()`.
-  - **Just-in-Time Rust**: Concurrency with `std::thread::spawn`, message passing (`std::sync::mpsc::channel`), and `Send + 'static`.
-  - **Cargo Verification & Mutation Coverage**: Deterministically test background worker progress reporting, clean cancellation on drop, and channel disconnection handling in `cargo test` + `cargo mutants`.
-- `0021-headless-snapshot-testing-and-wasm-build.html`
-  - **`egui` Skill & PCB Feature**: Render the full PCB canvas + inspector offscreen with `wgpu` to capture pixel-accurate PNG visual regression baselines and compile the reviewer for WebAssembly (`wasm32-unknown-unknown`).
-  - **Just-in-Time Rust**: Conditional compilation (`#[cfg(target_arch = "wasm32")]`), feature flags, and process-wide GPU serialization (`testkit::gpu_lock()`).
-  - **Cargo Verification & Mutation Coverage**: Implement Tier 3 & Tier 6 offscreen `wgpu` snapshot diffing guarded by `let _gpu = testkit::gpu_lock();` (so even visual shader/color mutations get caught!) and verify `cargo check --target wasm32-unknown-unknown`.
+- `0018-the-command-pattern-and-command-palette.html` (App: `apps/0018-the-command-pattern-and-command-palette`)
+  - **`egui` Skill & PCB Feature**: Route menu items, toolbar buttons, and a searchable `Key::K` Command Palette modal (`egui::Window`) through a single `CommandSpec` registry (`session.inspect`, `review.addPin`, `review.setStatus`, `review.clearPins`).
+  - **Just-in-Time Rust**: Static slices (`&'static [CommandSpec]`), typed `EngineError` via `thiserror`, `serde_json::Value` parameter inspection, and `COMMAND_PARITY_FLOOR`.
+  - **Cargo Verification & Mutation Coverage**: 17 workspace tests including the Tier 5 `panic_hunt` adversarial JSON fuzzer (`command_registry_dispatch_and_panic_hunt_fuzzer_preserve_invariants`) feeding malformed/non-object/negative/huge JSON payloads into every registered `CommandSpec` (`238 / 238 viable mutants caught, 24 unviable, 0 missed`).
+- `0019-viewport-culling-and-cached-tessellation.html` (App: `apps/0019-viewport-culling-and-cached-tessellation`)
+  - **`egui` Skill & PCB Feature**: Spatial viewport culling (`Rect::intersects`) skipping offscreen pads and stroke-expanded traces before submitting `Painter` commands, plus live `ViewportCullStats` telemetry in `SidePanel::right`.
+  - **Just-in-Time Rust**: Stroke-expanded axis-aligned bounding boxes (`TraceSegment::bounds_mm`), `ViewportCullStats::culled_count()`, `check_cull_budget(elapsed_micros, max_budget_micros)`, and `proptest!`.
+  - **Cargo Verification & Mutation Coverage**: 19 workspace tests (including `prop_spatial_culling_matches_reference_and_preserves_counts`) proving spatial culling equivalence and budget gate boundaries (`255 / 255 viable mutants caught, 29 unviable, 0 missed`).
+- `0020-non-blocking-file-import-and-progress-ui.html` (App: `apps/0020-non-blocking-file-import-and-progress-ui`)
+  - **`egui` Skill & PCB Feature**: Parse JSON board sessions on a background worker thread while polling non-blockingly (`Receiver::try_recv`), rendering `egui::ProgressBar`, and waking the UI loop via `ctx.request_repaint()`.
+  - **Just-in-Time Rust**: `std::thread::spawn`, `std::sync::mpsc::{channel, Receiver}`, `ImportJobMessage`, `ImportJobState`, and cancellation by dropping the `Receiver`.
+  - **Cargo Verification & Mutation Coverage**: 20 workspace tests deterministically testing multi-stage progress fractions, channel disconnection when the UI drops the receiver, and corrupt JSON worker recovery (`269 / 269 viable mutants caught, 33 unviable, 0 missed`).
+- `0021-headless-snapshot-testing-and-wasm-build.html` (App: `apps/0021-headless-snapshot-testing-and-wasm-build`)
+  - **`egui` Skill & PCB Feature**: Serialize GPU/snapshot tests via `gpu_lock()`, compute 64-bit FNV-1a `FrameSnapshotDigest` hashes over the visible layer bitmask (`visible_layer_mask`), culled geometry, and DRC violations, display `Target: native-desktop` / `wasm32-unknown-unknown`, and evaluate release readiness with `QualityScorecard`.
+  - **Just-in-Time Rust**: `std::sync::OnceLock<Mutex<()>>`, panic-free lock recovery via `PoisonError::into_inner`, 64-bit FNV-1a hashing, and `#[cfg(target_arch = "wasm32")]`.
+  - **Cargo Verification & Mutation Coverage**: 21 workspace tests (`15` in `pcb-doc`, `6` in `pcb-reviewer`) verifying `gpu_lock()`, `FrameSnapshotDigest`, `visible_layer_mask()`, and `QualityScorecard::is_release_ready()` (`304 / 304 viable mutants caught, 39 unviable, 0 missed`).
 
 ### Act VI: Real-World KiCad Parsing (`nom`) & Embedded SQL (`turso` / `libsql`) (`0022`–`0025`)
 *Goal: Parse real-world KiCad `.kicad_pcb` and `.kicad_sch` files with `nom` in an `L0` standalone parser crate, verify against pinned real-file corpus oracles, and persist/sync multi-engineer review threads in an embedded Turso (`libsql`) SQL database.*

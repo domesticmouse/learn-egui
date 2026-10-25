@@ -100,7 +100,15 @@ proptest! {
 }
 ```
 
-## 5. Progression of Testing Across the Six Acts
+## 5. Act V `panic_hunt`, `gpu_lock()` Snapshot Digests & Scorecards (`0018`–`0021`)
+
+In Act V, we harden the multi-crate workspace with three production gates:
+
+1. **Tier 5 `panic_hunt` Adversarial Command Fuzzing (`0018`)**: Iterates over every registered `CommandSpec` in `COMMAND_SPECS` (asserting `COMMAND_SPECS.len() >= COMMAND_PARITY_FLOOR`) and feeds malformed/out-of-bounds JSON payloads into `BoardModel::execute_command`, asserting `Err(EngineError::BadParams)` and zero panics.
+2. **Tier 2 + Tier 7 Spatial Culling Equivalence & Budgets (`0019`)**: Uses `proptest!` to prove `culled_pads_in_rect` and `culled_traces_in_rect` match reference filtering across arbitrary camera viewports while `check_cull_budget` enforces microsecond budgets.
+3. **Tier 3/6 `gpu_lock()` & `FrameSnapshotDigest` (`0021`)**: Acquires `let _gpu = gpu_lock();` (`OnceLock<Mutex<()>>` with `PoisonError::into_inner`) on the first line of snapshot tests, computes a deterministic 64-bit FNV-1a digest over visible layer bitmasks and culled geometry counts, and verifies release readiness via `QualityScorecard::is_release_ready()`.
+
+## 6. Progression of Testing Across the Six Acts
 
 | Curriculum Stage | Testing Mechanism Introduced | What `cargo test` + `cargo mutants` Verifies |
 | --- | --- | --- |

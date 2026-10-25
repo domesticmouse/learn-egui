@@ -89,10 +89,10 @@ pub fn from_session_json(raw: &str) -> Result<(String, Self), SessionIoError> {
         schema_version,
         board_id,
         board,
-    } = serde_json::[[from_str::<ReviewSessionEnvelope>(raw);;from_str(raw)|Deserialize ReviewSessionEnvelope from the raw JSON &str|from_str(...)|295px]]
+    } = serde_json::{{blank:from_str::<ReviewSessionEnvelope>(raw);;from_str(raw)|Deserialize ReviewSessionEnvelope from the raw JSON &str|from_str(...)|295px}}
         .map_err(|e| SessionIoError::MalformedJson(e.to_string()))?;
 
-    if schema_version != [[CURRENT_SCHEMA_VERSION|Compare schema_version against CURRENT_SCHEMA_VERSION|CURRENT_SCHEMA_VERSION|215px]] {
+    if schema_version != {{blank:CURRENT_SCHEMA_VERSION|Compare schema_version against CURRENT_SCHEMA_VERSION|CURRENT_SCHEMA_VERSION|215px}} {
         return Err(SessionIoError::UnsupportedSchemaVersion {
             found: schema_version,
             expected: CURRENT_SCHEMA_VERSION,
@@ -106,7 +106,7 @@ pub fn import_session_from_json(&mut self, raw: &str) -> bool {
         Ok((board_id, board)) => {
             self.view.active_board_id = board_id;
             self.board = board;
-            self.view.last_io_error = [[None|Clear last_io_error on a successful import|None|85px]];
+            self.view.last_io_error = {{blank:None|Clear last_io_error on a successful import|None|85px}};
             true
         }
         Err(err) => {

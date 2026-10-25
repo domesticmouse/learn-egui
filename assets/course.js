@@ -1958,3 +1958,447 @@ revision(): ${state.revision}`;
 }
 
 
+/**
+ * 20. Lesson 0018 Simulator: Unified CommandSpec Registry & panic_hunt Fuzzer
+ */
+function initCommandPaletteSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const state = {
+    pins: 2,
+    undoLen: 0,
+    revision: 0,
+    query: "",
+    lastPrecheck: "Ready — select a CommandSpec or run panic_hunt.",
+    lastResult: 'Ok({"pin_count": 2, "pad_count": 3, "revision": 0})',
+  };
+
+  const specs = [
+    {
+      id: "review.addPin",
+      label: "Place Review Pin",
+      shortcut: "P",
+      journal: true,
+      enabled: () => ({ ok: true, reason: null }),
+      run: () => {
+        state.pins += 1;
+        state.undoLen += 1;
+        state.revision += 1;
+        return `Ok({"added_pin_id": ${state.pins}, "pin_count": ${state.pins}})`;
+      },
+    },
+    {
+      id: "review.clearPins",
+      label: "Clear Review Pins",
+      shortcut: null,
+      journal: true,
+      enabled: () =>
+        state.pins > 0
+          ? { ok: true, reason: null }
+          : { ok: false, reason: "board has no review pins to clear" },
+      run: () => {
+        state.pins = 0;
+        state.undoLen += 1;
+        state.revision += 1;
+        return `Ok({"cleared": true, "pin_count": 0})`;
+      },
+    },
+    {
+      id: "history.undo",
+      label: "Undo Last Edit",
+      shortcut: "Z",
+      journal: false,
+      enabled: () =>
+        state.undoLen > 0
+          ? { ok: true, reason: null }
+          : { ok: false, reason: "undo stack is empty" },
+      run: () => {
+        state.undoLen -= 1;
+        state.revision += 1;
+        return `Ok({"undone": true, "undo_len": ${state.undoLen}})`;
+      },
+    },
+    {
+      id: "session.inspect",
+      label: "Inspect Session Telemetry",
+      shortcut: "I",
+      journal: false,
+      enabled: () => ({ ok: true, reason: null }),
+      run: () =>
+        `Ok({"pin_count": ${state.pins}, "pad_count": 3, "revision": ${state.revision}})`,
+    },
+  ];
+
+  function render() {
+    const listEl = root.querySelector("[data-role='cmd-list']");
+    const q = state.query.trim().toLowerCase();
+    const filtered = specs.filter(
+      (s) =>
+        !q ||
+        s.id.toLowerCase().includes(q) ||
+        s.label.toLowerCase().includes(q)
+    );
+
+    if (listEl) {
+      listEl.innerHTML = filtered
+        .map((s) => {
+          const chk = s.enabled();
+          const badge = s.shortcut ? `<kbd>${s.shortcut}</kbd>` : "";
+          const border = chk.ok ? "#30363d" : "#6e3630";
+          const opacity = chk.ok ? "1" : "0.65";
+          return `<button type="button" class="egui-btn" data-cmd-id="${s.id}" style="display:flex; justify-content:space-between; align-items:center; border-color:${border}; opacity:${opacity}; text-align:left;">
+            <span><strong>${s.label}</strong> <code style="font-size:0.72rem; color:#8b949e;">${s.id}</code></span>
+            <span>${badge}</span>
+          </button>`;
+        })
+        .join("");
+
+      listEl.querySelectorAll("[data-cmd-id]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const cmdId = btn.getAttribute("data-cmd-id");
+          const spec = specs.find((s) => s.id === cmdId);
+          if (!spec) return;
+          const chk = spec.enabled();
+          if (!chk.ok) {
+            state.lastPrecheck = `Precheck FAILED for "${spec.id}":\nenabled(&board, &history) -> Err("${chk.reason}")`;
+            state.lastResult = `Err(EngineError::DisabledCommand("${chk.reason}"))`;
+          } else {
+            state.lastPrecheck = `Precheck OK for "${spec.id}":\njournal=${spec.journal}, enabled=Ok(())`;
+            state.lastResult = spec.run();
+          }
+          render();
+        });
+      });
+    }
+
+    const preEl = root.querySelector("[data-role='cmd-precheck']");
+    if (preEl) {
+      preEl.textContent = state.lastPrecheck;
+    }
+
+    const stateEl = root.querySelector("[data-role='cmd-state']");
+    if (stateEl) {
+      stateEl.textContent = `// Active state: pins=${state.pins}, undo_len=${state.undoLen}, rev=${state.revision}
+// Registered specs: ${specs.length} (COMMAND_PARITY_FLOOR = 5)
+${state.lastResult}`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
+    }
+  }
+
+  const filterInput = root.querySelector("[data-role='cmd-filter']");
+  if (filterInput) {
+    filterInput.addEventListener("input", () => {
+      state.query = filterInput.value;
+      render();
+    });
+  }
+
+  const fuzzBtn = root.querySelector("[data-cmd-action='fuzz']");
+  if (fuzzBtn) {
+    fuzzBtn.addEventListener("click", () => {
+      state.lastPrecheck =
+        'panic_hunt: Tested 5 CommandSpecs x 7 adversarial JSON payloads (null, bool, x_mm=-50.0, comment="   ").\n0 panics, 0 hangs!';
+      state.lastResult = `// panic_hunt summary:
+// review.addPin({"x_mm": -50.0}) -> Err(BadParams("x_mm and y_mm must be within 0.0..=100.0"))
+// unknown.cmd({}) -> Err(UnknownCommand("unknown.cmd"))`;
+      render();
+    });
+  }
+
+  render();
+}
+
+/**
+ * 21. Lesson 0019 Simulator: Spatial Viewport Culling & PerfBudget
+ */
+function initViewportCullSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const pads = [
+    { x: 20, y: 22, w: 6, h: 4, color: "#e05243" },
+    { x: 20, y: 32, w: 6, h: 4, color: "#e05243" },
+    { x: 20, y: 48, w: 6, h: 4, color: "#3b8eea" },
+    { x: 52, y: 22, w: 6, h: 4, color: "#e05243" },
+    { x: 68, y: 35, w: 6, h: 4, color: "#e05243" },
+    { x: 82, y: 50, w: 6, h: 4, color: "#3b8eea" },
+  ];
+
+  const state = {
+    minX: 10,
+    width: 42,
+    enabled: true,
+  };
+
+  function render() {
+    const maxX = state.minX + state.width;
+    const itemsGroup = root.querySelector("[data-svg='cull-items']");
+    const boxEl = root.querySelector("[data-svg='cull-box']");
+
+    if (boxEl) {
+      const svgX = 16 + (state.minX / 100) * 288;
+      const svgW = (state.width / 100) * 288;
+      boxEl.setAttribute("x", svgX.toFixed(1));
+      boxEl.setAttribute("width", svgW.toFixed(1));
+      boxEl.style.opacity = state.enabled ? "1" : "0.25";
+    }
+
+    let visiblePads = 0;
+    if (itemsGroup) {
+      itemsGroup.innerHTML = pads
+        .map((p) => {
+          const pMinX = p.x - p.w / 2;
+          const pMaxX = p.x + p.w / 2;
+          const intersects = !state.enabled || (pMaxX >= state.minX && pMinX <= maxX);
+          if (intersects) visiblePads += 1;
+          const sx = 16 + ((p.x - p.w / 2) / 100) * 288;
+          const sy = 14 + ((p.y - p.h / 2) / 70) * 172;
+          const sw = (p.w / 100) * 288;
+          const sh = (p.h / 70) * 172;
+          const op = intersects ? "1.0" : "0.18";
+          const stroke = intersects ? "#ffffff" : "none";
+          return `<rect x="${sx.toFixed(1)}" y="${sy.toFixed(1)}" width="${sw.toFixed(1)}" height="${sh.toFixed(1)}" rx="2" fill="${p.color}" opacity="${op}" stroke="${stroke}" stroke-width="1"/>`;
+        })
+        .join("");
+    }
+
+    const culledCount = pads.length - visiblePads;
+    const estUs = state.enabled ? 95 + visiblePads * 18 : 95 + pads.length * 42;
+    const stateEl = root.querySelector("[data-role='cull-state']");
+    if (stateEl) {
+      stateEl.textContent = `viewport_mm: Rect::from_min_max(pos2(${state.minX}.0, 0.0), pos2(${maxX}.0, 70.0))
+enable_viewport_culling: ${state.enabled}
+visible_pads: ${visiblePads} / ${pads.length} (culled: ${culledCount})
+check_cull_budget(${estUs} us, max=500 us): Ok(${estUs})`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-cull]").forEach((el) => {
+    el.addEventListener("input", () => {
+      const k = el.getAttribute("data-cull");
+      if (k === "minX") state.minX = parseInt(el.value, 10);
+      if (k === "width") state.width = parseInt(el.value, 10);
+      if (k === "enabled") state.enabled = el.checked;
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 22. Lesson 0020 Simulator: Background mpsc File Import & ProgressBar
+ */
+function initAsyncImportSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const state = {
+    queue: [],
+    jobState: "ImportJobState::Idle",
+    fraction: 0.0,
+    phaseLabel: "Idle",
+    repaintRequested: false,
+  };
+
+  function render() {
+    const barEl = root.querySelector("[data-role='import-bar']");
+    const lblEl = root.querySelector("[data-role='import-bar-label']");
+    const qEl = root.querySelector("[data-role='import-queue']");
+    const stEl = root.querySelector("[data-role='import-state']");
+
+    if (barEl) barEl.style.width = `${Math.round(state.fraction * 100)}%`;
+    if (lblEl) lblEl.textContent = `${state.phaseLabel} (${Math.round(state.fraction * 100)}%)`;
+    if (qEl) {
+      qEl.innerHTML =
+        state.queue.length === 0
+          ? `<span style="color:#8b949e;">mpsc queue empty (TryRecvError::Empty / Disconnected)</span>`
+          : state.queue
+              .map(
+                (m, i) =>
+                  `<div style="color:#7fe5f0;">queued[${i}]: ${m.summary}</div>`
+              )
+              .join("");
+    }
+    if (stEl) {
+      stEl.textContent = `import_state: ${state.jobState}
+status_badge(): "${state.phaseLabel}"
+ctx.request_repaint(): ${state.repaintRequested}`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-import]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const act = btn.getAttribute("data-import");
+      if (act === "start-valid") {
+        state.queue = [
+          {
+            summary: 'Progress(1/2, "Validating envelope")',
+            fraction: 0.5,
+            label: "Importing: Validating envelope (50%)",
+            job: 'ImportJobState::Running { fraction: 0.5, phase: "Validating envelope" }',
+            repaint: true,
+          },
+          {
+            summary: 'Progress(2/2, "Loading copper layers")',
+            fraction: 1.0,
+            label: "Importing: Loading copper layers (100%)",
+            job: 'ImportJobState::Running { fraction: 1.0, phase: "Loading copper layers" }',
+            repaint: true,
+          },
+          {
+            summary: 'Completed { board_id: "pwr-stage-rev-b" }',
+            fraction: 1.0,
+            label: "Import Complete: pwr-stage-rev-b",
+            job: 'ImportJobState::Succeeded { board_id: "pwr-stage-rev-b" }',
+            repaint: false,
+          },
+        ];
+        state.fraction = 0.05;
+        state.phaseLabel = "Importing: Spawning worker (5%)";
+        state.jobState = 'ImportJobState::Running { fraction: 0.05, phase: "Spawning worker" }';
+        state.repaintRequested = true;
+      } else if (act === "start-corrupt") {
+        state.queue = [
+          {
+            summary: 'Progress(1/2, "Validating envelope")',
+            fraction: 0.5,
+            label: "Importing: Validating envelope (50%)",
+            job: 'ImportJobState::Running { fraction: 0.5, phase: "Validating envelope" }',
+            repaint: true,
+          },
+          {
+            summary: 'Failed(MalformedJson("key must be a string"))',
+            fraction: 0.0,
+            label: "Import Failed: malformed session JSON",
+            job: 'ImportJobState::Failed("malformed session JSON")',
+            repaint: false,
+          },
+        ];
+        state.fraction = 0.05;
+        state.phaseLabel = "Importing: Spawning worker (5%)";
+        state.jobState = 'ImportJobState::Running { fraction: 0.05, phase: "Spawning worker" }';
+        state.repaintRequested = true;
+      } else if (act === "step") {
+        if (state.queue.length > 0) {
+          const msg = state.queue.shift();
+          state.fraction = msg.fraction;
+          state.phaseLabel = msg.label;
+          state.jobState = msg.job;
+          state.repaintRequested = msg.repaint;
+        }
+      } else if (act === "cancel") {
+        state.queue = [];
+        state.fraction = 0.0;
+        state.phaseLabel = "Idle";
+        state.jobState = "ImportJobState::Idle";
+        state.repaintRequested = false;
+      }
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 23. Lesson 0021 Simulator: Offscreen Snapshot Digest (gpu_lock) & wasm32 Gate
+ */
+function initSnapshotWasmSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const state = {
+    top: true,
+    bot: true,
+    silk: true,
+    rats: false,
+    baselineHash: null,
+    target: "native-desktop",
+  };
+
+  function computeHash() {
+    const mask =
+      (state.top ? 1 : 0) |
+      (state.bot ? 2 : 0) |
+      (state.silk ? 4 : 0) |
+      (state.rats ? 8 : 0);
+    const pads = (state.top ? 2 : 0) + (state.bot ? 1 : 0);
+    const traces =
+      (state.top ? 2 : 0) +
+      (state.bot ? 2 : 0) +
+      (state.silk ? 1 : 0) +
+      (state.rats ? 1 : 0);
+    const hashNum = ((0xcbf29ce4 ^ mask) * 0x1000193 + pads * 31 + traces * 17) >>> 0;
+    return {
+      mask,
+      pads,
+      traces,
+      hex: "0x" + hashNum.toString(16).padStart(8, "0"),
+    };
+  }
+
+  state.baselineHash = computeHash().hex;
+
+  function render() {
+    const cur = computeHash();
+    const matches = cur.hex === state.baselineHash;
+    const diffEl = root.querySelector("[data-role='snap-diff']");
+    if (diffEl) {
+      diffEl.innerHTML = `<div style="margin-bottom:0.35rem;"><code>let _gpu = gpu_lock();</code> <span style="color:#3dd68c;">(Acquired MutexGuard)</span></div>
+      <div>Baseline Digest: <code>${state.baselineHash}</code></div>
+      <div>Current Digest:  <code>${cur.hex}</code></div>
+      <div style="margin-top:0.35rem; font-weight:600; color:${matches ? "#3dd68c" : "#ff6b5b"};">
+        Snapshot Status: ${matches ? "MATCH (Visual Parity Verified)" : "MISMATCH (Regression Caught!)"}
+      </div>`;
+    }
+
+    const stEl = root.querySelector("[data-role='snap-state']");
+    if (stEl) {
+      stEl.textContent = `RuntimeTarget::current(): "${state.target}"
+FrameSnapshotDigest {
+  visible_layer_mask: 0b${cur.mask.toString(2).padStart(4, "0")},
+  visible_pad_count: ${cur.pads},
+  visible_trace_count: ${cur.traces},
+  fnv1a_hash: ${cur.hex},
+}`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-snap]").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const k = cb.getAttribute("data-snap");
+      state[k] = cb.checked;
+      render();
+    });
+  });
+
+  root.querySelectorAll("[data-snap-act]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const act = btn.getAttribute("data-snap-act");
+      if (act === "bless") {
+        state.baselineHash = computeHash().hex;
+      } else if (act === "target") {
+        state.target =
+          state.target === "native-desktop"
+            ? "wasm32-unknown-unknown"
+            : "native-desktop";
+      }
+      render();
+    });
+  });
+
+  render();
+}

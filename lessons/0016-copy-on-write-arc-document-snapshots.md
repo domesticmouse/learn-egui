@@ -98,18 +98,18 @@ Complete `shared_arc_buffers`, `clear_review_pins`, and `transition_pin_status` 
 
 ```rust
 pub fn shared_arc_buffers(&self, other: &Self) -> usize {
-    usize::from(Arc::[[ptr_eq(&self.traces, &other.traces);;ptr_eq(&self.traces,&other.traces)|Compare heap pointers of self.traces and other.traces with Arc::ptr_eq|ptr_eq(...)|295px]])
+    usize::from(Arc::{{blank:ptr_eq(&self.traces, &other.traces);;ptr_eq(&self.traces,&other.traces)|Compare heap pointers of self.traces and other.traces with Arc::ptr_eq|ptr_eq(...)|295px}})
         + usize::from(Arc::ptr_eq(&self.pads, &other.pads))
         + usize::from(Arc::ptr_eq(&self.components, &other.components))
         + usize::from(Arc::ptr_eq(&self.review_pins, &other.review_pins))
 }
 
 pub fn clear_review_pins(&mut self) {
-    Arc::[[make_mut(&mut self.review_pins)|Obtain a mutable reference to review_pins via copy-on-write|make_mut(...)|255px]].clear();
+    Arc::{{blank:make_mut(&mut self.review_pins)|Obtain a mutable reference to review_pins via copy-on-write|make_mut(...)|255px}}.clear();
 }
 
 pub fn transition_pin_status(&mut self, id: PinId, next: ReviewStatus) -> bool {
-    let Some(pin) = Arc::[[make_mut(&mut self.review_pins)|Use Arc::make_mut to mutate only the review_pins map|make_mut(...)|255px]].get_mut(&id) else {
+    let Some(pin) = Arc::{{blank:make_mut(&mut self.review_pins)|Use Arc::make_mut to mutate only the review_pins map|make_mut(...)|255px}}.get_mut(&id) else {
         return false;
     };
     if pin.status.can_transition_to(next) {

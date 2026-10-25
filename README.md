@@ -24,6 +24,10 @@ Interactive engineering course for learning **Rust** and **[`egui`](https://docs
   - [Lesson 0015: Loading & Saving Board & Review Session Files (`serde`, `serde_json` & `thiserror`)](https://domesticmouse.github.io/learn-egui/lessons/0015-loading-board-and-review-files-serde.html) (`apps/0015-loading-board-and-review-files-serde`)
   - [Lesson 0016: Copy-on-Write Document Snapshots with `Arc` & `Arc::make_mut`](https://domesticmouse.github.io/learn-egui/lessons/0016-copy-on-write-arc-document-snapshots.html) (`apps/0016-copy-on-write-arc-document-snapshots`)
   - [Lesson 0017: Undo/Redo History (`VecDeque`) & Continuous Slider Drag Coalescing](https://domesticmouse.github.io/learn-egui/lessons/0017-undo-redo-history-and-slider-coalescing.html) (`apps/0017-undo-redo-history-and-slider-coalescing`)
+  - [Lesson 0018: The Command Pattern, `CommandSpec` Registry & `panic_hunt` Fuzzer](https://domesticmouse.github.io/learn-egui/lessons/0018-the-command-pattern-and-command-palette.html) (`apps/0018-the-command-pattern-and-command-palette`)
+  - [Lesson 0019: Spatial Viewport Culling (`Rect::intersects`), Batched Geometry & Frame Budgets](https://domesticmouse.github.io/learn-egui/lessons/0019-viewport-culling-and-cached-tessellation.html) (`apps/0019-viewport-culling-and-cached-tessellation`)
+  - [Lesson 0020: Non-Blocking Background File Import (`std::sync::mpsc`) & Live `ProgressBar` UI](https://domesticmouse.github.io/learn-egui/lessons/0020-non-blocking-file-import-and-progress-ui.html) (`apps/0020-non-blocking-file-import-and-progress-ui`)
+  - [Lesson 0021: Offscreen Snapshot Parity (`gpu_lock`), Quality Scorecards & WebAssembly (`wasm32`)](https://domesticmouse.github.io/learn-egui/lessons/0021-headless-snapshot-testing-and-wasm-build.html) (`apps/0021-headless-snapshot-testing-and-wasm-build`)
 - **Reference & Cheat Sheets:**
   - [Glossary of Rust & `egui` Terms](https://domesticmouse.github.io/learn-egui/reference/glossary.html)
   - [Immediate-Mode GUI Cheat Sheet](https://domesticmouse.github.io/learn-egui/reference/immediate-mode-cheatsheet.html)

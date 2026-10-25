@@ -30,6 +30,10 @@
       <a href="./lessons/0015-loading-board-and-review-files-serde.html">0015</a>
       <a href="./lessons/0016-copy-on-write-arc-document-snapshots.html">0016</a>
       <a href="./lessons/0017-undo-redo-history-and-slider-coalescing.html">0017</a>
+      <a href="./lessons/0018-the-command-pattern-and-command-palette.html">0018</a>
+      <a href="./lessons/0019-viewport-culling-and-cached-tessellation.html">0019</a>
+      <a href="./lessons/0020-non-blocking-file-import-and-progress-ui.html">0020</a>
+      <a href="./lessons/0021-headless-snapshot-testing-and-wasm-build.html">0021</a>
       <a href="./reference/glossary.html">Glossary</a>
       <a href="./reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="./reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
@@ -53,11 +57,12 @@ flowchart LR
   A1 --&gt; A2["Act II (0006–0009)\nSchematics &amp; egui_kittest"]
   A2 --&gt; A3["Act III (0010–0013)\nDRC Overlays &amp; Review Pins"]
   A3 --&gt; A4["Act IV (0014–0017)\nMulti-Crate CoW Engine"]
-  A4 --&gt; A5["Act V (0018–0025)\nKiCad nom Parser &amp; Turso SQL"]
+  A4 --&gt; A5["Act V (0018–0021)\nCommand Engine, Culling &amp; Snapshots"]
+  A5 --&gt; A6["Act VI (0022–0025)\nKiCad nom Parser &amp; Turso SQL"]
   </pre>
 </figure>
-<p><em>Five-Act Curriculum Progression: Every lesson builds toward a production Schematic &amp; PCB Design Review System verified with unit tests and mutation coverage.</em></p>
-<h2>Published Interactive Lessons (<code>0000</code>–<code>0017</code>)</h2>
+<p><em>Six-Act Curriculum Progression: Every lesson builds toward a production Schematic &amp; PCB Design Review System verified with unit tests and mutation coverage.</em></p>
+<h2>Published Interactive Lessons (<code>0000</code>–<code>0021</code>)</h2>
 <p>Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a> to set up your Cargo project and mutation-testing harness, or jump straight into any completed module below:</p>
 </div>
 
@@ -349,6 +354,70 @@ flowchart LR
       <span><strong>Runnable App:</strong> <code>apps/0017-undo-redo-history-and-slider-coalescing</code></span>
     </div>
   </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0018</span>
+        <span class="lesson-card-mutants">238 / 238 Caught</span>
+      </div>
+      <h3><a href="./lessons/0018-the-command-pattern-and-command-palette.html">Command Pattern, <code>CommandSpec</code> Registry &amp; <code>panic_hunt</code></a></h3>
+      <p>Unify actions into a static <code>CommandSpec</code> registry (<code>review.addPin</code>, <code>review.clearPins</code>, <code>history.undo</code>, <code>session.inspect</code>) with <code>EnabledFn</code> / <code>RunFn</code> function pointers, wire a <code>Key::K</code> Command Palette window, and verify with a Tier 5 <code>panic_hunt</code> fuzzer.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> Searchable <code>Key::K</code> Command Palette (<code>egui::Window</code>) &amp; Unified Command Dispatch</span>
+      <span><strong>Rust Concept:</strong> Function Pointers (<code>fn(...) -&gt; Result&lt;...&gt;</code>), Static Slice Registries &amp; Adversarial Fuzzing</span>
+      <span><strong>Runnable App:</strong> <code>apps/0018-the-command-pattern-and-command-palette</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0019</span>
+        <span class="lesson-card-mutants">255 / 255 Caught</span>
+      </div>
+      <h3><a href="./lessons/0019-viewport-culling-and-cached-tessellation.html">Spatial Viewport Culling (<code>Rect::intersects</code>) &amp; Frame Budgets</a></h3>
+      <p>Compute stroke-expanded <code>TraceSegment::bounds_mm()</code>, filter pads and traces against <code>pcb_scene_rect</code> via <code>Rect::intersects</code>, surface live <code>ViewportCullStats</code> telemetry, enforce a Tier 7 <code>PerfBudget</code>, and prove equivalence with <code>proptest</code>.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> Viewport Frustum Culling (<code>Rect::intersects</code>) &amp; Live <code>ViewportCullStats</code> Telemetry</span>
+      <span><strong>Rust Concept:</strong> AABB Geometry Math (<code>Rect::from_two_pos</code>, <code>expand</code>), <code>Vec::with_capacity</code> &amp; <code>proptest</code> Equivalence</span>
+      <span><strong>Runnable App:</strong> <code>apps/0019-viewport-culling-and-cached-tessellation</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0020</span>
+        <span class="lesson-card-mutants">269 / 269 Caught</span>
+      </div>
+      <h3><a href="./lessons/0020-non-blocking-file-import-and-progress-ui.html">Non-Blocking File Import (<code>mpsc::channel</code>) &amp; <code>ProgressBar</code></a></h3>
+      <p>Parse session files on a background worker (<code>std::thread::spawn</code> + <code>mpsc::channel</code>), poll <code>try_recv()</code> on each frame, render a live <code>egui::ProgressBar</code>, request continuous repaints while running, and support instant cancellation.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> <code>egui::ProgressBar</code>, Non-Blocking <code>try_recv()</code> Polling &amp; <code>ctx.request_repaint()</code></span>
+      <span><strong>Rust Concept:</strong> <code>std::thread::spawn</code>, <code>std::sync::mpsc::channel</code> &amp; <code>Send + 'static</code> Channel Ownership</span>
+      <span><strong>Runnable App:</strong> <code>apps/0020-non-blocking-file-import-and-progress-ui</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0021</span>
+        <span class="lesson-card-mutants">304 / 304 Caught</span>
+      </div>
+      <h3><a href="./lessons/0021-headless-snapshot-testing-and-wasm-build.html">Offscreen Snapshot Parity (<code>gpu_lock</code>) &amp; <code>wasm32</code> Readiness</a></h3>
+      <p>Serialize GPU/snapshot tests with <code>gpu_lock()</code>, compute 64-bit FNV-1a <code>FrameSnapshotDigest</code> hashes over visible layers and DRC overlays, gate <code>#[cfg(target_arch = &quot;wasm32&quot;)]</code>, and verify release readiness with <code>QualityScorecard</code>.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> Offscreen Frame Snapshot Digests (<code>gpu_lock</code>), Visual Baseline Diffing &amp; Scorecard UI</span>
+      <span><strong>Rust Concept:</strong> <code>OnceLock&lt;Mutex&lt;()&gt;&gt;</code> (<code>PoisonError::into_inner</code>), FNV-1a Hashing &amp; <code>#[cfg(target_arch = &quot;wasm32&quot;)]</code></span>
+      <span><strong>Runnable App:</strong> <code>apps/0021-headless-snapshot-testing-and-wasm-build</code></span>
+    </div>
+  </article>
 </section>
 
 <div class="prose-col">
@@ -378,14 +447,14 @@ flowchart LR
 </table>
 <h2>Running the Companion Rust Apps Locally</h2>
 <p>Every lesson is backed by a standalone, runnable Cargo package or workspace under <code>./apps/&lt;NNNN-lesson-slug&gt;/</code> that compiles with zero warnings and passes both <code>cargo test</code> and <code>cargo mutants</code>:</p>
-<pre><code class="language-bash"># Launch Lesson 0017's interactive multi-crate PCB Reviewer desktop window
-cargo run --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml
+<pre><code class="language-bash"># Launch Lesson 0021's interactive multi-crate PCB Reviewer desktop window
+cargo run --manifest-path ./apps/0021-headless-snapshot-testing-and-wasm-build/Cargo.toml
 
-# Run workspace unit + proptest suites and fast L1 domain mutation checks
-cargo test --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml --workspace
-cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml -p pcb-doc --in-place</code></pre>
+# Run workspace unit + proptest + panic_hunt suites and fast L1 domain mutation checks
+cargo test --manifest-path ./apps/0021-headless-snapshot-testing-and-wasm-build/Cargo.toml --workspace
+cargo mutants --manifest-path ./apps/0021-headless-snapshot-testing-and-wasm-build/Cargo.toml -p pcb-doc --in-place</code></pre>
 <div class="teacher-prompt-box">
-  <strong>Ready to dive in?</strong> Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html"><strong>Lesson 0000: Bootstrapping Your Rust &amp; <code>eframe</code> Project</strong></a> or jump straight to <a href="./lessons/0017-undo-redo-history-and-slider-coalescing.html"><strong>Lesson 0017: Undo/Redo History (<code>VecDeque</code>) &amp; Continuous Slider Drag Coalescing</strong></a>.
+  <strong>Ready to dive in?</strong> Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html"><strong>Lesson 0000: Bootstrapping Your Rust &amp; <code>eframe</code> Project</strong></a> or jump straight to <a href="./lessons/0021-headless-snapshot-testing-and-wasm-build.html"><strong>Lesson 0021: Offscreen Snapshot Parity (<code>gpu_lock</code>), Quality Scorecards &amp; WebAssembly (<code>wasm32</code>)</strong></a>.
 </div>
 </div>
     </article>

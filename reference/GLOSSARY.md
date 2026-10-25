@@ -126,6 +126,22 @@ _Avoid_: deep-cloning `Vec<TraceSegment>` or `HashMap<PinId, ReviewNote>` on eve
 A bounded history stack (`VecDeque<HistoryEntry>`) that evicts oldest snapshots via `pop_front()`, swaps snapshots in `O(1)` via `std::mem::replace`, and merges consecutive 60-FPS `egui::Slider` drag frames sharing `Some(coalesce_key)` into a single undo entry until `Response::drag_stopped()` calls `commit_coalesce()` ([std::collections::VecDeque](https://doc.rust-lang.org/std/collections/struct.VecDeque.html)).
 _Avoid_: pushing a new undo entry on every `slider_resp.changed()` frame without a `coalesce_key`.
 
+**Command Registry & `panic_hunt` Fuzzer (`CommandSpec`)**:
+A static slice (`COMMAND_SPECS: &[CommandSpec]`) pairing canonical command IDs (`"review.addPin"`, `"session.inspect"`) with an `EnabledFn` precondition guard (`fn(&BoardModel, &BoardHistory) -> Result<(), String>`) and a `RunFn` execution pointer, verified by a Tier 5 `panic_hunt` fuzzer that feeds adversarial JSON payloads into `execute_command`.
+_Avoid_: scattering untyped state mutations across ad-hoc button callbacks without parameter bounds checks.
+
+**Viewport Frustum Culling (`Rect::intersects`)**:
+Testing each pad's or stroke-expanded trace's axis-aligned bounding box (`bounds_mm().intersects(viewport_mm)`) before submitting geometry to `egui::Painter`, skipping off-screen primitives in `O(N)` bounds checks rather than tessellating invisible meshes ([docs.rs/emath](https://docs.rs/emath/latest/emath/struct.Rect.html#method.intersects)).
+_Avoid_: computing trace bounding boxes from centreline endpoints alone without expanding by `width_mm * 0.5`.
+
+**Non-Blocking Background Channel (`std::sync::mpsc::try_recv`)**:
+Offloading file parsing onto a worker thread (`std::thread::spawn`) that streams `ImportJobMessage` progress updates over an `mpsc::channel`, while `eframe::App::update` drains ready messages via `rx.try_recv()` and calls `ctx.request_repaint()` while `ImportJobState::Running` is active ([std::sync::mpsc](https://doc.rust-lang.org/std/sync/mpsc/index.html)).
+_Avoid_: calling blocking `rx.recv()` inside `eframe::App::update` (which freezes the UI thread).
+
+**Process-Wide GPU Lock & Frame Snapshot Digest (`gpu_lock`, `FrameSnapshotDigest`)**:
+A `OnceLock<Mutex<()>>` guard (`let _gpu = gpu_lock();` using `PoisonError::into_inner`) acquired on the first line of GPU/snapshot tests to serialize concurrent driver access, paired with a deterministic 64-bit FNV-1a `FrameSnapshotDigest` over visible layer masks, culled geometry counts, and DRC markers.
+_Avoid_: running multiple concurrent `wgpu` or snapshot harnesses across threads without acquiring `gpu_lock()`.
+
 ---
 
 ## Quick Lookup: Key `eframe` & `egui` APIs by Lesson
@@ -150,3 +166,7 @@ _Avoid_: pushing a new undo entry on every `slider_resp.changed()` frame without
 | `ReviewSessionEnvelope` & `SessionIoError` | Serializes and validates versioned JSON review sessions with `serde_json` and `thiserror`, surfacing errors in `SidePanel::right`. | [Lesson 0015](../lessons/0015-loading-board-and-review-files-serde.html) |
 | `Arc::make_mut` & `Arc::ptr_eq` | Turns `BoardModel::clone()` into `O(1)` pointer sharing and clones only touched collections on mutation, verified with `proptest`. | [Lesson 0016](../lessons/0016-copy-on-write-arc-document-snapshots.html) |
 | `BoardHistory`, `coalesce_key` & `drag_stopped()` | Maintains a bounded `VecDeque` undo/redo stack and coalesces continuous 60-FPS slider drags into a single undo step. | [Lesson 0017](../lessons/0017-undo-redo-history-and-slider-coalescing.html) |
+| `CommandSpec`, `Key::K` Palette & `panic_hunt` | Dispatches commands through a static `COMMAND_SPECS` registry with `EnabledFn` guards and fuzzes JSON inputs. | [Lesson 0018](../lessons/0018-the-command-pattern-and-command-palette.html) |
+| `Rect::intersects` & `ViewportCullStats` | Culls off-screen pads and stroke-expanded traces against `pcb_scene_rect` and enforces frame budgets. | [Lesson 0019](../lessons/0019-viewport-culling-and-cached-tessellation.html) |
+| `mpsc::Receiver::try_recv` & `egui::ProgressBar` | Streams background file import progress without blocking the UI thread and wakes `egui` via `ctx.request_repaint()`. | [Lesson 0020](../lessons/0020-non-blocking-file-import-and-progress-ui.html) |
+| `gpu_lock()`, `FrameSnapshotDigest` & `QualityScorecard` | Serializes snapshot tests with `OnceLock<Mutex<()>>`, computes 64-bit FNV-1a visual digests, and gates `wasm32` release readiness. | [Lesson 0021](../lessons/0021-headless-snapshot-testing-and-wasm-build.html) |

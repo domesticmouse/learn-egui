@@ -30,6 +30,10 @@
       <a href="../lessons/0015-loading-board-and-review-files-serde.html">0015</a>
       <a href="../lessons/0016-copy-on-write-arc-document-snapshots.html">0016</a>
       <a href="../lessons/0017-undo-redo-history-and-slider-coalescing.html">0017</a>
+      <a href="../lessons/0018-the-command-pattern-and-command-palette.html">0018</a>
+      <a href="../lessons/0019-viewport-culling-and-cached-tessellation.html">0019</a>
+      <a href="../lessons/0020-non-blocking-file-import-and-progress-ui.html">0020</a>
+      <a href="../lessons/0021-headless-snapshot-testing-and-wasm-build.html">0021</a>
       <a href="./glossary.html" class="active">Glossary</a>
       <a href="./immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="./testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
@@ -203,6 +207,26 @@
       <td><strong>Undo/Redo Ring Buffer &amp; Drag Coalescing (<code>VecDeque</code>, <code>coalesce_key</code>)</strong></td>
       <td>A bounded history stack (<code>VecDeque&lt;HistoryEntry&gt;</code>) that evicts oldest snapshots via <code>pop_front()</code>, swaps snapshots in <code>O(1)</code> via <code>std::mem::replace</code>, and merges consecutive 60-FPS <code>egui::Slider</code> drag frames sharing <code>Some(coalesce_key)</code> into a single undo entry until <code>Response::drag_stopped()</code> calls <code>commit_coalesce()</code> (<a href="https://doc.rust-lang.org/std/collections/struct.VecDeque.html">std::collections::VecDeque</a>).</td>
       <td><em>Avoid:</em> pushing a new undo entry on every <code>slider_resp.changed()</code> frame without a <code>coalesce_key</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Command Registry &amp; <code>panic_hunt</code> Fuzzer (<code>CommandSpec</code>)</strong></td>
+      <td>A static slice (<code>COMMAND_SPECS: &amp;[CommandSpec]</code>) pairing canonical command IDs (<code>&quot;review.addPin&quot;</code>, <code>&quot;session.inspect&quot;</code>) with an <code>EnabledFn</code> precondition guard (<code>fn(&amp;BoardModel, &amp;BoardHistory) -&gt; Result&lt;(), String&gt;</code>) and a <code>RunFn</code> execution pointer, verified by a Tier 5 <code>panic_hunt</code> fuzzer that feeds adversarial JSON payloads into <code>execute_command</code>.</td>
+      <td><em>Avoid:</em> scattering untyped state mutations across ad-hoc button callbacks without parameter bounds checks.</td>
+    </tr>
+    <tr>
+      <td><strong>Viewport Frustum Culling (<code>Rect::intersects</code>)</strong></td>
+      <td>Testing each pad's or stroke-expanded trace's axis-aligned bounding box (<code>bounds_mm().intersects(viewport_mm)</code>) before submitting geometry to <code>egui::Painter</code>, skipping off-screen primitives in <code>O(N)</code> bounds checks rather than tessellating invisible meshes (<a href="https://docs.rs/emath/latest/emath/struct.Rect.html#method.intersects">docs.rs/emath</a>).</td>
+      <td><em>Avoid:</em> computing trace bounding boxes from centreline endpoints alone without expanding by <code>width_mm * 0.5</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Non-Blocking Background Channel (<code>std::sync::mpsc::try_recv</code>)</strong></td>
+      <td>Offloading file parsing onto a worker thread (<code>std::thread::spawn</code>) that streams <code>ImportJobMessage</code> progress updates over an <code>mpsc::channel</code>, while <code>eframe::App::update</code> drains ready messages via <code>rx.try_recv()</code> and calls <code>ctx.request_repaint()</code> while <code>ImportJobState::Running</code> is active (<a href="https://doc.rust-lang.org/std/sync/mpsc/index.html">std::sync::mpsc</a>).</td>
+      <td><em>Avoid:</em> calling blocking <code>rx.recv()</code> inside <code>eframe::App::update</code> (which freezes the UI thread).</td>
+    </tr>
+    <tr>
+      <td><strong>Process-Wide GPU Lock &amp; Frame Snapshot Digest (<code>gpu_lock</code>, <code>FrameSnapshotDigest</code>)</strong></td>
+      <td>A <code>OnceLock&lt;Mutex&lt;()&gt;&gt;</code> guard (<code>let _gpu = gpu_lock();</code> using <code>PoisonError::into_inner</code>) acquired on the first line of GPU/snapshot tests to serialize concurrent driver access, paired with a deterministic 64-bit FNV-1a <code>FrameSnapshotDigest</code> over visible layer masks, culled geometry counts, and DRC markers.</td>
+      <td><em>Avoid:</em> running multiple concurrent <code>wgpu</code> or snapshot harnesses across threads without acquiring <code>gpu_lock()</code>.</td>
     </tr>
   </tbody>
 </table>

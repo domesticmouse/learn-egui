@@ -30,6 +30,10 @@
       <a href="./0015-loading-board-and-review-files-serde.html">0015</a>
       <a href="./0016-copy-on-write-arc-document-snapshots.html">0016</a>
       <a href="./0017-undo-redo-history-and-slider-coalescing.html" class="active">0017</a>
+      <a href="./0018-the-command-pattern-and-command-palette.html">0018</a>
+      <a href="./0019-viewport-culling-and-cached-tessellation.html">0019</a>
+      <a href="./0020-non-blocking-file-import-and-progress-ui.html">0020</a>
+      <a href="./0021-headless-snapshot-testing-and-wasm-build.html">0021</a>
       <a href="../reference/glossary.html">Glossary</a>
       <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
@@ -164,7 +168,7 @@ sequenceDiagram
   <p>Complete <code>BoardHistory::record_edit</code>, <code>BoardHistory::undo</code>, and the <code>egui::Slider</code> response handling inside <code>render_active_pin_callout</code>.</p>
 <pre class="keep-markup"><code class="language-rust">pub fn record_edit(&amp;mut self, label: &amp;str, before: BoardModel, coalesce_key: Option&lt;&amp;str&gt;) {
     let should_coalesce =
-        self.active_coalesce_key.as_deref() == coalesce_key &amp;&amp; coalesce_key.[[is_some()|Coalesce only when coalesce_key is Some(...)|is_some()|115px]];
+        self.active_coalesce_key.as_deref() == coalesce_key &amp;&amp; coalesce_key.<input id="ex0017-blank-1" class="code-challenge-input" style="width:115px;" placeholder="is_some()" autocomplete="off">;
 
     if !should_coalesce {
         if self.undo_stack.len() &gt;= self.max_entries {
@@ -184,7 +188,7 @@ pub fn undo(&amp;mut self, current: &amp;mut BoardModel) -&gt; Option&lt;String&
     let entry = self.undo_stack.pop_back()?;
     self.active_coalesce_key = None;
     let label = entry.label.clone();
-    let prev = std::mem::[[replace(current, entry.doc);;replace(current,entry.doc)|Swap entry.doc into current and return the outgoing BoardModel|replace(...)|245px]];
+    let prev = std::mem::<input id="ex0017-blank-2" class="code-challenge-input" style="width:245px;" placeholder="replace(...)" autocomplete="off">;
     self.redo_stack.push(HistoryEntry { label: entry.label, doc: prev });
     self.revision += 1;
     Some(label)
@@ -195,7 +199,7 @@ let slider_resp = ui.add(egui::Slider::new(&amp;mut x_mm, 5.0..=95.0).text("Pin 
 if slider_resp.changed() {
     self.drag_review_pin_x(pin.id, x_mm);
 }
-if slider_resp.[[drag_stopped()|Commit the coalesce gesture when the slider drag finishes|drag_stopped()|145px]] {
+if slider_resp.<input id="ex0017-blank-3" class="code-challenge-input" style="width:145px;" placeholder="drag_stopped()" autocomplete="off"> {
     self.commit_drag_gesture();
 }</code></pre>
   <div style="display: flex; gap: 0.75rem; align-items: center;">
@@ -284,7 +288,24 @@ cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescin
       hintBtnId: "btn-hint-ex0017",
       feedbackId: "ex0017-feedback",
       blanks: [
-
+        {
+          inputId: "ex0017-blank-1",
+          accepted: ["is_some()"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Coalesce only when coalesce_key is Some(...)",
+        },
+        {
+          inputId: "ex0017-blank-2",
+          accepted: ["replace(current, entry.doc)", "replace(current,entry.doc)"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Swap entry.doc into current and return the outgoing BoardModel",
+        },
+        {
+          inputId: "ex0017-blank-3",
+          accepted: ["drag_stopped()"],
+          getErrorHint: (val) =>
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Commit the coalesce gesture when the slider drag finishes",
+        }
       ],
       hintMessage: "Check <code>coalesce_key.is_some()</code> in <code>record_edit</code>, swap <code>*current</code> with <code>std::mem::replace(current, entry.doc)</code> in <code>undo</code>, and call <code>self.commit_drag_gesture()</code> when <code>slider_resp.drag_stopped()</code> is true.",
       successMessage: "Excellent! Continuous 60-FPS slider drags coalesce into a single undo entry and swap back in O(1) time via <code>std::mem::replace</code>.",

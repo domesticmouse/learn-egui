@@ -30,6 +30,10 @@
       <a href="../lessons/0015-loading-board-and-review-files-serde.html">0015</a>
       <a href="../lessons/0016-copy-on-write-arc-document-snapshots.html">0016</a>
       <a href="../lessons/0017-undo-redo-history-and-slider-coalescing.html">0017</a>
+      <a href="../lessons/0018-the-command-pattern-and-command-palette.html">0018</a>
+      <a href="../lessons/0019-viewport-culling-and-cached-tessellation.html">0019</a>
+      <a href="../lessons/0020-non-blocking-file-import-and-progress-ui.html">0020</a>
+      <a href="../lessons/0021-headless-snapshot-testing-and-wasm-build.html">0021</a>
       <a href="./glossary.html">Glossary</a>
       <a href="./immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="./testing-and-mutation-cheatsheet.html" class="active">Mutation Cheat Sheet</a>
@@ -143,7 +147,14 @@ cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescin
         prop_assert_eq!(working.shared_arc_buffers(&amp;initial), 4);
     }
 }</code></pre>
-<h2>5. Progression of Testing Across the Six Acts</h2>
+<h2>5. Act V <code>panic_hunt</code>, <code>gpu_lock()</code> Snapshot Digests &amp; Scorecards (<code>0018</code>–<code>0021</code>)</h2>
+<p>In Act V, we harden the multi-crate workspace with three production gates:</p>
+<ol>
+<li><strong>Tier 5 <code>panic_hunt</code> Adversarial Command Fuzzing (<code>0018</code>)</strong>: Iterates over every registered <code>CommandSpec</code> in <code>COMMAND_SPECS</code> (asserting <code>COMMAND_SPECS.len() &gt;= COMMAND_PARITY_FLOOR</code>) and feeds malformed/out-of-bounds JSON payloads into <code>BoardModel::execute_command</code>, asserting <code>Err(EngineError::BadParams)</code> and zero panics.</li>
+<li><strong>Tier 2 + Tier 7 Spatial Culling Equivalence &amp; Budgets (<code>0019</code>)</strong>: Uses <code>proptest!</code> to prove <code>culled_pads_in_rect</code> and <code>culled_traces_in_rect</code> match reference filtering across arbitrary camera viewports while <code>check_cull_budget</code> enforces microsecond budgets.</li>
+<li><strong>Tier 3/6 <code>gpu_lock()</code> &amp; <code>FrameSnapshotDigest</code> (<code>0021</code>)</strong>: Acquires <code>let _gpu = gpu_lock();</code> (<code>OnceLock&lt;Mutex&lt;()&gt;&gt;</code> with <code>PoisonError::into_inner</code>) on the first line of snapshot tests, computes a deterministic 64-bit FNV-1a digest over visible layer bitmasks and culled geometry counts, and verifies release readiness via <code>QualityScorecard::is_release_ready()</code>.</li>
+</ol>
+<h2>6. Progression of Testing Across the Six Acts</h2>
 <table class="ref-table">
 <thead>
 <tr>

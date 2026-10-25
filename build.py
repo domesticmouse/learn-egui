@@ -177,7 +177,7 @@ def render_code_figure(
 
             blank_idx = len(blanks_out) + 1
             input_id = f"{ex_id}-blank-{blank_idx}"
-            accepted = [a.strip() for a in ans_raw.split(";;") if a.strip()]
+            accepted = [a.strip() for a in re.split(r";;|(?<!;)\|\|", ans_raw) if a.strip()]
             blanks_out.append(
                 {
                     "inputId": input_id,
@@ -295,7 +295,12 @@ def render_verify_block(attr_line: str, inner_md: str) -> str:
 
 
 def render_exercise_block(
-    attr_line: str, inner_md: str, *, scripts_out: list[str]
+    attr_line: str,
+    inner_md: str,
+    *,
+    source_name: str = "",
+    errors: list[str] | None = None,
+    scripts_out: list[str],
 ) -> str:
     """Render `:::exercise` into a full-width interactive code completion lab."""
     attrs = parse_kv_attrs(attr_line)
@@ -330,6 +335,10 @@ def render_exercise_block(
         return f"\n\n@@EXERCISE_CODE_{idx}@@\n\n"
 
     processed_md = FENCED_CODE_RE.sub(_extract_code, working.strip())
+    if errors is not None and not blanks:
+        errors.append(
+            f"{source_name}: Exercise '{ex_id}' contains 0 `{{{{blank:...}}}}` inputs."
+        )
     rendered_inner = rewrite_md_links(MD.render(expand_sidenotes(processed_md)).strip())
     for idx, fig_html in enumerate(code_figures):
         rendered_inner = rendered_inner.replace(f"<p>@@EXERCISE_CODE_{idx}@@</p>", fig_html)
@@ -1315,6 +1324,158 @@ def widget_undo_coalesce_sim(scripts_out: list[str]) -> str:
 </section>"""
 
 
+def widget_command_palette_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initCommandPaletteSimulator("command-palette-sim");')
+    return """<section class="full-width-panel" id="command-palette-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Unified <code>CommandSpec</code> Registry &amp; <code>panic_hunt</code> Fuzzer</span>
+    <span class="panel-badge">CommandSpec • fn(&amp;mut BoardModel, ...) • panic_hunt</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Filter the command palette below, dispatch valid JSON commands (<code>review.addPin</code>, <code>review.clearPins</code>, <code>history.undo</code>, <code>session.inspect</code>), or click <strong>Run <code>panic_hunt</code> Fuzzer</strong> to bombard every registered <code>CommandSpec</code> with malformed/out-of-range JSON payloads.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Command Palette (<code>Key::K</code>)</h4>
+      <input type="text" data-role="cmd-filter" placeholder="Filter commands (e.g. review, undo)..." style="width:100%; padding:0.4rem 0.55rem; margin-bottom:0.55rem; background:#0d1117; color:#e6edf3; border:1px solid #30363d; border-radius:4px; font-family:var(--font-mono); font-size:0.78rem;">
+      <div data-role="cmd-list" style="display:flex; flex-direction:column; gap:0.35rem; margin-bottom:0.65rem;"></div>
+      <button type="button" class="egui-btn" data-cmd-action="fuzz" style="width:100%;">Run <code>panic_hunt</code> Adversarial Fuzzer</button>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Precheck &amp; Enabled Guard</h4>
+      <div data-role="cmd-precheck" style="font-family:var(--font-mono); font-size:0.76rem; line-height:1.5;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. Dispatch Result (<code>Result&lt;Value, EngineError&gt;</code>)</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="cmd-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_viewport_cull_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initViewportCullSimulator("viewport-cull-sim");')
+    return """<section class="full-width-panel" id="viewport-cull-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Spatial Viewport Culling (<code>Rect::intersects</code>) &amp; Frame Budget</span>
+    <span class="panel-badge">Rect::intersects • Vec::with_capacity • PerfBudget</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Drag the camera X/Y and viewport width sliders below. Watch how <code>culled_pads_in_rect</code> and <code>culled_traces_in_rect</code> test each primitive's axis-aligned bounding box (<code>bounds_mm().intersects(viewport_mm)</code>) so off-screen geometry is skipped before <code>Painter</code> tessellation.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Camera Frustum (<code>pcb_scene_rect</code>)</h4>
+      <label style="display:block; font-size:0.8rem; margin-bottom:0.45rem;">
+        Camera Min X (<code>mm</code>):
+        <input type="range" data-cull="minX" min="0" max="60" value="10" style="width:100%;">
+      </label>
+      <label style="display:block; font-size:0.8rem; margin-bottom:0.45rem;">
+        Camera Width (<code>mm</code>):
+        <input type="range" data-cull="width" min="20" max="90" value="42" style="width:100%;">
+      </label>
+      <label class="egui-checkbox" style="margin-top:0.4rem;">
+        <input type="checkbox" data-cull="enabled" checked>
+        Enable Viewport Culling
+      </label>
+    </div>
+
+    <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:215px;">
+      <svg viewBox="0 0 320 200" width="100%" height="200" aria-label="Spatial Viewport Culling Preview">
+        <rect x="16" y="14" width="288" height="172" rx="6" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
+        <g data-svg="cull-items"></g>
+        <rect data-svg="cull-box" x="45" y="26" width="120" height="148" fill="rgba(61, 214, 140, 0.08)" stroke="#3dd68c" stroke-width="2" stroke-dasharray="5 3"/>
+      </svg>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. <code>ViewportCullStats</code> &amp; Budget</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="cull-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_async_import_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initAsyncImportSimulator("async-import-sim");')
+    return """<section class="full-width-panel" id="async-import-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Non-Blocking Background Import (<code>mpsc::channel</code>)</span>
+    <span class="panel-badge">std::thread::spawn • mpsc::Receiver::try_recv • ProgressBar</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Start a background session import below and step through non-blocking <code>try_recv()</code> frames—or cancel mid-flight by dropping the <code>Receiver&lt;ImportJobMessage&gt;</code>. Notice how the UI thread stays 100% responsive and requests repaints via <code>ctx.request_repaint()</code> while <code>ImportJobState::Running</code> is active.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Worker &amp; Channel Controls</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-import="start-valid">Spawn Valid JSON Import</button>
+        <button type="button" class="egui-btn" data-import="start-corrupt">Spawn Corrupt JSON Import</button>
+        <button type="button" class="egui-btn" data-import="step">Poll Next Frame (<code>try_recv</code>)</button>
+        <button type="button" class="egui-btn" data-import="cancel">Cancel Import (Drop <code>rx</code>)</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Simulated <code>egui::ProgressBar</code></h4>
+      <div style="background:#0d1117; border:1px solid #30363d; border-radius:4px; height:24px; overflow:hidden; margin-bottom:0.55rem; position:relative;">
+        <div data-role="import-bar" style="background:#2ea043; height:100%; width:0%; transition:width 0.15s ease;"></div>
+        <span data-role="import-bar-label" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:0.75rem; color:#e6edf3;">Idle</span>
+      </div>
+      <div data-role="import-queue" style="font-family:var(--font-mono); font-size:0.75rem; line-height:1.45;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. <code>ImportJobState</code> on UI Thread</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="import-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_snapshot_wasm_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initSnapshotWasmSimulator("snapshot-wasm-sim");')
+    return """<section class="full-width-panel" id="snapshot-wasm-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Offscreen Snapshot Digest (<code>gpu_lock</code>) &amp; <code>wasm32</code> Gate</span>
+    <span class="panel-badge">gpu_lock() • FrameSnapshotDigest • cfg(target_arch = "wasm32")</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Toggle layers or DRC clearance below and compare the live 64-bit FNV-1a <code>FrameSnapshotDigest</code> against the pinned golden baseline. Any visual regression in visible layers, pad/trace counts, or DRC halos immediately flips the snapshot check to <code>MISMATCH</code>.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Offscreen Render Controls</h4>
+      <label class="egui-checkbox"><input type="checkbox" data-snap="top" checked> Top Copper (bit 0)</label>
+      <label class="egui-checkbox"><input type="checkbox" data-snap="bot" checked> Bottom Copper (bit 1)</label>
+      <label class="egui-checkbox"><input type="checkbox" data-snap="silk" checked> Silkscreen (bit 2)</label>
+      <label class="egui-checkbox"><input type="checkbox" data-snap="rats"> Ratsnest (bit 3)</label>
+      <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-top:0.55rem;">
+        <button type="button" class="egui-btn" data-snap-act="bless">Bless Current as Baseline</button>
+        <button type="button" class="egui-btn" data-snap-act="target">Toggle Target (<code>native</code> / <code>wasm32</code>)</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Snapshot Parity &amp; <code>gpu_lock()</code></h4>
+      <div data-role="snap-diff" style="font-family:var(--font-mono); font-size:0.76rem; line-height:1.5;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. <code>FrameSnapshotDigest</code> &amp; Scorecard</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="snap-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
 def widget_layer_swatch_sim(scripts_out: list[str]) -> str:
     scripts_out.append('    initLayerSwatchSimulator("layer-swatch-sim");')
     return """<section class="full-width-panel" id="layer-swatch-sim">
@@ -1548,7 +1709,13 @@ def compile_markdown_body(
     # 2. Extract `:::exercise` blocks (full-width)
     text = EXERCISE_BLOCK_RE.sub(
         lambda m: _stash_fullwidth(
-            render_exercise_block(m.group(1), m.group(2), scripts_out=scripts_out)
+            render_exercise_block(
+                m.group(1),
+                m.group(2),
+                source_name=source_name,
+                errors=errors,
+                scripts_out=scripts_out,
+            )
         ),
         text,
     )
@@ -1601,6 +1768,10 @@ def compile_markdown_body(
         "{{widget:serde-session-sim}}": lambda: widget_serde_session_sim(scripts_out),
         "{{widget:cow-arc-sim}}": lambda: widget_cow_arc_sim(scripts_out),
         "{{widget:undo-coalesce-sim}}": lambda: widget_undo_coalesce_sim(scripts_out),
+        "{{widget:command-palette-sim}}": lambda: widget_command_palette_sim(scripts_out),
+        "{{widget:viewport-cull-sim}}": lambda: widget_viewport_cull_sim(scripts_out),
+        "{{widget:async-import-sim}}": lambda: widget_async_import_sim(scripts_out),
+        "{{widget:snapshot-wasm-sim}}": lambda: widget_snapshot_wasm_sim(scripts_out),
     }
     for shortcode, factory in fullwidth_widgets.items():
         if shortcode in text:

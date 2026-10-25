@@ -77,15 +77,15 @@ pub fn validate_l1_manifest_no_ui_deps(cargo_toml: &str) -> Result<(), &'static 
     for &forbidden in FORBIDDEN_UI_DEPS_BELOW_L6 {
         let key_eq = format!("{forbidden} =");
         if cargo_toml.contains(&key_eq) {
-            return [[Err(forbidden)|Return Err(forbidden) when a forbidden UI dependency is detected|Err(...)|145px]];
+            return {{blank:Err(forbidden)|Return Err(forbidden) when a forbidden UI dependency is detected|Err(...)|145px}};
         }
     }
     Ok(())
 }
 
 pub fn layer_color(layer: PcbLayer) -> Color32 {
-    let (r, g, b) = layer.[[rgb()|Call PcbLayer::rgb() from the L1 pcb-doc crate|rgb()|95px]];
-    Color32::[[from_rgb(r, g, b);;from_rgb(r,g,b)|Construct an opaque Color32 from the (r, g, b) tuple|from_rgb(...)|165px]]
+    let (r, g, b) = layer.{{blank:rgb()|Call PcbLayer::rgb() from the L1 pcb-doc crate|rgb()|95px}};
+    Color32::{{blank:from_rgb(r, g, b);;from_rgb(r,g,b)|Construct an opaque Color32 from the (r, g, b) tuple|from_rgb(...)|165px}}
 }
 ```
 

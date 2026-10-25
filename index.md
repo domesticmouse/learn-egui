@@ -14,11 +14,12 @@ flowchart LR
   A1 --> A2["Act II (0006–0009)\nSchematics & egui_kittest"]
   A2 --> A3["Act III (0010–0013)\nDRC Overlays & Review Pins"]
   A3 --> A4["Act IV (0014–0017)\nMulti-Crate CoW Engine"]
-  A4 --> A5["Act V (0018–0025)\nKiCad nom Parser & Turso SQL"]
+  A4 --> A5["Act V (0018–0021)\nCommand Engine, Culling & Snapshots"]
+  A5 --> A6["Act VI (0022–0025)\nKiCad nom Parser & Turso SQL"]
 ```
-_Five-Act Curriculum Progression: Every lesson builds toward a production Schematic & PCB Design Review System verified with unit tests and mutation coverage._
+_Six-Act Curriculum Progression: Every lesson builds toward a production Schematic & PCB Design Review System verified with unit tests and mutation coverage._
 
-## Published Interactive Lessons (`0000`–`0017`)
+## Published Interactive Lessons (`0000`–`0021`)
 
 Start with [Lesson 0000](./lessons/0000-project-setup-and-eframe-boot.html) to set up your Cargo project and mutation-testing harness, or jump straight into any completed module below:
 
@@ -39,14 +40,14 @@ Turns out, having a one-page cheat sheet next to your editor saves a lot of tab-
 Every lesson is backed by a standalone, runnable Cargo package or workspace under `./apps/<NNNN-lesson-slug>/` that compiles with zero warnings and passes both `cargo test` and `cargo mutants`:
 
 ```bash
-# Launch Lesson 0017's interactive multi-crate PCB Reviewer desktop window
-cargo run --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml
+# Launch Lesson 0021's interactive multi-crate PCB Reviewer desktop window
+cargo run --manifest-path ./apps/0021-headless-snapshot-testing-and-wasm-build/Cargo.toml
 
-# Run workspace unit + proptest suites and fast L1 domain mutation checks
-cargo test --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml --workspace
-cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml -p pcb-doc --in-place
+# Run workspace unit + proptest + panic_hunt suites and fast L1 domain mutation checks
+cargo test --manifest-path ./apps/0021-headless-snapshot-testing-and-wasm-build/Cargo.toml --workspace
+cargo mutants --manifest-path ./apps/0021-headless-snapshot-testing-and-wasm-build/Cargo.toml -p pcb-doc --in-place
 ```
 
 :::teacher-prompt
-**Ready to dive in?** Start with [**Lesson 0000: Bootstrapping Your Rust & `eframe` Project**](./lessons/0000-project-setup-and-eframe-boot.html) or jump straight to [**Lesson 0017: Undo/Redo History (`VecDeque`) & Continuous Slider Drag Coalescing**](./lessons/0017-undo-redo-history-and-slider-coalescing.html).
+**Ready to dive in?** Start with [**Lesson 0000: Bootstrapping Your Rust & `eframe` Project**](./lessons/0000-project-setup-and-eframe-boot.html) or jump straight to [**Lesson 0021: Offscreen Snapshot Parity (`gpu_lock`), Quality Scorecards & WebAssembly (`wasm32`)**](./lessons/0021-headless-snapshot-testing-and-wasm-build.html).
 :::
