@@ -24,11 +24,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Stage static course bundle
-        run: |
-          mkdir -p _site
-          cp index.html .nojekyll _site/
-          cp -R assets lessons reference _site/
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Markdown builder dependencies
+        run: python -m pip install markdown-it-py pyyaml
+
+      - name: Build and verify static course bundle
+        run: python build.py --out-dir _site --check
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

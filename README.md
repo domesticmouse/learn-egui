@@ -34,6 +34,18 @@ cargo test --manifest-path ./apps/0005-hit-testing-and-net-cross-probing/Cargo.t
 cargo mutants -d ./apps/0005-hit-testing-and-net-cross-probing
 ```
 
+## Building the Course Pages from Markdown (`build.py`)
+
+All course pages (`index.md`, `lessons/*.md`, and `reference/*.md`) are authored in Markdown and compiled to standalone HTML via [`build.py`](./build.py):
+
+```bash
+# Compile all Markdown pages in-place and run link, frontmatter, and equal-word-count quiz checks
+.venv/bin/python build.py --check
+
+# Or build a standalone bundle into _site/ (used by GitHub Pages CI)
+.venv/bin/python build.py --out-dir _site --check
+```
+
 ## License
 
 Licensed under the [Apache License, Version 2.0](./LICENSE.txt).

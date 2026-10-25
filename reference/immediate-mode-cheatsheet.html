@@ -4,11 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
-  <title>Immediate-Mode Cheat Sheet — Rust &amp; egui</title>
+  <title>Reference: The `eframe::App` Immediate-Mode Loop</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
-  <nav class="course-nav">
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
     <div>
       <a href="../index.html">Index</a>
       <a href="../lessons/0000-project-setup-and-eframe-boot.html">0000</a>
@@ -27,27 +28,28 @@
     </div>
     <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
   </nav>
+  </header>
 
-  <article class="tufte-article">
-    <h1>Reference: The <code>eframe::App</code> Immediate-Mode Loop</h1>
-    <p class="subtitle">One-page syntax and mental-model reference for Lessons 0000 &amp; 0001. Keep open or print while writing <code>egui</code> panels.</p>
+  <main>
+    <article class="tufte-article">
+<h1>Reference: The <code>eframe::App</code> Immediate-Mode Loop</h1>
+<p class="subtitle">One-page syntax and mental-model reference for Lessons 0000 &amp; 0001. Keep open or print while writing <code>egui</code> panels.</p>
 
-    <h2>1. The Mental Model (One Frame = One Function Call)</h2>
-    <figure class="mermaid-figure">
-      <pre class="mermaid">
+<h2>1. The Mental Model (One Frame = One Function Call)</h2>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
 flowchart TD
-    State["Persistent Rust Struct<br/>struct PcbReviewerApp { show_top_copper: bool, ... }"]
-    State -->|"1. eframe calls update(&amp;mut self, ctx, frame)"| Side["SidePanel::left('layers').show(ctx, |ui| { ... })"]
-    Side --> Checkbox["ui.checkbox(&amp;mut self.show_top_copper, 'Top Copper (F.Cu)')"]
-    Checkbox -->|"Reads bool to draw box<br/>Flips bool in-place if clicked"| Central["CentralPanel::default().show(ctx, |ui| { ... })"]
-    Central -->|"2. Reads updated self.show_top_copper"| Paint["Paints visible F.Cu traces &amp; pads for this frame"]
-    Paint -->|"3. End of update(): borrow released"| State
-      </pre>
-      <figcaption>The <code>eframe::App::update</code> lifecycle across a single frame.</figcaption>
-    </figure>
-
-    <h2>2. Complete Runnable Skeleton (<code>src/main.rs</code>)</h2>
-    <pre><code class="language-rust">use eframe::egui;
+    State["Persistent Rust Struct&lt;br/&gt;struct PcbReviewerApp { show_top_copper: bool, ... }"]
+    State --&gt;|"1. eframe calls update(&amp;mut self, ctx, frame)"| Side["SidePanel::left('layers').show(ctx, |ui| { ... })"]
+    Side --&gt; Checkbox["ui.checkbox(&amp;mut self.show_top_copper, 'Top Copper (F.Cu)')"]
+    Checkbox --&gt;|"Reads bool to draw box&lt;br/&gt;Flips bool in-place if clicked"| Central["CentralPanel::default().show(ctx, |ui| { ... })"]
+    Central --&gt;|"2. Reads updated self.show_top_copper"| Paint["Paints visible F.Cu traces &amp; pads for this frame"]
+    Paint --&gt;|"3. End of update(): borrow released"| State
+  </pre>
+</figure>
+<p><em>The <code>eframe::App::update</code> lifecycle across a single frame.</em></p>
+<h2>2. Complete Runnable Skeleton (<code>src/main.rs</code>)</h2>
+<pre><code class="language-rust">use eframe::egui;
 
 fn main() -&gt; eframe::Result {
     let mut options = eframe::NativeOptions::default();
@@ -130,35 +132,40 @@ impl eframe::App for PcbReviewerApp {
         });
     }
 }</code></pre>
+<h2>3. Common Panel &amp; Widget Signatures</h2>
+<table class="ref-table">
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Rust Code</th>
+<th>Why It Works This Way</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Two-way boolean toggle</strong></td>
+<td><code>ui.checkbox(&amp;mut self.flag, &quot;Label&quot;)</code></td>
+<td>Borrows <code>self.flag</code> mutably for the duration of the call; flips the boolean if clicked and returns a <code>Response</code>.</td>
+</tr>
+<tr>
+<td><strong>Momentary action button</strong></td>
+<td><code>if ui.button(&quot;Reset&quot;).clicked() { ... }</code></td>
+<td>Buttons don't store a boolean; they return a <code>Response</code> whose <code>.clicked()</code> method is <code>true</code> on the frame the click occurred.</td>
+</tr>
+<tr>
+<td><strong>Panel ordering rule</strong></td>
+<td><code>SidePanel</code> first, <code>CentralPanel</code> last</td>
+<td><code>CentralPanel</code> claims all remaining area left over in <code>ctx</code> after outer panels allocate their widths/heights (<a href="https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html">docs.rs</a>).</td>
+</tr>
+</tbody>
+</table>
+    </article>
+  </main>
 
-    <h2>3. Common Panel &amp; Widget Signatures</h2>
-    <table class="ref-table">
-      <thead>
-        <tr>
-          <th>Pattern</th>
-          <th>Rust Code</th>
-          <th>Why It Works This Way</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>Two-way boolean toggle</strong></td>
-          <td><code>ui.checkbox(&amp;mut self.flag, "Label")</code></td>
-          <td>Borrows <code>self.flag</code> mutably for the duration of the call; flips the boolean if clicked and returns a <code>Response</code>.</td>
-        </tr>
-        <tr>
-          <td><strong>Momentary action button</strong></td>
-          <td><code>if ui.button("Reset").clicked() { ... }</code></td>
-          <td>Buttons don't store a boolean; they return a <code>Response</code> whose <code>.clicked()</code> method is <code>true</code> on the frame the click occurred.</td>
-        </tr>
-        <tr>
-          <td><strong>Panel ordering rule</strong></td>
-          <td><code>SidePanel</code> first, <code>CentralPanel</code> last</td>
-          <td><code>CentralPanel</code> claims all remaining area left over in <code>ctx</code> after outer panels allocate their widths/heights (<a href="https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html" target="_blank" rel="noopener">docs.rs</a>).</td>
-        </tr>
-      </tbody>
-    </table>
-  </article>
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
 
   <script src="../assets/course.js"></script>
 </body>

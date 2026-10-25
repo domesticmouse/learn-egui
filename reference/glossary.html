@@ -4,11 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
-  <title>Glossary — Rust &amp; egui for Schematic/PCB Review</title>
+  <title>Glossary of Rust &amp; `egui` Terms</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
-  <nav class="course-nav">
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
     <div>
       <a href="../index.html">Index</a>
       <a href="../lessons/0000-project-setup-and-eframe-boot.html">0000</a>
@@ -27,213 +28,150 @@
     </div>
     <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
   </nav>
+  </header>
 
-  <article class="tufte-article">
-    <h1>Glossary of Rust &amp; <code>egui</code> Terms</h1>
-    <p class="subtitle">Canonical definitions used across all lessons and reference sheets. Designed for quick screen lookup and clean printing.</p>
+  <main>
+    <article class="tufte-article">
+<h1>Glossary of Rust &amp; <code>egui</code> Terms</h1>
+<p class="subtitle">Canonical definitions used across all lessons and reference sheets. Designed for quick screen lookup and clean printing.</p>
 
-    <h2>1. Core GUI Paradigms</h2>
-    <table class="ref-table">
-      <thead>
-        <tr>
-          <th style="width: 24%;">Term</th>
-          <th style="width: 48%;">Definition</th>
-          <th style="width: 28%;">PCB / Schematic Analogy</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>Immediate-Mode GUI (IMGUI)</strong></td>
-          <td>A UI paradigm where widgets are not persistent objects in memory. Instead, your application state lives in a plain Rust <code>struct</code>, and every frame you call functions like <code>ui.checkbox(...)</code> or <code>ui.button(...)</code> that simultaneously query input and emit draw commands (<a href="https://docs.rs/egui/latest/egui/#understanding-immediate-mode" target="_blank" rel="noopener">docs.rs/egui</a>).</td>
-          <td>Redrawing the active copper and silkscreen layers directly from the board data model on every display refresh.</td>
-        </tr>
-        <tr>
-          <td><strong>Retained-Mode GUI</strong></td>
-          <td>A traditional UI paradigm (DOM, Qt, Flutter widget trees) where the framework stores a persistent graph of widget objects with their own internal state that must be synchronized via callbacks or listeners.</td>
-          <td>Maintaining a separate physical copy of every switch and indicator LED and wiring event listeners between them.</td>
-        </tr>
-      </tbody>
-    </table>
+<h2>Canonical Glossary</h2>
 
-    <h2>2. Essential Rust Mechanics Used by <code>egui</code></h2>
-    <table class="ref-table">
-      <thead>
-        <tr>
-          <th style="width: 24%;">Term &amp; Syntax</th>
-          <th style="width: 48%;">Definition</th>
-          <th style="width: 28%;">Where You See It in <code>egui</code></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>Manifest (<code>Cargo.toml</code>)</strong></td>
-          <td>The configuration file for a Rust package defining its metadata, external dependencies (like <code>eframe</code>), and compiler optimization profiles (<a href="https://doc.rust-lang.org/cargo/reference/manifest.html" target="_blank" rel="noopener">Cargo Book</a>).</td>
-          <td>Declares <code>eframe = "0.33"</code> and <code>[profile.dev.package."*"] opt-level = 2</code>.</td>
-        </tr>
-        <tr>
-          <td><strong>Struct (<code>struct</code>)</strong></td>
-          <td>A composite data type that groups named fields together into a single unit of ownership (<a href="https://doc.rust-lang.org/book/ch05-01-defining-structs.html" target="_blank" rel="noopener">Rust Book §5.1</a>).</td>
-          <td><code>struct PcbReviewerApp</code> holds your persistent layer toggles, zoom level, and netlist state across frames.</td>
-        </tr>
-        <tr>
-          <td><strong>Default Trait (<code>Default</code>)</strong></td>
-          <td>A standard library trait granting a type a canonical constructor (<code>T::default()</code>) for initial values (<a href="https://doc.rust-lang.org/std/default/trait.Default.html" target="_blank" rel="noopener">std::default::Default</a>).</td>
-          <td><code>impl Default for PcbReviewerApp</code> sets <code>show_top_copper: true</code> when the reviewer boots.</td>
-        </tr>
-        <tr>
-          <td><strong>Heap Box (<code>Box&lt;T&gt;</code>)</strong></td>
-          <td>A smart pointer that allocates a value of type <code>T</code> on the heap and owns it with a fixed-size pointer on the stack (<a href="https://doc.rust-lang.org/book/ch15-01-box.html" target="_blank" rel="noopener">Rust Book §15.1</a>).</td>
-          <td><code>Box::new(PcbReviewerApp::default())</code> hands your app instance to <code>eframe::run_native</code>.</td>
-        </tr>
-        <tr>
-          <td><strong>Shared Borrow (<code>&amp;T</code>)</strong></td>
-          <td>An immutable, read-only reference to a value of type <code>T</code>. Multiple <code>&amp;T</code> references can coexist simultaneously, but the target cannot be mutated while borrowed (<a href="https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html" target="_blank" rel="noopener">Rust Book §4.2</a>).</td>
-          <td><code>&amp;egui::Context</code> passed into <code>update</code>, or iterating over <code>&amp;self.traces</code> to paint them on the canvas.</td>
-        </tr>
-        <tr>
-          <td><strong>Mutable Borrow (<code>&amp;mut T</code>)</strong></td>
-          <td>An exclusive, read-write reference to a value of type <code>T</code>. Allows a called function to both read the current value and modify it in place without taking ownership (<a href="https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html" target="_blank" rel="noopener">Rust Book §4.2</a>).</td>
-          <td><code>&amp;mut self</code> in <code>update()</code>, and <code>ui.checkbox(&amp;mut self.show_top_copper, "Top Cu")</code>.</td>
-        </tr>
-        <tr>
-          <td><strong>Closure (<code>|ui| { ... }</code>)</strong></td>
-          <td>An anonymous inline function that can capture variables (like <code>self</code>) from its surrounding scope. Arguments appear between vertical pipes <code>|...|</code> (<a href="https://doc.rust-lang.org/book/ch13-01-closures.html" target="_blank" rel="noopener">Rust Book §13.1</a>).</td>
-          <td><code>egui::SidePanel::left("layers").show(ctx, |ui| { ... })</code> scopes which widgets belong inside that panel.</td>
-        </tr>
-        <tr>
-          <td><strong>Copy Semantics (<code>Copy</code>)</strong></td>
-          <td>A marker trait for small stack-only values that can be duplicated simply by copying bits when passed to functions or assigned, without moving ownership (<a href="https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy" target="_blank" rel="noopener">Rust Book §4.1</a>).</td>
-          <td><code>Pos2</code>, <code>Vec2</code>, <code>Rect</code>, <code>Color32</code>, <code>Stroke</code>, and <code>PcbLayer</code> all implement <code>Copy</code>.</td>
-        </tr>
-        <tr>
-          <td><strong>Enum &amp; Exhaustive <code>match</code></strong></td>
-          <td>An algebraic data type enumerating a closed set of variants; <code>match</code> forces every variant to be handled at compile time (<a href="https://doc.rust-lang.org/book/ch06-00-enums.html" target="_blank" rel="noopener">Rust Book §6</a>).</td>
-          <td><code>enum PcbLayer { BottomCopper, TopCopper, Silkscreen, Ratsnest }</code> and <code>Option&lt;NetId&gt;</code>.</td>
-        </tr>
-        <tr>
-          <td><strong>Optional Value (<code>Option&lt;T&gt;</code>)</strong></td>
-          <td>Rust's null-free representation of a value that may be present (<code>Some(T)</code>) or absent (<code>None</code>).</td>
-          <td><code>hovered_net: Option&lt;NetId&gt;</code> and <code>selected_net.or(hovered_net)</code> in Lesson 0005.</td>
-        </tr>
-        <tr>
-          <td><strong>String Slice vs. Owned String (<code>&amp;'static str</code> vs. <code>String</code>)</strong></td>
-          <td><code>&amp;'static str</code> is a zero-allocation borrowed reference to UTF-8 text baked into the compiled binary; <code>String</code> is a heap-allocated, growable UTF-8 buffer constructed dynamically with <code>format!(...)</code> or mutated by <code>TextEdit</code> (<a href="https://doc.rust-lang.org/book/ch08-02-strings.html" target="_blank" rel="noopener">Rust Book §8.2</a>).</td>
-          <td>Fixed pin labels use <code>&amp;'static str</code>; formatted schematic headers and search queries use <code>String</code> (Lessons 0006 &amp; 0008).</td>
-        </tr>
-        <tr>
-          <td><strong>Disjoint Struct Field Borrowing</strong></td>
-          <td>Rust's borrow checker tracks borrows per struct field when fields are accessed directly, allowing a shared borrow (<code>&amp;self.board</code>) and a mutable borrow (<code>&amp;mut self.view</code>) to coexist in the same scope (<a href="https://doc.rust-lang.org/nomicon/borrow-splitting.html" target="_blank" rel="noopener">Rustonomicon</a>).</td>
-          <td>Passing <code>&amp;self.board</code> and <code>&amp;mut self.view</code> simultaneously to split Schematic and PCB viewports in Lesson 0007.</td>
-        </tr>
-        <tr>
-          <td><strong>Data-Carrying Enum (Tagged Union)</strong></td>
-          <td>A Rust <code>enum</code> whose variants store variant-specific payload fields directly inside the variant (e.g., <code>Measuring { start_mm: Pos2, end_mm: Pos2 }</code>), making invalid state combinations unrepresentable (<a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html" target="_blank" rel="noopener">Rust Book §6.1</a>).</td>
-          <td><code>enum ActiveTool</code> state machine for the Point-to-Point CAD Ruler in Lesson 0009.</td>
-        </tr>
-      </tbody>
-    </table>
+<table class="ref-table">
+  <thead>
+    <tr>
+      <th style="width: 24%;">Term &amp; Syntax</th>
+      <th style="width: 50%;">Definition</th>
+      <th style="width: 26%;">Avoid / CAD Context</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Immediate-Mode GUI (IMGUI)</strong></td>
+      <td>A UI paradigm where widgets are not persistent objects in memory; instead, your application state lives in a plain Rust <code>struct</code> and every frame you call functions like <code>ui.checkbox(...)</code> or <code>ui.button(...)</code> that simultaneously query input and emit draw commands (<a href="https://docs.rs/egui/latest/egui/#understanding-immediate-mode">docs.rs/egui</a>). Analogy: redrawing the active copper and silkscreen layers directly from the board data model on every display refresh.</td>
+      <td><em>Avoid:</em> &quot;stateless UI&quot; (your Rust struct holds persistent state across frames; only the widget tree is transient).</td>
+    </tr>
+    <tr>
+      <td><strong>Retained-Mode GUI</strong></td>
+      <td>A traditional UI paradigm (DOM, Qt, Flutter widget trees) where the framework stores a persistent graph of widget objects with their own internal state that must be synchronized with application state via callbacks or listeners.</td>
+      <td><em>Avoid:</em> &quot;stateful UI&quot; (both immediate-mode and retained-mode UIs manage state; they differ in whether widgets retain a separate copy of it).</td>
+    </tr>
+    <tr>
+      <td><strong>Manifest (<code>Cargo.toml</code>)</strong></td>
+      <td>The configuration file for a Rust package defining its metadata, external dependencies (like <code>eframe</code>), and compiler optimization profiles (<a href="https://doc.rust-lang.org/cargo/reference/manifest.html">Cargo Book</a>).</td>
+      <td><em>Avoid:</em> &quot;package.json&quot; or &quot;build script&quot; (<code>Cargo.toml</code> is declarative metadata; <code>build.rs</code> is a build script).</td>
+    </tr>
+    <tr>
+      <td><strong>Struct (<code>struct</code>)</strong></td>
+      <td>A composite Rust data type that groups named fields together into a single unit of ownership (<a href="https://doc.rust-lang.org/book/ch05-01-defining-structs.html">Rust Book §5.1</a>), such as <code>struct PcbReviewerApp</code>.</td>
+      <td><em>Avoid:</em> &quot;class&quot; or &quot;object&quot; (Rust structs have no inheritance hierarchy and separate data layout from <code>impl</code> behavior blocks).</td>
+    </tr>
+    <tr>
+      <td><strong>Default Trait (<code>Default</code>)</strong></td>
+      <td>A standard library trait granting a type a canonical parameterless constructor (<code>T::default()</code>) for initial values (<a href="https://doc.rust-lang.org/std/default/trait.Default.html">std::default::Default</a>).</td>
+      <td><em>Avoid:</em> &quot;default constructor&quot; (Rust has no implicit constructors; <code>Default::default()</code> is an explicit trait method).</td>
+    </tr>
+    <tr>
+      <td><strong>Heap Box (<code>Box&lt;T&gt;</code>)</strong></td>
+      <td>A smart pointer that allocates a value of type <code>T</code> on the heap and owns it through a fixed-size pointer on the stack (<a href="https://doc.rust-lang.org/book/ch15-01-box.html">Rust Book §15.1</a>), used to hand <code>Box&lt;dyn eframe::App&gt;</code> to <code>eframe::run_native</code>.</td>
+      <td><em>Avoid:</em> &quot;raw pointer&quot; (<code>Box&lt;T&gt;</code> uniquely owns its heap allocation and drops it deterministically when it goes out of scope).</td>
+    </tr>
+    <tr>
+      <td><strong>Shared Borrow (<code>&amp;T</code>)</strong></td>
+      <td>An immutable, read-only reference to a value of type <code>T</code>; multiple <code>&amp;T</code> references can coexist simultaneously, but the target cannot be mutated while borrowed (<a href="https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html">Rust Book §4.2</a>).</td>
+      <td><em>Avoid:</em> &quot;pointer&quot; or &quot;copy&quot; (a shared borrow is a compile-time lifetime-checked non-owning reference).</td>
+    </tr>
+    <tr>
+      <td><strong>Mutable Borrow (<code>&amp;mut T</code>)</strong></td>
+      <td>An exclusive, read-write reference to a value of type <code>T</code> that allows a called function (such as <code>ui.checkbox(&amp;mut self.show_top_copper, &quot;Top Cu&quot;)</code>) to read and modify a value in place without taking ownership (<a href="https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html">Rust Book §4.2</a>).</td>
+      <td><em>Avoid:</em> &quot;mutable pointer&quot; or &quot;pass by reference&quot; (emphasize exclusivity: no other <code>&amp;T</code> or <code>&amp;mut T</code> to the same data may overlap).</td>
+    </tr>
+    <tr>
+      <td><strong>Closure (<code>|ui| { ... }</code>)</strong></td>
+      <td>An anonymous inline function that can capture variables (like <code>self</code>) from its surrounding scope, with parameters written between vertical pipes <code>|...|</code> (<a href="https://doc.rust-lang.org/book/ch13-01-closures.html">Rust Book §13.1</a>).</td>
+      <td><em>Avoid:</em> &quot;callback&quot; (in <code>egui</code>, panel closures execute synchronously right now during the current frame, not asynchronously later).</td>
+    </tr>
+    <tr>
+      <td><strong>Copy Semantics (<code>Copy</code>)</strong></td>
+      <td>A marker trait for small stack-only values (<code>Pos2</code>, <code>Vec2</code>, <code>Rect</code>, <code>Color32</code>, <code>Stroke</code>, <code>PcbLayer</code>) that duplicate trivially by copying bits on assignment or function call without moving ownership (<a href="https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#stack-only-data-copy">Rust Book §4.1</a>).</td>
+      <td><em>Avoid:</em> &quot;deep clone&quot; (<code>Copy</code> is an implicit bitwise stack copy; heap-allocating duplicates use explicit <code>.clone()</code>).</td>
+    </tr>
+    <tr>
+      <td><strong>Enum &amp; Exhaustive <code>match</code></strong></td>
+      <td>An algebraic data type enumerating a closed set of variants (<code>PcbLayer</code>, <code>Option&lt;NetId&gt;</code>, <code>ActiveTool</code>) where <code>match</code> forces every variant to be handled at compile time (<a href="https://doc.rust-lang.org/book/ch06-00-enums.html">Rust Book §6</a>).</td>
+      <td><em>Avoid:</em> &quot;integer constants&quot; (Rust enums are strongly typed sum types and can carry per-variant data).</td>
+    </tr>
+    <tr>
+      <td><strong>Optional Value (<code>Option&lt;T&gt;</code>)</strong></td>
+      <td>Rust's null-free enum representing a value that is either present (<code>Some(T)</code>) or absent (<code>None</code>), used for hover and selection state (<code>Option&lt;NetId&gt;</code>).</td>
+      <td><em>Avoid:</em> &quot;null&quot; or &quot;nullable pointer&quot; (Rust references are never null; absence is always explicit in the type signature).</td>
+    </tr>
+    <tr>
+      <td><strong>String Slice vs. Owned String (<code>&amp;'static str</code> vs. <code>String</code>)</strong></td>
+      <td><code>&amp;'static str</code> is a zero-allocation borrowed view into UTF-8 text baked into the compiled binary, whereas <code>String</code> is a heap-allocated, growable UTF-8 buffer constructed dynamically with <code>format!(...)</code> or mutated by <code>TextEdit::singleline</code> (<a href="https://doc.rust-lang.org/book/ch08-02-strings.html">Rust Book §8.2</a>).</td>
+      <td><em>Avoid:</em> calling both &quot;strings&quot; without distinguishing borrowed slices (<code>&amp;str</code>) from owned buffers (<code>String</code>).</td>
+    </tr>
+    <tr>
+      <td><strong>Disjoint Struct Field Borrowing</strong></td>
+      <td>Rust's borrow checker tracks borrows per struct field when fields are accessed directly, allowing a shared borrow (<code>&amp;self.board</code>) and a mutable borrow (<code>&amp;mut self.view</code>) to coexist in the same scope (<a href="https://doc.rust-lang.org/nomicon/borrow-splitting.html">Rustonomicon</a>).</td>
+      <td><em>Avoid:</em> &quot;borrowing <code>self</code> twice&quot; (borrowing distinct fields <code>&amp;self.board</code> and <code>&amp;mut self.view</code> works precisely because whole-struct <code>&amp;mut self</code> is split across disjoint fields).</td>
+    </tr>
+    <tr>
+      <td><strong>Data-Carrying Enum (Tagged Union)</strong></td>
+      <td>A Rust <code>enum</code> whose variants store variant-specific payload fields directly inside the variant (such as <code>ActiveTool::Measuring { start_mm: Pos2, end_mm: Pos2 }</code>), making invalid state combinations unrepresentable (<a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html">Rust Book §6.1</a>).</td>
+      <td><em>Avoid:</em> &quot;boolean flag + optional fields&quot; (which permit contradictory states like <code>is_measuring = true</code> with <code>start_mm = None</code>).</td>
+    </tr>
+    <tr>
+      <td><strong><code>eframe::App</code></strong></td>
+      <td>The root application trait in <code>eframe</code> whose core method, <code>fn update(&amp;mut self, ctx: &amp;egui::Context, frame: &amp;mut eframe::Frame)</code>, is invoked on every repaint (<a href="https://docs.rs/eframe/latest/eframe/trait.App.html">docs.rs/eframe</a>).</td>
+      <td><em>Avoid:</em> &quot;window controller&quot; (<code>eframe::App</code> describes per-frame UI state transitions and rendering).</td>
+    </tr>
+    <tr>
+      <td><strong><code>egui::Context</code> (<code>ctx</code>)</strong></td>
+      <td>The top-level handle to <code>egui</code> for the entire window: manages input state, fonts, style, widget ID memory, and root panels (<code>SidePanel</code>, <code>TopBottomPanel</code>, <code>CentralPanel</code>) (<a href="https://docs.rs/egui/latest/egui/struct.Context.html">docs.rs/egui</a>).</td>
+      <td><em>Avoid:</em> confusing <code>ctx: &amp;egui::Context</code> (whole-window coordinator) with <code>ui: &amp;mut egui::Ui</code> (a bounded region inside a panel).</td>
+    </tr>
+    <tr>
+      <td><strong><code>egui::Ui</code> (<code>ui</code>)</strong></td>
+      <td>A bounded rectangular region inside a panel or container with an automatic layout cursor on which you invoke widget methods (<code>ui.heading</code>, <code>ui.checkbox</code>, <code>ui.button</code>, <code>ui.allocate_painter</code>) (<a href="https://docs.rs/egui/latest/egui/struct.Ui.html">docs.rs/egui</a>).</td>
+      <td><em>Avoid:</em> storing <code>Ui</code> across frames (<code>Ui</code> is a short-lived per-frame layout builder).</td>
+    </tr>
+    <tr>
+      <td><strong><code>egui::Response</code></strong></td>
+      <td>The immediate return value of every widget call (e.g., <code>ui.button(&quot;Reset&quot;).clicked()</code> or <code>.hovered()</code>) reporting how the user interacted with that widget during the current frame (<a href="https://docs.rs/egui/latest/egui/struct.Response.html">docs.rs/egui</a>).</td>
+      <td><em>Avoid:</em> &quot;event listener&quot; (<code>Response</code> is a plain value inspected synchronously inside <code>update</code>).</td>
+    </tr>
+    <tr>
+      <td><strong><code>egui::Painter</code></strong></td>
+      <td>The 2D vector drawing API returned by <code>ui.allocate_painter(size, sense)</code> that emits clipped shapes (<code>rect_filled</code>, <code>line_segment</code>, <code>circle_filled</code>, <code>text</code>) in back-to-front painter's algorithm order (<a href="https://docs.rs/egui/latest/egui/struct.Painter.html">docs.rs/egui</a>).</td>
+      <td><em>Avoid:</em> &quot;GPU shader&quot; (<code>Painter</code> tessellates 2D vector primitives into vertex/index meshes for <code>eframe</code> to render).</td>
+    </tr>
+    <tr>
+      <td><strong><code>egui::emath::TSTransform</code></strong></td>
+      <td>A 2D translation plus uniform scaling transform (<code>scaling * pt + translation</code>) with <code>.inverse()</code> for mapping between physical board millimeters (world space) and window points (screen space) (<a href="https://docs.rs/emath/latest/emath/struct.TSTransform.html">docs.rs/emath</a>).</td>
+      <td><em>Avoid:</em> manually mixing unscaled millimeters and screen pixels without a typed coordinate transform.</td>
+    </tr>
+    <tr>
+      <td><strong>Mutation Testing (<code>cargo-mutants</code>)</strong></td>
+      <td>A verification technique that injects small deliberate faults (<em>mutants</em>, such as flipping <code>true</code> to <code>false</code>, replacing <code>+</code> with <code>-</code>, or emptying a method body) and verifies that <code>cargo test</code> fails for every injected fault (<a href="https://mutants.rs/">mutants.rs</a>).</td>
+      <td><em>Avoid:</em> equating &quot;100% line coverage&quot; with verified behavior (line coverage only proves code ran, whereas caught mutants prove assertions fail when logic breaks).</td>
+    </tr>
+    <tr>
+      <td><strong>Headless UI Harness (<code>egui_kittest</code>)</strong></td>
+      <td>The official testing library for <code>egui</code> that drives an app or widget closure without opening an OS window, supporting semantic AccessKit widget queries (<code>get_by_label</code>), simulated clicks/key presses, and offscreen visual snapshots (<a href="https://docs.rs/egui_kittest/latest/egui_kittest/">docs.rs/egui_kittest</a>).</td>
+      <td><em>Avoid:</em> skipping <code>eframe::App::update</code> forever once headless UI testing is available in Act II+.</td>
+    </tr>
+  </tbody>
+</table>
 
-    <h2>3. Key <code>eframe</code> &amp; <code>egui</code> Types</h2>
-    <table class="ref-table">
-      <thead>
-        <tr>
-          <th style="width: 24%;">Type / Method</th>
-          <th style="width: 48%;">Role in the Frame Loop</th>
-          <th style="width: 28%;">Primary Reference</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><code>eframe::run_native</code></td>
-          <td>Opens a native desktop OS window, initializes the GPU renderer, calls your creation closure once to construct your app struct, and starts the event loop.</td>
-          <td><a href="https://docs.rs/eframe/latest/eframe/fn.run_native.html" target="_blank" rel="noopener"><code>eframe::run_native</code> docs</a></td>
-        </tr>
-        <tr>
-          <td><code>eframe::App</code></td>
-          <td>The trait your root application struct implements. Its core method, <code>fn update(&amp;mut self, ctx: &amp;egui::Context, frame: &amp;mut eframe::Frame)</code>, is invoked on every repaint.</td>
-          <td><a href="https://docs.rs/eframe/latest/eframe/trait.App.html" target="_blank" rel="noopener"><code>eframe::App</code> docs</a></td>
-        </tr>
-        <tr>
-          <td><code>egui::Context</code> (<code>ctx</code>)</td>
-          <td>The top-level handle to <code>egui</code> for the entire window: manages input state (mouse/keyboard), fonts, style, memory of widget IDs, and top-level panels (<code>SidePanel</code>, <code>TopBottomPanel</code>, <code>CentralPanel</code>).</td>
-          <td><a href="https://docs.rs/egui/latest/egui/struct.Context.html" target="_blank" rel="noopener"><code>egui::Context</code> docs</a></td>
-        </tr>
-        <tr>
-          <td><code>egui::Ui</code> (<code>ui</code>)</td>
-          <td>Represents a bounded rectangular region inside a panel or container with a layout cursor. You call widget methods (<code>ui.heading</code>, <code>ui.checkbox</code>, <code>ui.button</code>, <code>ui.allocate_painter</code>) on <code>ui</code>.</td>
-          <td><a href="https://docs.rs/egui/latest/egui/struct.Ui.html" target="_blank" rel="noopener"><code>egui::Ui</code> docs</a></td>
-        </tr>
-        <tr>
-          <td><code>egui::Response</code></td>
-          <td>Returned immediately by every widget call (e.g. <code>ui.button("Reset").clicked()</code> or <code>.hovered()</code>). Tells you how the user interacted with that widget during the current frame.</td>
-          <td><a href="https://docs.rs/egui/latest/egui/struct.Response.html" target="_blank" rel="noopener"><code>egui::Response</code> docs</a></td>
-        </tr>
-        <tr>
-          <td><code>egui::Painter</code></td>
-          <td>The 2D vector drawing API returned by <code>ui.allocate_painter(size, sense)</code>. Emits clipped shapes (<code>rect</code>, <code>rect_filled</code>, <code>line_segment</code>, <code>circle</code>, <code>text</code>) in back-to-front order.</td>
-          <td><a href="https://docs.rs/egui/latest/egui/struct.Painter.html" target="_blank" rel="noopener"><code>egui::Painter</code> docs</a></td>
-        </tr>
-        <tr>
-          <td><code>egui::emath::TSTransform</code></td>
-          <td>A 2D translation + uniform scaling transform (<code>scaling * pt + translation</code>) with <code>.inverse()</code> for mapping between physical board millimeters (world space) and window points (screen space).</td>
-          <td><a href="https://docs.rs/emath/latest/emath/struct.TSTransform.html" target="_blank" rel="noopener"><code>TSTransform</code> docs</a></td>
-        </tr>
-        <tr>
-          <td><code>egui::Align2</code> &amp; <code>FontId</code></td>
-          <td>Controls 2D text anchor placement (<code>LEFT_CENTER</code>, <code>RIGHT_CENTER</code>, <code>CENTER_BOTTOM</code>) and font family/point size when calling <code>painter.text(...)</code> (Lesson 0006).</td>
-          <td><a href="https://docs.rs/egui/latest/egui/struct.Align2.html" target="_blank" rel="noopener"><code>egui::Align2</code> docs</a></td>
-        </tr>
-        <tr>
-          <td><code>egui::Scene</code></td>
-          <td>Built-in infinite pan/zoom 2D container that transforms child <code>Ui</code> coordinates using a mutable <code>scene_rect: &amp;mut Rect</code> (Lesson 0007).</td>
-          <td><a href="https://docs.rs/egui/latest/egui/containers/scene/struct.Scene.html" target="_blank" rel="noopener"><code>egui::Scene</code> docs</a></td>
-        </tr>
-        <tr>
-          <td><code>ScrollArea::show_rows</code></td>
-          <td>Virtualized scrolling container that passes a <code>row_range: Range&lt;usize&gt;</code> closure argument so only visible rows are laid out each frame (Lesson 0008).</td>
-          <td><a href="https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows" target="_blank" rel="noopener"><code>show_rows</code> docs</a></td>
-        </tr>
-        <tr>
-          <td><code>InputState::consume_key</code></td>
-          <td>Checks whether a keyboard shortcut (<code>Modifiers</code> + <code>Key</code>) was pressed this frame and removes it from the input queue so it cannot trigger twice (Lesson 0009).</td>
-          <td><a href="https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key" target="_blank" rel="noopener"><code>consume_key</code> docs</a></td>
-        </tr>
-      </tbody>
-    </table>
+<h2>Quick Lookup: Key <code>eframe</code> &amp; <code>egui</code> APIs by Lesson</h2>
+    </article>
+  </main>
 
-    <h2>4. Verification &amp; Mutation Testing Terms</h2>
-    <table class="ref-table">
-      <thead>
-        <tr>
-          <th style="width: 24%;">Term &amp; Syntax</th>
-          <th style="width: 48%;">Definition</th>
-          <th style="width: 28%;">Primary Reference</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>Test Module (<code>#[cfg(test)]</code>)</strong></td>
-          <td>A conditional compilation attribute telling <code>rustc</code> to compile the annotated <code>mod tests</code> block only when running <code>cargo test</code>, keeping test code out of production builds.</td>
-          <td><a href="https://doc.rust-lang.org/book/ch11-03-test-organization.html" target="_blank" rel="noopener">Rust Book §11.3</a></td>
-        </tr>
-        <tr>
-          <td><strong>Mutation Testing (<code>cargo-mutants</code>)</strong></td>
-          <td>A verification technique that injects small deliberate bugs (<em>mutants</em>, such as flipping <code>true</code> to <code>false</code> or replacing a function body with <code>Default::default()</code>) and checks whether <code>cargo test</code> fails.</td>
-          <td><a href="https://mutants.rs/" target="_blank" rel="noopener"><code>mutants.rs</code> guide</a></td>
-        </tr>
-        <tr>
-          <td><strong>Caught vs. Missed Mutant</strong></td>
-          <td>A <strong>Caught Mutant</strong> causes at least one test to fail (proving your assertions cover that logic). A <strong>Missed Mutant</strong> allows all tests to still pass (revealing an unasserted coverage gap).</td>
-          <td><a href="./testing-and-mutation-cheatsheet.html">Testing &amp; Mutation Cheat Sheet</a></td>
-        </tr>
-        <tr>
-          <td><strong>Headless UI Harness (<code>egui_kittest</code>)</strong></td>
-          <td>The official testing library for <code>egui</code> that drives an app or widget without opening an OS window, supporting semantic widget queries, simulated clicks/keys, and offscreen visual snapshots.</td>
-          <td><a href="https://docs.rs/egui_kittest/latest/egui_kittest/" target="_blank" rel="noopener"><code>egui_kittest</code> docs</a></td>
-        </tr>
-      </tbody>
-    </table>
-  </article>
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
 
   <script src="../assets/course.js"></script>
 </body>

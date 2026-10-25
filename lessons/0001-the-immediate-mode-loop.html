@@ -4,11 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
-  <title>Lesson 0001: The Immediate-Mode Loop &amp; &amp;mut State — Learn egui</title>
+  <title>Lesson 0001: The Immediate-Mode Loop &amp; Mutable State (`&amp;mut`)</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
-  <nav class="course-nav">
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
     <div>
       <a href="../index.html">Index</a>
       <a href="./0000-project-setup-and-eframe-boot.html">0000</a>
@@ -27,90 +28,56 @@
     </div>
     <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
   </nav>
+  </header>
 
-  <article class="tufte-article">
-    <div class="prose-col">
-      <h1>Lesson 0001: The Immediate-Mode Loop &amp; Mutable State (<code>&amp;mut</code>)</h1>
-      <p class="subtitle">Building the PCB Layer Visibility Inspector inside your <code>eframe::App</code></p>
+  <main>
+    <article class="tufte-article">
+<div class="prose-col">
+<h1>Lesson 0001: The Immediate-Mode Loop &amp; Mutable State (<code>&amp;mut</code>)</h1>
+<p class="subtitle">Building the PCB Layer Visibility Inspector inside your <code>eframe::App</code></p>
 
-      <p>
-        In <a href="./0000-project-setup-and-eframe-boot.html">Lesson 0000</a>, we created our <code>pcb-reviewer</code> Cargo crate and booted a native window with <code>eframe::run_native</code>. Now we will fill in the heart of that file—<code>PcbReviewerApp::update</code>—to build the <strong>Layer Visibility Inspector</strong>: toggling <em>Top Copper (<code>F.Cu</code>)</em>, <em>Bottom Copper (<code>B.Cu</code>)</em>, <em>Silkscreen (<code>F.SilkS</code>)</em>, and the unrouted <em>Ratsnest</em> on and off.
-      </p>
-
-      <p>
-        In traditional <a href="../reference/glossary.html">retained-mode</a> GUI frameworks (like HTML/React, Qt, or Flutter), you create checkbox widget objects once, attach event callbacks (<code>onChange</code>), and synchronize their internal state with your board renderer.<span class="sidenote-number"></span><span class="sidenote">See Emil Ernerfeldt's official <a href="https://docs.rs/egui/latest/egui/#understanding-immediate-mode" target="_blank" rel="noopener">Understanding Immediate Mode</a> section in the <code>egui</code> documentation for why eliminating widget callbacks prevents out-of-sync UI bugs.</span>
-      </p>
-
-      <p>
-        <code>egui</code> works completely differently. In <code>egui</code>, <strong>there are no persistent checkbox or button objects</strong>. Instead, your Rust <a href="../reference/glossary.html"><code>struct</code></a> holds the single source of truth, and on every frame, your <a href="../reference/glossary.html"><code>eframe::App::update</code></a> method runs from top to bottom.
-      </p>
-
-      <figure class="mermaid-figure">
-        <pre class="mermaid">
+<p>In <a href="./0000-project-setup-and-eframe-boot.html">Lesson 0000</a>, we created our <code>pcb-reviewer</code> Cargo crate and booted a native window with <code>eframe::run_native</code>. Now we will fill in the heart of that file—<code>PcbReviewerApp::update</code>—to build the <strong>Layer Visibility Inspector</strong>: toggling <em>Top Copper (<code>F.Cu</code>)</em>, <em>Bottom Copper (<code>B.Cu</code>)</em>, <em>Silkscreen (<code>F.SilkS</code>)</em>, and the unrouted <em>Ratsnest</em> on and off.</p>
+<p>In traditional <a href="../reference/glossary.html">retained-mode</a> GUI frameworks (like HTML/React, Qt, or Flutter), you create checkbox widget objects once, attach event callbacks (<code>onChange</code>), and synchronize their internal state with your board renderer.<span class="sidenote-number"></span><span class="sidenote">See Emil Ernerfeldt's official <a href="https://docs.rs/egui/latest/egui/#understanding-immediate-mode">Understanding Immediate Mode</a> section in the <code>egui</code> documentation for why eliminating widget callbacks prevents out-of-sync UI bugs.</span></p>
+<p><code>egui</code> works completely differently. In <code>egui</code>, <strong>there are no persistent checkbox or button objects</strong>. Instead, your Rust <a href="../reference/glossary.html"><code>struct</code></a> holds the single source of truth, and on every frame, your <a href="../reference/glossary.html"><code>eframe::App::update</code></a> method runs from top to bottom.</p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
 flowchart TD
-    Start["Frame Start: eframe calls update(&amp;mut self, ctx, frame)"] --> Side["1. egui::SidePanel::left('layers').show(ctx, |ui| { ... })"]
-    Side --> Check["ui.checkbox(&amp;mut self.show_top_copper, 'Top Cu')"]
-    Check -->|"Reads bool to draw check<br/>Flips bool in-place if clicked"| Mutated["self.show_top_copper updated immediately"]
-    Mutated --> Central["2. egui::CentralPanel::default().show(ctx, |ui| { ... })"]
-    Central -->|"Reads updated self fields"| Paint["Paints visible PCB layers for this frame"]
-    Paint --> End["Frame End: &amp;mut self borrow released until next repaint"]
-        </pre>
-        <figcaption>Figure 1.1: Inside a single call to <code>update(&amp;mut self, ctx, frame)</code>, <code>SidePanel</code> mutates <code>self</code> in-place via <code>&amp;mut</code> before <code>CentralPanel</code> reads <code>self</code> to paint the board.</figcaption>
-      </figure>
-
-      <h2>1. Your Rust <code>struct</code> Is the Only State</h2>
-
-      <p>
-        Recall the <code>PcbReviewerApp</code> struct we initialized in <a href="./0000-project-setup-and-eframe-boot.html">Lesson 0000</a>. Four <code>bool</code> fields track which PCB layers are currently visible:
-      </p>
-
-      <pre><code class="language-rust">pub struct PcbReviewerApp {
+    Start["Frame Start: eframe calls update(&amp;mut self, ctx, frame)"] --&gt; Side["1. egui::SidePanel::left('layers').show(ctx, |ui| { ... })"]
+    Side --&gt; Check["ui.checkbox(&amp;mut self.show_top_copper, 'Top Cu')"]
+    Check --&gt;|"Reads bool to draw check&lt;br/&gt;Flips bool in-place if clicked"| Mutated["self.show_top_copper updated immediately"]
+    Mutated --&gt; Central["2. egui::CentralPanel::default().show(ctx, |ui| { ... })"]
+    Central --&gt;|"Reads updated self fields"| Paint["Paints visible PCB layers for this frame"]
+    Paint --&gt; End["Frame End: &amp;mut self borrow released until next repaint"]
+  </pre>
+</figure>
+<p><em>Figure 1.1: Inside a single call to <code>update(&amp;mut self, ctx, frame)</code>, <code>SidePanel</code> mutates <code>self</code> in-place via <code>&amp;mut</code> before <code>CentralPanel</code> reads <code>self</code> to paint the board.</em></p>
+<h2>1. Your Rust <code>struct</code> Is the Only State</h2>
+<p>Recall the <code>PcbReviewerApp</code> struct we initialized in <a href="./0000-project-setup-and-eframe-boot.html">Lesson 0000</a>. Four <code>bool</code> fields track which PCB layers are currently visible:</p>
+<pre><code class="language-rust">pub struct PcbReviewerApp {
     pub show_top_copper: bool,
     pub show_bottom_copper: bool,
     pub show_silkscreen: bool,
     pub show_ratsnest: bool,
 }</code></pre>
-
-      <h2>2. Why <code>egui</code> Widgets Take <code>&amp;mut</code> References</h2>
-
-      <p>
-        When <code>eframe</code> redraws your window, it calls:<span class="sidenote-number"></span><span class="sidenote">In <a href="https://docs.rs/eframe/latest/eframe/trait.App.html#tymethod.update" target="_blank" rel="noopener"><code>eframe::App::update</code></a>, <code>&amp;mut self</code> is shorthand for <code>self: &amp;mut PcbReviewerApp</code>—an exclusive mutable borrow of your struct for the duration of a single frame (<a href="https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#mutable-references" target="_blank" rel="noopener">Rust Book §4.2</a>).</span>
-      </p>
-
-      <pre><code class="language-rust">fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame)</code></pre>
-
-      <p>
-        Inside <code>update</code>, we place a left <a href="https://docs.rs/egui/latest/egui/containers/panel/struct.SidePanel.html" target="_blank" rel="noopener"><code>egui::SidePanel</code></a> for our layer controls, followed by an <a href="https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html" target="_blank" rel="noopener"><code>egui::CentralPanel</code></a> for our 2D PCB canvas. Look closely at what we pass into <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.checkbox" target="_blank" rel="noopener"><code>ui.checkbox</code></a>:
-      </p>
-
-      <pre><code class="language-rust">egui::SidePanel::left("layer_panel").show(ctx, |ui| {
+<h2>2. Why <code>egui</code> Widgets Take <code>&amp;mut</code> References</h2>
+<p>When <code>eframe</code> redraws your window, it calls:<span class="sidenote-number"></span><span class="sidenote">In <a href="https://docs.rs/eframe/latest/eframe/trait.App.html#tymethod.update"><code>eframe::App::update</code></a>, <code>&amp;mut self</code> is shorthand for <code>self: &amp;mut PcbReviewerApp</code>—an exclusive mutable borrow of your struct for the duration of a single frame (<a href="https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#mutable-references">Rust Book §4.2</a>).</span></p>
+<pre><code class="language-rust">fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame)</code></pre>
+<p>Inside <code>update</code>, we place a left <a href="https://docs.rs/egui/latest/egui/containers/panel/struct.SidePanel.html"><code>egui::SidePanel</code></a> for our layer controls, followed by an <a href="https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html"><code>egui::CentralPanel</code></a> for our 2D PCB canvas. Look closely at what we pass into <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.checkbox"><code>ui.checkbox</code></a>:</p>
+<pre><code class="language-rust">egui::SidePanel::left("layer_panel").show(ctx, |ui| {
     ui.heading("PCB Layers");
     ui.checkbox(&amp;mut self.show_top_copper, "Top Copper (F.Cu)");
     ui.checkbox(&amp;mut self.show_bottom_copper, "Bottom Copper (B.Cu)");
     ui.checkbox(&amp;mut self.show_silkscreen, "Silkscreen (F.SilkS)");
     ui.checkbox(&amp;mut self.show_ratsnest, "Ratsnest (Unrouted)");
 });</code></pre>
-
-      <p>
-        Two Rust mechanics make those six lines work without a single callback:<span class="sidenote-number"></span><span class="sidenote">Always declare <code>SidePanel</code> and <code>TopBottomPanel</code> <strong>before</strong> <code>CentralPanel</code>. According to the <a href="https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html" target="_blank" rel="noopener"><code>CentralPanel</code> docs</a>, it claims all remaining space in <code>ctx</code> after outer panels have been laid out.</span>
-      </p>
-
-      <ol>
-        <li>
-          <strong>The Closure (<code>|ui| { ... }</code>):</strong> <code>.show(ctx, |ui| { ... })</code> takes an inline anonymous function (<a href="https://doc.rust-lang.org/book/ch13-01-closures.html" target="_blank" rel="noopener">Rust Book §13.1</a>) receiving a temporary <a href="../reference/glossary.html"><code>&amp;mut egui::Ui</code></a> region. When the closure ends, <code>ui</code> is dropped—only your <code>self</code> struct persists to the next frame.
-        </li>
-        <li>
-          <strong>The Mutable Borrow (<code>&amp;mut self.show_top_copper</code>):</strong> Passing <code>&amp;mut</code> grants <code>ui.checkbox</code> temporary read-write access to that single <code>bool</code> field. In one function call, <code>ui.checkbox</code> <em>reads</em> the boolean to draw the checkmark, checks whether the mouse clicked that rectangle this frame, and if so, <em>flips the boolean in place</em> before returning!
-        </li>
-      </ol>
-
-      <h2>3. Making Button Actions Testable &amp; Mutant-Proof</h2>
-
-      <p>
-        What about preset buttons like <strong>"Isolate Top Copper"</strong> or <strong>"Show All Layers"</strong>? When you click a button, <code>ui.button("...").clicked()</code> returns <code>true</code> for that single frame. If you extract the state transition into a method on <code>PcbReviewerApp</code> that takes <code>&amp;mut self</code>, your <code>update()</code> loop stays clean <em>and</em> you can test and mutate every state transition with <code>cargo test</code> and <a href="https://mutants.rs/" target="_blank" rel="noopener"><code>cargo mutants</code></a> (<a href="../reference/testing-and-mutation-cheatsheet.html">Testing &amp; Mutation Cheat Sheet</a>):<span class="sidenote-number"></span><span class="sidenote">Watch what happens if a test starts from a state where <code>show_top_copper</code> is <em>already</em> <code>true</code> and the other layers are already <code>false</code>, and then calls <code>app.isolate_top_copper()</code>: when <code>cargo mutants</code> replaces the body of <code>isolate_top_copper</code> with an empty no-op <code>()</code>, the test would still pass unless the starting state actually requires <code>isolate_top_copper()</code> to flip the fields!</span>
-      </p>
-
-      <pre><code class="language-rust">impl PcbReviewerApp {
+<p>Two Rust mechanics make those six lines work without a single callback:<span class="sidenote-number"></span><span class="sidenote">Always declare <code>SidePanel</code> and <code>TopBottomPanel</code> <strong>before</strong> <code>CentralPanel</code>. According to the <a href="https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html"><code>CentralPanel</code> docs</a>, it claims all remaining space in <code>ctx</code> after outer panels have been laid out.</span></p>
+<ol>
+<li><strong>The Closure (<code>|ui| { ... }</code>):</strong> <code>.show(ctx, |ui| { ... })</code> takes an inline anonymous function (<a href="https://doc.rust-lang.org/book/ch13-01-closures.html">Rust Book §13.1</a>) receiving a temporary <a href="../reference/glossary.html"><code>&amp;mut egui::Ui</code></a> region. When the closure ends, <code>ui</code> is dropped—only your <code>self</code> struct persists to the next frame.</li>
+<li><strong>The Mutable Borrow (<code>&amp;mut self.show_top_copper</code>):</strong> Passing <code>&amp;mut</code> grants <code>ui.checkbox</code> temporary read-write access to that single <code>bool</code> field. In one function call, <code>ui.checkbox</code> <em>reads</em> the boolean to draw the checkmark, checks whether the mouse clicked that rectangle this frame, and if so, <em>flips the boolean in place</em> before returning!</li>
+</ol>
+<h2>3. Making Button Actions Testable &amp; Mutant-Proof</h2>
+<p>What about preset buttons like <strong>&quot;Isolate Top Copper&quot;</strong> or <strong>&quot;Show All Layers&quot;</strong>? When you click a button, <code>ui.button(&quot;...&quot;).clicked()</code> returns <code>true</code> for that single frame. If you extract the state transition into a method on <code>PcbReviewerApp</code> that takes <code>&amp;mut self</code>, your <code>update()</code> loop stays clean <em>and</em> you can test and mutate every state transition with <code>cargo test</code> and <a href="https://mutants.rs/"><code>cargo mutants</code></a> (<a href="../reference/testing-and-mutation-cheatsheet.html">Testing &amp; Mutation Cheat Sheet</a>):<span class="sidenote-number"></span><span class="sidenote">Watch what happens if a test starts from a state where <code>show_top_copper</code> is <em>already</em> <code>true</code> and the other layers are already <code>false</code>, and then calls <code>app.isolate_top_copper()</code>: when <code>cargo mutants</code> replaces the body of <code>isolate_top_copper</code> with an empty no-op <code>()</code>, the test would still pass unless the starting state actually requires <code>isolate_top_copper()</code> to flip the fields!</span></p>
+<pre><code class="language-rust">impl PcbReviewerApp {
     pub fn reset_layers(&amp;mut self) {
         self.show_top_copper = true;
         self.show_bottom_copper = true;
@@ -168,125 +135,101 @@ impl eframe::App for PcbReviewerApp {
         });
     }
 }</code></pre>
+</div>
+
+<section class="full-width-panel" id="pcb-layer-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Trace the Immediate-Mode Frame Loop</span>
+    <span class="panel-badge" data-role="frame-badge">Frame #1 • update(&amp;mut self, ctx, frame)</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Toggle the checkboxes or click the preset buttons inside the simulated <code>egui</code> window below. Watch how each interaction immediately mutates <code>self</code> via <code>&amp;mut</code> and repaints the 2D PCB viewport in the very same frame.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Persistent Rust State (<code>self</code>)</h4>
+      <pre class="language-rust" style="margin: 0; font-size: 0.78rem; padding: 0.85rem;"><code class="language-rust" data-role="rust-state"></code></pre>
     </div>
 
-    <!-- Interactive Skill 1: Immediate-Mode Frame Simulator -->
-    <section class="full-width-panel" id="pcb-layer-sim">
-      <div class="panel-header">
-        <span class="panel-title">Interactive Lab 1: Trace the Immediate-Mode Frame Loop</span>
-        <span class="panel-badge" data-role="frame-badge">Frame #1 • update(&amp;mut self, ctx, frame)</span>
+    <div class="egui-mock-window">
+      <div class="egui-side-panel">
+        <div class="egui-heading">PCB Layers</div>
+        <label class="egui-checkbox">
+          <input type="checkbox" data-layer="top" checked>
+          <span style="color: #ff6b5b;">■</span> Top Cu (F.Cu)
+        </label>
+        <label class="egui-checkbox">
+          <input type="checkbox" data-layer="bottom" checked>
+          <span style="color: #4da6ff;">■</span> Bottom Cu (B.Cu)
+        </label>
+        <label class="egui-checkbox">
+          <input type="checkbox" data-layer="silk" checked>
+          <span style="color: #f0e68c;">■</span> Silkscreen
+        </label>
+        <label class="egui-checkbox">
+          <input type="checkbox" data-layer="rats">
+          <span style="color: #7fe5f0;">---</span> Ratsnest
+        </label>
+        <button type="button" class="egui-btn" data-action="copper-only">Isolate Top Copper</button>
+        <button type="button" class="egui-btn" data-action="all-on">Show All Layers</button>
       </div>
-      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-        Toggle the checkboxes or click the preset buttons inside the simulated <code>egui</code> window below. Watch how each interaction immediately mutates <code>self</code> via <code>&amp;mut</code> and repaints the 2D PCB viewport in the very same frame.
-      </p>
 
-      <div class="sim-grid">
-        <!-- Left: Persistent Rust Struct State -->
-        <div class="sim-box">
-          <h4>1. Persistent Rust State (<code>self</code>)</h4>
-          <pre class="language-rust" style="margin: 0; font-size: 0.78rem; padding: 0.85rem;"><code class="language-rust" data-role="rust-state"></code></pre>
-        </div>
-
-        <!-- Middle: Simulated egui Window (SidePanel + CentralPanel) -->
-        <div class="egui-mock-window">
-          <div class="egui-side-panel">
-            <div class="egui-heading">PCB Layers</div>
-            <label class="egui-checkbox">
-              <input type="checkbox" data-layer="top" checked>
-              <span style="color: #ff6b5b;">■</span> Top Cu (F.Cu)
-            </label>
-            <label class="egui-checkbox">
-              <input type="checkbox" data-layer="bottom" checked>
-              <span style="color: #4da6ff;">■</span> Bottom Cu (B.Cu)
-            </label>
-            <label class="egui-checkbox">
-              <input type="checkbox" data-layer="silk" checked>
-              <span style="color: #f0e68c;">■</span> Silkscreen
-            </label>
-            <label class="egui-checkbox">
-              <input type="checkbox" data-layer="rats">
-              <span style="color: #7fe5f0;">---</span> Ratsnest
-            </label>
-            <button type="button" class="egui-btn" data-action="copper-only">Isolate Top Copper</button>
-            <button type="button" class="egui-btn" data-action="all-on">Show All Layers</button>
-          </div>
-
-          <div class="egui-central-canvas">
-            <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="Simulated PCB Viewport">
-              <!-- FR4 Board Outline -->
-              <rect x="16" y="14" width="288" height="182" rx="8" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
-              <!-- Mounting Holes -->
-              <circle cx="32" cy="30" r="6" fill="#0b1410" stroke="#c5a449" stroke-width="2.5"/>
-              <circle cx="288" cy="30" r="6" fill="#0b1410" stroke="#c5a449" stroke-width="2.5"/>
-              <circle cx="32" cy="180" r="6" fill="#0b1410" stroke="#c5a449" stroke-width="2.5"/>
-              <circle cx="288" cy="180" r="6" fill="#0b1410" stroke="#c5a449" stroke-width="2.5"/>
-
-              <!-- Layer: Bottom Copper (B.Cu - Blue) -->
-              <g id="svg-layer-bottom" style="transition: opacity 0.15s ease;">
-                <path d="M 75 145 L 135 145 L 165 115 L 245 115" fill="none" stroke="#3b8eea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M 95 70 L 95 125 L 145 165 L 220 165" fill="none" stroke="#3b8eea" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-              </g>
-
-              <!-- Layer: Top Copper (F.Cu - Red/Terracotta) -->
-              <g id="svg-layer-top" style="transition: opacity 0.15s ease;">
-                <path d="M 75 65 L 145 65 L 175 95 L 245 95" fill="none" stroke="#e05243" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M 75 95 L 125 95 L 145 115" fill="none" stroke="#e05243" stroke-width="4" stroke-linecap="round"/>
-                <!-- SMD IC Pads (U1) -->
-                <rect x="65" y="58" width="16" height="10" rx="2" fill="#e05243"/>
-                <rect x="65" y="88" width="16" height="10" rx="2" fill="#e05243"/>
-                <rect x="65" y="138" width="16" height="10" rx="2" fill="#e05243"/>
-                <!-- Connector Pads (J1) -->
-                <rect x="238" y="88" width="16" height="12" rx="2" fill="#e05243"/>
-                <rect x="238" y="108" width="16" height="12" rx="2" fill="#e05243"/>
-                <!-- Vias -->
-                <circle cx="145" cy="115" r="5" fill="#10281e" stroke="#e6c15a" stroke-width="3"/>
-              </g>
-
-              <!-- Layer: Silkscreen (F.SilkS - Yellow/Cream) -->
-              <g id="svg-layer-silk" style="transition: opacity 0.15s ease;">
-                <rect x="58" y="48" width="38" height="108" fill="none" stroke="#f0e68c" stroke-width="1.5" stroke-dasharray="4 2"/>
-                <text x="64" y="43" fill="#f0e68c" font-family="monospace" font-size="11">U1: MCU</text>
-                <rect x="232" y="78" width="28" height="52" fill="none" stroke="#f0e68c" stroke-width="1.5"/>
-                <text x="230" y="72" fill="#f0e68c" font-family="monospace" font-size="11">J1: USB</text>
-              </g>
-
-              <!-- Layer: Ratsnest (Unrouted airwires - Cyan dashed) -->
-              <g id="svg-layer-rats" style="transition: opacity 0.15s ease;">
-                <line x1="75" y1="143" x2="245" y2="94" stroke="#6ff7ff" stroke-width="1.6" stroke-dasharray="4 4"/>
-                <line x1="75" y1="63" x2="220" y2="165" stroke="#6ff7ff" stroke-width="1.6" stroke-dasharray="4 4"/>
-              </g>
-            </svg>
-          </div>
-        </div>
-
-        <!-- Right: Frame Execution Trace -->
-        <div class="sim-box">
-          <h4>2. What Happened This Frame</h4>
-          <div data-role="frame-trace" style="font-size: 0.85rem; line-height: 1.55;"></div>
-        </div>
+      <div class="egui-central-canvas">
+        <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="Simulated PCB Viewport">
+          <rect x="16" y="14" width="288" height="182" rx="8" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
+          <circle cx="32" cy="30" r="6" fill="#0b1410" stroke="#c5a449" stroke-width="2.5"/>
+          <circle cx="288" cy="30" r="6" fill="#0b1410" stroke="#c5a449" stroke-width="2.5"/>
+          <circle cx="32" cy="180" r="6" fill="#0b1410" stroke="#c5a449" stroke-width="2.5"/>
+          <circle cx="288" cy="180" r="6" fill="#0b1410" stroke="#c5a449" stroke-width="2.5"/>
+          <g id="svg-layer-bottom" style="transition: opacity 0.15s ease;">
+            <path d="M 75 145 L 135 145 L 165 115 L 245 115" fill="none" stroke="#3b8eea" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M 95 70 L 95 125 L 145 165 L 220 165" fill="none" stroke="#3b8eea" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+          <g id="svg-layer-top" style="transition: opacity 0.15s ease;">
+            <path d="M 75 65 L 145 65 L 175 95 L 245 95" fill="none" stroke="#e05243" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M 75 95 L 125 95 L 145 115" fill="none" stroke="#e05243" stroke-width="4" stroke-linecap="round"/>
+            <rect x="65" y="58" width="16" height="10" rx="2" fill="#e05243"/>
+            <rect x="65" y="88" width="16" height="10" rx="2" fill="#e05243"/>
+            <rect x="65" y="138" width="16" height="10" rx="2" fill="#e05243"/>
+            <rect x="238" y="88" width="16" height="12" rx="2" fill="#e05243"/>
+            <rect x="238" y="108" width="16" height="12" rx="2" fill="#e05243"/>
+            <circle cx="145" cy="115" r="5" fill="#10281e" stroke="#e6c15a" stroke-width="3"/>
+          </g>
+          <g id="svg-layer-silk" style="transition: opacity 0.15s ease;">
+            <rect x="58" y="48" width="38" height="108" fill="none" stroke="#f0e68c" stroke-width="1.5" stroke-dasharray="4 2"/>
+            <text x="64" y="43" fill="#f0e68c" font-family="monospace" font-size="11">U1: MCU</text>
+            <rect x="232" y="78" width="28" height="52" fill="none" stroke="#f0e68c" stroke-width="1.5"/>
+            <text x="230" y="72" fill="#f0e68c" font-family="monospace" font-size="11">J1: USB</text>
+          </g>
+          <g id="svg-layer-rats" style="transition: opacity 0.15s ease;">
+            <line x1="75" y1="143" x2="245" y2="94" stroke="#6ff7ff" stroke-width="1.6" stroke-dasharray="4 4"/>
+            <line x1="75" y1="63" x2="220" y2="165" stroke="#6ff7ff" stroke-width="1.6" stroke-dasharray="4 4"/>
+          </g>
+        </svg>
       </div>
-    </section>
+    </div>
 
-    <!-- Interactive Skill 2: Hands-On Code Completion -->
-    <section class="full-width-panel">
-      <div class="panel-header">
-        <span class="panel-title">Interactive Lab 2: Wire Up the Layer Inspector in Rust</span>
-        <span class="panel-badge">Skill Practice • Tight Feedback Loop</span>
-      </div>
-      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-        Complete the three missing expressions in <code>PcbReviewerApp::update</code> below so that:
-        (1) the checkbox mutably borrows <code>self.show_ratsnest</code>,
-        (2) the <code>"Isolate Top Copper"</code> button checks whether it was clicked this frame, and
-        (3) the <code>CentralPanel</code> closure receives the <code>ui</code> handle.
-      </p>
+    <div class="sim-box">
+      <h4>2. What Happened This Frame</h4>
+      <div data-role="frame-trace" style="font-size: 0.85rem; line-height: 1.55;"></div>
+    </div>
+  </div>
+</section>
 
-      <pre class="keep-markup"><code class="language-rust">impl eframe::App for PcbReviewerApp {
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 2: Wire Up the Layer Inspector in Rust</span>
+    <span class="panel-badge">Skill Practice • Tight Feedback Loop</span>
+  </div>
+  <p>Complete the three missing expressions in <code>PcbReviewerApp::update</code> below so that: (1) the checkbox mutably borrows <code>self.show_ratsnest</code>, (2) the <code>&quot;Isolate Top Copper&quot;</code> button checks whether it was clicked this frame, and (3) the <code>CentralPanel</code> closure receives the <code>ui</code> handle.</p>
+<pre class="keep-markup"><code class="language-rust">impl eframe::App for PcbReviewerApp {
     fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame) {
         egui::SidePanel::left("layers").show(ctx, |ui| {
             ui.heading("Layers");
-            ui.checkbox(<input id="blank-1" class="code-challenge-input" placeholder="/* 1: borrow field */" autocomplete="off">, "Ratsnest");
+            ui.checkbox(<input id="ex-blank-1" class="code-challenge-input" style="width:180px;" placeholder="/* 1: borrow field */" autocomplete="off">, "Ratsnest");
 
-            if ui.button("Isolate Top Copper").<input id="blank-2" class="code-challenge-input" style="width:145px;" placeholder="/* 2: method */" autocomplete="off"> {
+            if ui.button("Isolate Top Copper").<input id="ex-blank-2" class="code-challenge-input" style="width:145px;" placeholder="/* 2: method */" autocomplete="off"> {
                 self.show_top_copper = true;
                 self.show_bottom_copper = false;
                 self.show_silkscreen = false;
@@ -294,32 +237,27 @@ impl eframe::App for PcbReviewerApp {
             }
         });
 
-        egui::CentralPanel::default().show(ctx, <input id="blank-3" class="code-challenge-input" style="width:110px;" placeholder="/* 3: arg */" autocomplete="off"> {
+        egui::CentralPanel::default().show(ctx, <input id="ex-blank-3" class="code-challenge-input" style="width:110px;" placeholder="/* 3: arg */" autocomplete="off"> {
             if self.show_top_copper {
                 ui.label("Rendering Top Copper (F.Cu)...");
             }
         });
     }
 }</code></pre>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn-primary" id="btn-check-ex">Check Rust Code</button>
+    <button type="button" class="btn-secondary" id="btn-hint-ex">Show Hint</button>
+  </div>
+  <div id="ex-feedback" class="feedback-box"></div>
+</section>
 
-      <div style="display: flex; gap: 0.75rem; align-items: center;">
-        <button type="button" class="btn-primary" id="btn-check-code">Check Rust Code</button>
-        <button type="button" class="btn-secondary" id="btn-hint-code">Show Hint</button>
-      </div>
-      <div id="code-feedback" class="feedback-box"></div>
-    </section>
-
-    <!-- Interactive Skill 3: Cargo Verification & Mutation Coverage Gate -->
-    <section class="full-width-panel">
-      <div class="panel-header">
-        <span class="panel-title">Interactive Lab 3: Cargo Verification &amp; Catching a Missed Mutant</span>
-        <span class="panel-badge">cargo test + cargo mutants</span>
-      </div>
-      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-        Add the two unit tests below to your <code>#[cfg(test)] mod tests</code> block in <code>src/main.rs</code>. Notice why we start with <code>show_top_copper: false</code> and the other layers <code>true</code> <em>before</em> calling <code>app.isolate_top_copper()</code>—so when <code>cargo mutants</code> replaces <code>isolate_top_copper</code> or <code>show_all_layers</code> with a no-op <code>()</code>, the test assertions immediately catch the mutant!
-      </p>
-
-      <pre><code class="language-rust">#[test]
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 3: Cargo Verification &amp; Catching a Missed Mutant</span>
+    <span class="panel-badge">cargo test + cargo mutants</span>
+  </div>
+  <p>Add the two unit tests below to your <code>#[cfg(test)] mod tests</code> block in <code>src/main.rs</code>. Notice why we start with <code>show_top_copper: false</code> and the other layers <code>true</code> <em>before</em> calling <code>app.isolate_top_copper()</code>—so when <code>cargo mutants</code> replaces <code>isolate_top_copper</code> or <code>show_all_layers</code> with a no-op <code>()</code>, the test assertions immediately catch the mutant!</p>
+<pre><code class="language-rust">#[test]
 fn isolate_top_copper_forces_only_top_copper_visible() {
     let mut app = PcbReviewerApp {
         show_top_copper: false,
@@ -352,22 +290,20 @@ fn show_all_layers_enables_every_layer() {
     assert!(app.show_silkscreen);
     assert!(app.show_ratsnest);
 }</code></pre>
-
-      <div class="mutation-scoreboard">
-        <div class="mutation-stat tier">
-          <div class="stat-label">Verification Tier</div>
-          <div class="stat-value">Tier 2: State Unit Tests</div>
-        </div>
-        <div class="mutation-stat caught">
-          <div class="stat-label">Target Caught Mutants</div>
-          <div class="stat-value">3 / 3 Functions (100%)</div>
-        </div>
-        <div class="mutation-stat missed">
-          <div class="stat-label">Target Missed Mutants</div>
-          <div class="stat-value">0 Missed</div>
-        </div>
-      </div>
-
+  <div class="mutation-scoreboard">
+    <div class="mutation-stat tier">
+      <div class="stat-label">Verification Tier</div>
+      <div class="stat-value">Tier 2: State Unit Tests</div>
+    </div>
+    <div class="mutation-stat caught">
+      <div class="stat-label">Target Caught Mutants</div>
+      <div class="stat-value">3 / 3 Functions (100%)</div>
+    </div>
+    <div class="mutation-stat missed">
+      <div class="stat-label">Target Missed Mutants</div>
+      <div class="stat-value">0 Missed</div>
+    </div>
+  </div>
       <ul class="step-checklist">
         <li>
           <input type="checkbox" id="verify-1">
@@ -382,116 +318,105 @@ fn show_all_layers_enables_every_layer() {
           </label>
         </li>
       </ul>
-    </section>
+</section>
 
-    <!-- Interactive Skill 4: Retrieval Practice Quiz -->
-    <section class="full-width-panel">
-      <div class="panel-header">
-        <span class="panel-title">Retrieval Practice: Lock It Into Long-Term Memory</span>
-        <span class="panel-badge">3 Questions • Equal-Length Options</span>
-      </div>
-      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-        Answer from memory before peeking back at the prose or the <a href="../reference/immediate-mode-cheatsheet.html">Immediate-Mode Cheat Sheet</a>. Effortful retrieval builds long-term storage strength.
-      </p>
-      <div id="lesson-quiz-container"></div>
-    </section>
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Retrieval Practice: Lock It Into Long-Term Memory</span>
+    <span class="panel-badge">3 Questions • Equal-Length Options</span>
+  </div>
+  <p>Answer from memory before peeking back at the prose or the <a href="../reference/immediate-mode-cheatsheet.html">Immediate-Mode Cheat Sheet</a>. Effortful retrieval builds long-term storage strength.</p>
+  <div id="quiz-container"></div>
+</section>
 
-    <div class="prose-col">
-      <h2>Recommended Primary Source</h2>
-      <div class="callout">
-        <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/#understanding-immediate-mode" target="_blank" rel="noopener"><code>egui</code> Crate Root Documentation — "Understanding Immediate Mode" &amp; "Quick Start"</a> by Emil Ernerfeldt.<br>
-        Pay special attention to how <code>ui.label</code>, <code>ui.button</code>, and mutable state fit together, and why <code>egui</code> has no widget lifecycle callbacks.
-      </div>
+<div class="prose-col">
+<h2>Recommended Primary Source</h2>
+<div class="callout">
+  <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/#understanding-immediate-mode"><code>egui</code> Crate Root Documentation — &quot;Understanding Immediate Mode&quot; &amp; &quot;Quick Start&quot;</a> by Emil Ernerfeldt.
+Pay special attention to how <code>ui.label</code>, <code>ui.button</code>, and mutable state fit together, and why <code>egui</code> has no widget lifecycle callbacks.
+</div>
+<div class="teacher-prompt-box">
+  <strong>Ask Your Teacher:</strong> Anything in this lesson feel fuzzy—such as how Rust's borrow checker treats <code>&amp;mut self</code> inside closures, or when <code>eframe</code> decides to run <code>update()</code> vs. sleep? Ask me any follow-up question in chat, or click straight through to <a href="./0002-custom-2d-canvas-and-painter.html"><strong>Lesson 0002: Custom 2D Canvas &amp; <code>egui::Painter</code></strong></a>!
+</div>
+</div>
+    </article>
+  </main>
 
-      <div class="teacher-prompt-box">
-        <strong>Ask Your Teacher:</strong> Anything in this lesson feel fuzzy—such as how Rust's borrow checker treats <code>&amp;mut self</code> inside closures, or when <code>eframe</code> decides to run <code>update()</code> vs. sleep? Ask me any follow-up question in chat, or click straight through to <a href="./0002-custom-2d-canvas-and-painter.html"><strong>Lesson 0002: Custom 2D Canvas &amp; <code>egui::Painter</code></strong></a>!
-      </div>
-    </div>
-  </article>
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
 
   <script src="../assets/course.js"></script>
   <script>
-    initPcbLayerSimulator("pcb-layer-sim");
-
     initCodeExercise({
-      checkBtnId: "btn-check-code",
-      hintBtnId: "btn-hint-code",
-      feedbackId: "code-feedback",
+      checkBtnId: "btn-check-ex",
+      hintBtnId: "btn-hint-ex",
+      feedbackId: "ex-feedback",
       blanks: [
         {
-          inputId: "blank-1",
+          inputId: "ex-blank-1",
           accepted: ["&mut self.show_ratsnest"],
           getErrorHint: (val) =>
-            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. Remember that <code>ui.checkbox</code> needs a <em>mutable reference</em> (<code>&amp;mut ...</code>) to the <code>show_ratsnest</code> field on <code>self</code>.`,
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Remember that <code>ui.checkbox</code> needs a mutable reference (<code>&amp;mut ...</code>) to the <code>show_ratsnest</code> field on <code>self</code>.",
         },
         {
-          inputId: "blank-2",
+          inputId: "ex-blank-2",
           accepted: ["clicked()"],
           getErrorHint: (val) =>
-            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. <code>ui.button(...)</code> returns an <a href="../reference/glossary.html"><code>egui::Response</code></a>; call the method that checks if it was clicked this frame (don't forget parentheses <code>()</code>).`,
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "<code>ui.button(...)</code> returns an <code>egui::Response</code>; call the method that checks if it was clicked this frame (don't forget parentheses <code>()</code>).",
         },
         {
-          inputId: "blank-3",
+          inputId: "ex-blank-3",
           accepted: ["|ui|", "|ui: &mut egui::Ui|"],
           getErrorHint: (val) =>
-            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. Pass the closure parameter syntax that binds the panel's <code>Ui</code> handle using vertical pipes.`,
-        },
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Pass the closure parameter syntax that binds the panel's <code>Ui</code> handle using vertical pipes.",
+        }
       ],
-      hintMessage:
-        "<strong>Hints:</strong> (1) Pass a mutable borrow: <code>&amp;mut self.show_ratsnest</code>. (2) Query the button's <code>Response</code> with <code>clicked()</code>. (3) Start the closure with <code>|ui|</code>.",
-      successMessage:
-        "<strong>Spot on!</strong> Your <code>SidePanel</code> borrows <code>&amp;mut self.show_ratsnest</code> in place, inspects <code>.clicked()</code> on the button's <code>Response</code>, and passes <code>|ui|</code> to the <code>CentralPanel</code> closure.",
+      hintMessage: "<strong>Hints:</strong> (1) Pass a mutable borrow: <code>&amp;mut self.show_ratsnest</code>. (2) Query the button's <code>Response</code> with <code>clicked()</code>. (3) Start the closure with <code>|ui|</code>.",
+      successMessage: "<strong>Spot on!</strong> Your <code>SidePanel</code> borrows <code>&amp;mut self.show_ratsnest</code> in place, inspects <code>.clicked()</code> on the button's <code>Response</code>, and passes <code>|ui|</code> to the <code>CentralPanel</code> closure.",
     });
 
-    // Strict equal word-count AND equal character-count options per question,
-    // with varied correct answer indices (1 -> 3 -> 0).
-    initQuiz("lesson-quiz-container", [
+    initQuiz("quiz-container", [
       {
-        question:
-          "In egui, why do you pass `&mut self.show_top_copper` instead of `self.show_top_copper` into `ui.checkbox(...)`?",
-        options: [
-          "It copies the boolean into graphics memory", // 7 words, 42 chars
-          "It lets checkboxes read then mutate states", // 7 words, 42 chars (Correct: B)
-          "It stores each widget object across frames", // 7 words, 42 chars
-          "It locks your window thread during drawing", // 7 words, 42 chars
-        ],
-        correctIndex: 1,
-        explanation:
-          "A mutable borrow (`&mut`) allows `ui.checkbox` to both read the current boolean value to draw the check state and flip the boolean in-place if the user clicked it this frame.",
-        wrongHint:
-          "Think about what `ui.checkbox` has to do in a single immediate-mode call: both inspect the current `bool` and flip it if clicked.",
+            "question": "In egui, why do you pass `&mut self.show_top_copper` instead of `self.show_top_copper` into `ui.checkbox(...)`?",
+            "options": [
+                  "It copies the boolean into graphics memory",
+                  "It lets checkboxes read then mutate states",
+                  "It stores each widget object across frames",
+                  "It locks your window thread during drawing"
+            ],
+            "correctIndex": 1,
+            "explanation": "A mutable borrow (`&mut`) allows `ui.checkbox` to both read the current boolean value to draw the check state and flip the boolean in-place if the user clicked it this frame.",
+            "wrongHint": "Think about what `ui.checkbox` has to do in a single immediate-mode call: both inspect the current `bool` and flip it if clicked."
       },
       {
-        question:
-          "Why must `egui::SidePanel` be declared before `egui::CentralPanel` inside `update()`?",
-        options: [
-          "SidePanels create the shared window background", // 6 words, 46 chars
-          "CentralPanel clears all previous panel widgets", // 6 words, 46 chars
-          "SidePanels cannot use mutable struct variables", // 6 words, 46 chars
-          "CentralPanel claims all remaining window space", // 6 words, 46 chars (Correct: D)
-        ],
-        correctIndex: 3,
-        explanation:
-          "`SidePanel` and `TopBottomPanel` carve out their widths/heights from the available `Context` rect first; `CentralPanel` then consumes whatever space remains in the center.",
-        wrongHint:
-          "Check the panel layout order rule in the Immediate-Mode Cheat Sheet: how does `CentralPanel` decide how large it should be?",
+            "question": "Why must `egui::SidePanel` be declared before `egui::CentralPanel` inside `update()`?",
+            "options": [
+                  "SidePanels create the shared window background",
+                  "CentralPanel clears all previous panel widgets",
+                  "SidePanels cannot use mutable struct variables",
+                  "CentralPanel claims all remaining window space"
+            ],
+            "correctIndex": 3,
+            "explanation": "`SidePanel` and `TopBottomPanel` carve out their widths/heights from the available `Context` rect first; `CentralPanel` then consumes whatever space remains in the center.",
+            "wrongHint": "Check the panel layout order rule in the Immediate-Mode Cheat Sheet: how does `CentralPanel` decide how large it should be?"
       },
       {
-        question:
-          "What happens to the local `ui` handle inside `|ui| { ... }` when a panel closure finishes?",
-        options: [
-          "Ui drops while your struct state persists", // 7 words, 41 chars (Correct: A)
-          "Ui stays saved inside your struct forever", // 7 words, 41 chars
-          "Ui locks mutexes across every next redraw", // 7 words, 41 chars
-          "Ui moves ownership of self into rendering", // 7 words, 41 chars
-        ],
-        correctIndex: 0,
-        explanation:
-          "`ui` is just a temporary region builder for the current frame. When the closure finishes, `ui` goes out of scope and is dropped, while your `PcbReviewerApp` struct (`self`) persists to the next frame.",
-        wrongHint:
-          "Remember what persists across frames in immediate mode versus what is created temporarily just to lay out one frame.",
-      },
-    ]);
+            "question": "What happens to the local `ui` handle inside `|ui| { ... }` when a panel closure finishes?",
+            "options": [
+                  "Ui drops while your struct state persists",
+                  "Ui stays saved inside your struct forever",
+                  "Ui locks mutexes across every next redraw",
+                  "Ui moves ownership of self into rendering"
+            ],
+            "correctIndex": 0,
+            "explanation": "`ui` is just a temporary region builder for the current frame. When the closure finishes, `ui` goes out of scope and is dropped, while your `PcbReviewerApp` struct (`self`) persists to the next frame.",
+            "wrongHint": "Remember what persists across frames in immediate mode versus what is created temporarily just to lay out one frame."
+      }
+]);
+
+    initPcbLayerSimulator("pcb-layer-sim");
   </script>
 </body>
 </html>

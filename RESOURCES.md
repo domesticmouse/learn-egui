@@ -24,9 +24,13 @@
   Official specification for KiCad's symbolic-expression (`.kicad_pcb`, `.kicad_sch`, `.kicad_sym`, `.kicad_mod`) grammar, coordinate systems, layers, pads, segments, and nets. Use for: mapping parsed S-expressions into typed Rust domain structs.
 - [Official API Docs: `libsql` / Turso Rust SDK on docs.rs](https://docs.rs/libsql/latest/libsql/) and [Turso Rust Reference](https://docs.turso.tech/sdk/rust/reference)
   Official Rust SDK for Turso's embedded SQLite-compatible database engine (`libsql` / `turso`) supporting local database files, parameterized SQL queries, and embedded cloud-synced replicas. Use for: storing review pins, comment threads, and DRC sign-off audit trails in Act VI.
-- [Local Skill: `egui-app-architecture`](file:///Users/brett/tmp/learn-egui/.agents/skills/egui-app-architecture/SKILL.md)
+- [Local Skill: `egui-app-architecture`](./.agents/skills/egui-app-architecture/SKILL.md)
   Workspace guide on structuring larger engine-first `egui` applications with strict `L0`–`L7` crate layering. Use for: scaling the prototype into a production multi-crate CAD/review system once core `egui` skills are solid.
-- [Local Skill: `egui-testing-infrastructure`](file:///Users/brett/tmp/learn-egui/.agents/skills/egui-testing-infrastructure/SKILL.md)
+- [Local Skill: `egui-command-engine`](./.agents/skills/egui-command-engine/SKILL.md)
+  Workspace guide on the three-tier command taxonomy (`CommandSpec`, shell UI commands, and automation transports), schema-driven dialogs, and `panic_hunt` fuzzing. Use for: Act V (`0018`) command architecture.
+- [Local Skill: `egui-cow-document-model`](./.agents/skills/egui-cow-document-model/SKILL.md)
+  Workspace guide on immutable copy-on-write (`Arc`) document trees, O(1) snapshot undo/redo history, and deterministic serialization. Use for: Act IV (`0017`) undo/redo engine.
+- [Local Skill: `egui-testing-infrastructure`](./.agents/skills/egui-testing-infrastructure/SKILL.md)
   Workspace guide on the 7-tier verification architecture (`nextest`, `gpu_lock`, real-file corpus oracles, `panic_hunt` command fuzzing, headless `egui_kittest` snapshots, performance budgets, and scorecards). Use for: scaling our per-lesson `cargo test` + `cargo mutants` workflow into production CI gates.
 
 ## Wisdom (Communities)

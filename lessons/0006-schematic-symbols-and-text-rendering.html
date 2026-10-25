@@ -4,11 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
-  <title>Lesson 0006: Schematic Symbols, Text Rendering &amp; egui_kittest — Learn egui</title>
+  <title>Lesson 0006: Schematic Symbols, Text Rendering &amp; Headless UI Testing (`egui_kittest`)</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
-  <nav class="course-nav">
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
     <div>
       <a href="../index.html">Index</a>
       <a href="./0000-project-setup-and-eframe-boot.html">0000</a>
@@ -25,43 +26,34 @@
       <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
     </div>
-    <span class="mission-badge">Act II: Schematic Views, Layout &amp; egui_kittest</span>
+    <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
   </nav>
+  </header>
 
-  <article class="tufte-article">
-    <div class="prose-col">
-      <h1>Lesson 0006: Schematic Symbols, Text Rendering &amp; Headless UI Testing (<code>egui_kittest</code>)</h1>
-      <p class="subtitle">Drawing IC reference designators (<code>U1</code>, <code>R12</code>, <code>J1</code>) with <code>Painter::text</code>, mastering <code>String</code> vs. <code>&amp;str</code>, and un-skipping <code>eframe::App::update</code> with <code>egui_kittest::Harness</code></p>
+  <main>
+    <article class="tufte-article">
+<div class="prose-col">
+<h1>Lesson 0006: Schematic Symbols, Text Rendering &amp; Headless UI Testing (<code>egui_kittest</code>)</h1>
+<p class="subtitle">Drawing IC reference designators (<code>U1</code>, <code>R12</code>, <code>J1</code>) with <code>Painter::text</code>, mastering <code>String</code> vs. <code>&amp;str</code>, and un-skipping <code>eframe::App::update</code> with <code>egui_kittest::Harness</code></p>
 
-      <p>
-        Welcome to <strong>Act II</strong>! In <a href="./0005-hit-testing-and-net-cross-probing.html">Lesson 0005</a>, we built interactive pad hit-testing and net highlighting. However, an engineer inspecting a board or schematic cannot navigate by anonymous red and blue rectangles alone—they need <strong>reference designators</strong> (<code>U1</code>, <code>R12</code>, <code>J1</code>), component values (<code>LDO_3V3</code>, <code>10k</code>), and human-readable net names (<code>VCC_3V3</code>, <code>SPI_CLK</code>).
-      </p>
-      <p>
-        Even more importantly, Lesson 0006 marks a milestone in our verification architecture: we add <a href="https://docs.rs/egui_kittest/latest/egui_kittest/" target="_blank" rel="noopener"><code>egui_kittest</code></a> to <code>[dev-dependencies]</code>, boot our <code>PcbReviewerApp</code> headlessly inside <code>cargo test</code>, and <strong>remove <code>&lt;impl eframe::App for PcbReviewerApp&gt;::update</code> from <code>.cargo/mutants.toml</code></strong> so mutation testing actively guards our rendered UI panels!
-      </p>
-
-      <figure class="mermaid-figure">
-        <pre class="mermaid">
+<p>Welcome to <strong>Act II</strong>! In <a href="./0005-hit-testing-and-net-cross-probing.html">Lesson 0005</a>, we built interactive pad hit-testing and net highlighting. However, an engineer inspecting a board or schematic cannot navigate by anonymous red and blue rectangles alone—they need <strong>reference designators</strong> (<code>U1</code>, <code>R12</code>, <code>J1</code>), component values (<code>LDO_3V3</code>, <code>10k</code>), and human-readable net names (<code>VCC_3V3</code>, <code>SPI_CLK</code>).</p>
+<p>Even more importantly, Lesson 0006 marks a milestone in our verification architecture: we add <a href="https://docs.rs/egui_kittest/latest/egui_kittest/"><code>egui_kittest</code></a> to <code>[dev-dependencies]</code>, boot our <code>PcbReviewerApp</code> headlessly inside <code>cargo test</code>, and <strong>remove <code>&lt;impl eframe::App for PcbReviewerApp&gt;::update</code> from <code>.cargo/mutants.toml</code></strong> so mutation testing actively guards our rendered UI panels!</p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
 flowchart LR
-    Comp["ComponentSymbol<br/>ref_des: String ('U1')<br/>value: String ('LDO_3V3')"] -->|"format!('{}: {} ({})')"| Panel["SidePanel::left<br/>ui.label(comp.inspector_label())"]
-    Comp -->|"Painter::text(&amp;comp.ref_des)"| Canvas["CentralPanel Canvas<br/>Align2::CENTER_CENTER + FontId::monospace"]
-    Panel -->|"AccessKit Node Tree"| Kittest["egui_kittest::Harness<br/>harness.get_by_label('U1: LDO_3V3 (SOT-23)')"]
-        </pre>
-        <figcaption>Figure 6.1: Component metadata feeds both <code>Painter::text</code> on the 2D canvas and semantic <code>ui.label</code> nodes verified headlessly by <code>egui_kittest::Harness</code>.</figcaption>
-      </figure>
-
-      <h2>1. Just-in-Time Rust: Owned <code>String</code> vs. Borrowed <code>&amp;str</code> &amp; <code>format!()</code></h2>
-
-      <p>
-        When modeling a component symbol or net label in Rust, you will immediately encounter two string types (<a href="https://doc.rust-lang.org/book/ch08-02-strings.html" target="_blank" rel="noopener">Rust Book §8.2</a>):<span class="sidenote-number"></span><span class="sidenote">Because <code>&amp;String</code> automatically coerces to <code>&amp;str</code> (via the <code>Deref</code> trait), a function that accepts <code>&amp;str</code> can take both string literals like <code>"U1"</code> and borrowed heap strings like <code>&amp;comp.ref_des</code> without copying a single byte!</span>
-      </p>
-
-      <ul>
-        <li><strong><code>&amp;str</code> (String Slice):</strong> An immutable, fat-pointer view (<code>ptr + len</code>) borrowing existing UTF-8 bytes in memory (such as a compile-time string literal <code>"Top Copper (F.Cu)"</code> or a slice of a <code>String</code>). It is <code>Copy</code> and does not own heap memory.</li>
-        <li><strong><code>String</code> (Owned UTF-8 Buffer):</strong> A growable, heap-allocated UTF-8 buffer (backed by <code>Vec&lt;u8&gt;</code>) owned by a struct field (like <code>pub ref_des: String</code>) or freshly constructed at runtime with the <a href="https://doc.rust-lang.org/std/macro.format.html" target="_blank" rel="noopener"><code>format!()</code></a> macro.</li>
-      </ul>
-
-      <pre><code class="language-rust">#[derive(Clone, Debug, PartialEq)]
+    Comp["ComponentSymbol&lt;br/&gt;ref_des: String ('U1')&lt;br/&gt;value: String ('LDO_3V3')"] --&gt;|"format!('{}: {} ({})')"| Panel["SidePanel::left&lt;br/&gt;ui.label(comp.inspector_label())"]
+    Comp --&gt;|"Painter::text(&amp;comp.ref_des)"| Canvas["CentralPanel Canvas&lt;br/&gt;Align2::CENTER_CENTER + FontId::monospace"]
+    Panel --&gt;|"AccessKit Node Tree"| Kittest["egui_kittest::Harness&lt;br/&gt;harness.get_by_label('U1: LDO_3V3 (SOT-23)')"]
+  </pre>
+</figure>
+<p><em>Figure 6.1: Component metadata feeds both <code>Painter::text</code> on the 2D canvas and semantic <code>ui.label</code> nodes verified headlessly by <code>egui_kittest::Harness</code>.</em></p>
+<h2>1. Just-in-Time Rust: Owned <code>String</code> vs. Borrowed <code>&amp;str</code> &amp; <code>format!()</code></h2>
+<p>When modeling a component symbol or net label in Rust, you will immediately encounter two string types (<a href="https://doc.rust-lang.org/book/ch08-02-strings.html">Rust Book §8.2</a>):<span class="sidenote-number"></span><span class="sidenote">Because <code>&amp;String</code> automatically coerces to <code>&amp;str</code> (via the <code>Deref</code> trait), a function that accepts <code>&amp;str</code> can take both string literals like <code>&quot;U1&quot;</code> and borrowed heap strings like <code>&amp;comp.ref_des</code> without copying a single byte!</span></p>
+<ul>
+<li><strong><code>&amp;str</code> (String Slice):</strong> An immutable, fat-pointer view (<code>ptr + len</code>) borrowing existing UTF-8 bytes in memory (such as a compile-time string literal <code>&quot;Top Copper (F.Cu)&quot;</code> or a slice of a <code>String</code>). It is <code>Copy</code> and does not own heap memory.</li>
+<li><strong><code>String</code> (Owned UTF-8 Buffer):</strong> A growable, heap-allocated UTF-8 buffer (backed by <code>Vec&lt;u8&gt;</code>) owned by a struct field (like <code>pub ref_des: String</code>) or freshly constructed at runtime with the <a href="https://doc.rust-lang.org/std/macro.format.html"><code>format!()</code></a> macro.</li>
+</ul>
+<pre><code class="language-rust">#[derive(Clone, Debug, PartialEq)]
 pub struct ComponentSymbol {
     pub ref_des: String,
     pub value: String,
@@ -76,14 +68,9 @@ impl ComponentSymbol {
         format!("{}: {} ({})", self.ref_des, self.value, self.package_name)
     }
 }</code></pre>
-
-      <h2>2. Drawing Silkscreen Reference Designators with <code>Painter::text</code></h2>
-
-      <p>
-        On the 2D canvas, <a href="https://docs.rs/egui/latest/egui/struct.Painter.html#method.text" target="_blank" rel="noopener"><code>Painter::text</code></a> renders crisp vector-rasterized glyphs anchored to any screen-space <code>Pos2</code> using <a href="https://docs.rs/egui/latest/egui/enum.Align2.html" target="_blank" rel="noopener"><code>Align2</code></a> and <a href="https://docs.rs/egui/latest/egui/struct.FontId.html" target="_blank" rel="noopener"><code>FontId</code></a>:<span class="sidenote-number"></span><span class="sidenote">Using <code>Align2::CENTER_CENTER</code> places the exact geometric center of the rendered glyph bounding box at <code>center_px</code>, keeping <code>U1</code> centered inside its IC body at any zoom level.</span>
-      </p>
-
-      <pre><code class="language-rust">let center_px = self.viewport.world_to_screen(comp.center_mm);
+<h2>2. Drawing Silkscreen Reference Designators with <code>Painter::text</code></h2>
+<p>On the 2D canvas, <a href="https://docs.rs/egui/latest/egui/struct.Painter.html#method.text"><code>Painter::text</code></a> renders crisp vector-rasterized glyphs anchored to any screen-space <code>Pos2</code> using <a href="https://docs.rs/egui/latest/egui/enum.Align2.html"><code>Align2</code></a> and <a href="https://docs.rs/egui/latest/egui/struct.FontId.html"><code>FontId</code></a>:<span class="sidenote-number"></span><span class="sidenote">Using <code>Align2::CENTER_CENTER</code> places the exact geometric center of the rendered glyph bounding box at <code>center_px</code>, keeping <code>U1</code> centered inside its IC body at any zoom level.</span></p>
+<pre><code class="language-rust">let center_px = self.viewport.world_to_screen(comp.center_mm);
 painter.text(
     center_px,
     egui::Align2::CENTER_CENTER,
@@ -91,14 +78,9 @@ painter.text(
     egui::FontId::monospace((2.2 * scale).clamp(9.0, 22.0)),
     PcbLayer::Silkscreen.color(),
 );</code></pre>
-
-      <h2>3. Headless UI Verification with <code>egui_kittest::Harness</code></h2>
-
-      <p>
-        In Acts 0–I, we excluded <code>&lt;impl eframe::App for PcbReviewerApp&gt;::update</code> in <code>.cargo/mutants.toml</code> because we only had pure domain unit tests. By adding <code>egui_kittest = { version = "0.33", features = ["eframe"] }</code> under <code>[dev-dependencies]</code>, we can spin up our entire <code>eframe::App</code> headlessly in milliseconds using AccessKit's semantic node tree:
-      </p>
-
-      <pre><code class="language-rust">use egui_kittest::{Harness, kittest::Queryable};
+<h2>3. Headless UI Verification with <code>egui_kittest::Harness</code></h2>
+<p>In Acts 0–I, we excluded <code>&lt;impl eframe::App for PcbReviewerApp&gt;::update</code> in <code>.cargo/mutants.toml</code> because we only had pure domain unit tests. By adding <code>egui_kittest = { version = &quot;0.33&quot;, features = [&quot;eframe&quot;] }</code> under <code>[dev-dependencies]</code>, we can spin up our entire <code>eframe::App</code> headlessly in milliseconds using AccessKit's semantic node tree:</p>
+<pre><code class="language-rust">use egui_kittest::{Harness, kittest::Queryable};
 
 #[test]
 fn headless_ui_renders_component_labels_and_toggles_layers() {
@@ -115,97 +97,86 @@ fn headless_ui_renders_component_labels_and_toggles_layers() {
     assert!(!harness.state().show_silkscreen);
     assert!(harness.query_by_label("U1: LDO_3V3 (SOT-23)").is_none());
 }</code></pre>
+</div>
+
+<section class="full-width-panel" id="sch-text-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: <code>Painter::text</code> Anchor Alignment &amp; <code>egui_kittest</code> Node Tree</span>
+    <span class="panel-badge">Align2 • FontId • Harness::new_eframe</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Adjust the <code>Align2</code> anchor mode, font size, and <code>show_silkscreen</code> toggle below. Observe how <code>Painter::text</code> repositions the reference designators on the canvas while <code>egui_kittest::Harness</code> inspects the live accessibility tree in the <code>SidePanel</code>.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Text &amp; Layer Controls</h4>
+      <label style="display:block; font-size:0.82rem; margin-bottom:0.6rem;">
+        <code>Align2</code> Anchor:<br>
+        <select data-param="align" style="width:100%; margin-top:0.25rem; padding:0.35rem; background:var(--bg-code); color:var(--text-main); border:1px solid var(--border-strong); border-radius:4px;">
+          <option value="CENTER_CENTER">Align2::CENTER_CENTER</option>
+          <option value="LEFT_TOP">Align2::LEFT_TOP</option>
+          <option value="RIGHT_BOTTOM">Align2::RIGHT_BOTTOM</option>
+        </select>
+      </label>
+      <label style="display:block; font-size:0.82rem; margin-bottom:0.6rem;">
+        <code>FontId::monospace(size)</code>:<br>
+        <input type="range" data-param="fontSize" min="10" max="18" step="1" value="13" style="width:100%;">
+      </label>
+      <label class="egui-checkbox" style="margin-bottom:0.6rem;">
+        <input type="checkbox" data-param="silk" checked>
+        <span>Silkscreen (<code>show_silkscreen</code>)</span>
+      </label>
+      <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+        <button type="button" class="egui-btn" data-select-net="1">Select NET_1</button>
+        <button type="button" class="egui-btn" data-select-net="2">Select NET_2</button>
+        <button type="button" class="egui-btn" data-select-net="none">Clear Net</button>
+      </div>
     </div>
 
-    <!-- Interactive Skill 1: Painter::text & egui_kittest Simulator -->
-    <section class="full-width-panel" id="sch-text-sim">
-      <div class="panel-header">
-        <span class="panel-title">Interactive Lab 1: <code>Painter::text</code> Anchor Alignment &amp; <code>egui_kittest</code> Node Tree</span>
-        <span class="panel-badge">Align2 • FontId • Harness::new_eframe</span>
-      </div>
-      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-        Adjust the <code>Align2</code> anchor mode, font size, and <code>show_silkscreen</code> toggle below. Observe how <code>Painter::text</code> repositions the reference designators on the canvas while <code>egui_kittest::Harness</code> inspects the live accessibility tree in the <code>SidePanel</code>.
-      </p>
+    <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px;">
+      <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="Silkscreen Component &amp; Text Alignment Canvas">
+        <rect x="18" y="14" width="284" height="182" rx="6" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
+        <path d="M 80 75 L 160 75 L 240 75" fill="none" stroke="#e05243" stroke-width="4" stroke-linecap="round"/>
+        <path d="M 80 135 L 160 135 L 240 135" fill="none" stroke="#3b8eea" stroke-width="4" stroke-linecap="round"/>
+        <g data-svg="silk-outlines">
+          <rect x="48" y="55" width="64" height="96" rx="3" fill="rgba(240,230,140,0.06)" stroke="#f0e68c" stroke-width="1.8"/>
+          <rect x="134" y="88" width="52" height="32" rx="2" fill="rgba(240,230,140,0.06)" stroke="#f0e68c" stroke-width="1.8"/>
+          <rect x="214" y="58" width="52" height="90" rx="3" fill="rgba(240,230,140,0.06)" stroke="#f0e68c" stroke-width="1.8"/>
+          <circle cx="80" cy="103" r="2.5" fill="#ff8b6b"/>
+          <circle cx="160" cy="104" r="2.5" fill="#ff8b6b"/>
+          <circle cx="240" cy="103" r="2.5" fill="#ff8b6b"/>
+        </g>
+        <text data-svg="refdes-label" x="80" y="103" fill="#f0e68c" font-family="monospace" font-weight="bold" font-size="13" text-anchor="middle" dy="0.35em">U1</text>
+        <text data-svg="refdes-label" x="160" y="104" fill="#f0e68c" font-family="monospace" font-weight="bold" font-size="13" text-anchor="middle" dy="0.35em">R12</text>
+        <text data-svg="refdes-label" x="240" y="103" fill="#f0e68c" font-family="monospace" font-weight="bold" font-size="13" text-anchor="middle" dy="0.35em">J1</text>
+      </svg>
+    </div>
 
-      <div class="sim-grid">
-        <div class="sim-box">
-          <h4>1. Text &amp; Layer Controls</h4>
-          <label style="display:block; font-size:0.82rem; margin-bottom:0.6rem;">
-            <code>Align2</code> Anchor:<br>
-            <select data-param="align" style="width:100%; margin-top:0.25rem; padding:0.35rem; background:var(--bg-code); color:var(--text-main); border:1px solid var(--border-strong); border-radius:4px;">
-              <option value="CENTER_CENTER">Align2::CENTER_CENTER</option>
-              <option value="LEFT_TOP">Align2::LEFT_TOP</option>
-              <option value="RIGHT_BOTTOM">Align2::RIGHT_BOTTOM</option>
-            </select>
-          </label>
-          <label style="display:block; font-size:0.82rem; margin-bottom:0.6rem;">
-            <code>FontId::monospace(size)</code>:<br>
-            <input type="range" data-param="fontSize" min="10" max="18" step="1" value="13" style="width:100%;">
-          </label>
-          <label class="egui-checkbox" style="margin-bottom:0.6rem;">
-            <input type="checkbox" data-param="silk" checked>
-            <span>Silkscreen (<code>show_silkscreen</code>)</span>
-          </label>
-          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-            <button type="button" class="egui-btn" data-select-net="1">Select NET_1</button>
-            <button type="button" class="egui-btn" data-select-net="2">Select NET_2</button>
-            <button type="button" class="egui-btn" data-select-net="none">Clear Net</button>
-          </div>
-        </div>
+    <div class="sim-box">
+      <h4>2. Live Code &amp; <code>egui_kittest</code> Tree</h4>
+      <pre class="language-rust" style="margin:0 0 0.65rem 0; font-size:0.74rem; padding:0.65rem;"><code class="language-rust" data-role="text-painter-code"></code></pre>
+      <pre class="language-bash" style="margin:0; font-size:0.72rem; padding:0.65rem;"><code class="language-bash" data-role="kittest-tree"></code></pre>
+    </div>
+  </div>
+</section>
 
-        <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px;">
-          <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="Silkscreen Component &amp; Text Alignment Canvas">
-            <rect x="18" y="14" width="284" height="182" rx="6" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
-            <!-- Copper traces -->
-            <path d="M 80 75 L 160 75 L 240 75" fill="none" stroke="#e05243" stroke-width="4" stroke-linecap="round"/>
-            <path d="M 80 135 L 160 135 L 240 135" fill="none" stroke="#3b8eea" stroke-width="4" stroke-linecap="round"/>
-
-            <!-- Silkscreen Component Outlines -->
-            <g data-svg="silk-outlines">
-              <rect x="48" y="55" width="64" height="96" rx="3" fill="rgba(240,230,140,0.06)" stroke="#f0e68c" stroke-width="1.8"/>
-              <rect x="134" y="88" width="52" height="32" rx="2" fill="rgba(240,230,140,0.06)" stroke="#f0e68c" stroke-width="1.8"/>
-              <rect x="214" y="58" width="52" height="90" rx="3" fill="rgba(240,230,140,0.06)" stroke="#f0e68c" stroke-width="1.8"/>
-              <!-- Anchor crosshairs -->
-              <circle cx="80" cy="103" r="2.5" fill="#ff8b6b"/>
-              <circle cx="160" cy="104" r="2.5" fill="#ff8b6b"/>
-              <circle cx="240" cy="103" r="2.5" fill="#ff8b6b"/>
-            </g>
-
-            <!-- Painter::text Labels -->
-            <text data-svg="refdes-label" x="80" y="103" fill="#f0e68c" font-family="monospace" font-weight="bold" font-size="13" text-anchor="middle" dy="0.35em">U1</text>
-            <text data-svg="refdes-label" x="160" y="104" fill="#f0e68c" font-family="monospace" font-weight="bold" font-size="13" text-anchor="middle" dy="0.35em">R12</text>
-            <text data-svg="refdes-label" x="240" y="103" fill="#f0e68c" font-family="monospace" font-weight="bold" font-size="13" text-anchor="middle" dy="0.35em">J1</text>
-          </svg>
-        </div>
-
-        <div class="sim-box">
-          <h4>2. Live Code &amp; <code>egui_kittest</code> Tree</h4>
-          <pre class="language-rust" style="margin:0 0 0.65rem 0; font-size:0.74rem; padding:0.65rem;"><code class="language-rust" data-role="text-painter-code"></code></pre>
-          <pre class="language-bash" style="margin:0; font-size:0.72rem; padding:0.65rem;"><code class="language-bash" data-role="kittest-tree"></code></pre>
-        </div>
-      </div>
-    </section>
-
-    <!-- Interactive Skill 2: Code Completion Lab -->
-    <section class="full-width-panel">
-      <div class="panel-header">
-        <span class="panel-title">Interactive Lab 2: Complete <code>inspector_label</code> &amp; the <code>egui_kittest</code> Assertion</span>
-        <span class="panel-badge">format!() • Align2 • Queryable</span>
-      </div>
-      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-        Fill in the three blanks below to (1) format an owned <code>String</code> in <code>inspector_label</code>, (2) center-align the reference designator glyph on the canvas, and (3) click the <code>"Isolate Top Copper"</code> button inside our headless <code>egui_kittest</code> test:
-      </p>
-
-      <pre class="keep-markup"><code class="language-rust">impl ComponentSymbol {
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 2: Complete <code>inspector_label</code> &amp; the <code>egui_kittest</code> Assertion</span>
+    <span class="panel-badge">format!() • Align2 • Queryable</span>
+  </div>
+  <p>Fill in the three blanks below to (1) format an owned <code>String</code> in <code>inspector_label</code>, (2) center-align the reference designator glyph on the canvas, and (3) click the <code>&quot;Isolate Top Copper&quot;</code> button inside our headless <code>egui_kittest</code> test:</p>
+<pre class="keep-markup"><code class="language-rust">impl ComponentSymbol {
     pub fn inspector_label(&amp;self) -&gt; String {
-        <input id="sch-blank-1" class="code-challenge-input" style="width:110px;" placeholder="/* 1: macro */" autocomplete="off">("{}: {} ({})", self.ref_des, self.value, self.package_name)
+        <input id="ex-blank-1" class="code-challenge-input" style="width:110px;" placeholder="/* 1: macro */" autocomplete="off">("{}: {} ({})", self.ref_des, self.value, self.package_name)
     }
 }
 
 // Inside paint_board():
 painter.text(
     center_px,
-    Align2::<input id="sch-blank-2" class="code-challenge-input" style="width:155px;" placeholder="/* 2: center anchor */" autocomplete="off">,
+    Align2::<input id="ex-blank-2" class="code-challenge-input" style="width:155px;" placeholder="/* 2: center anchor */" autocomplete="off">,
     &amp;comp.ref_des,
     FontId::monospace(12.0),
     PcbLayer::Silkscreen.color(),
@@ -213,27 +184,22 @@ painter.text(
 
 // Inside #[test] fn headless_ui_renders_component_labels_and_toggles_layers():
 let mut harness = Harness::new_eframe(|_cc| PcbReviewerApp::default());
-harness.<input id="sch-blank-3" class="code-challenge-input" style="width:145px;" placeholder="/* 3: find node */" autocomplete="off">("Isolate Top Copper").click();
+harness.<input id="ex-blank-3" class="code-challenge-input" style="width:145px;" placeholder="/* 3: find node */" autocomplete="off">("Isolate Top Copper").click();
 harness.run();</code></pre>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn-primary" id="btn-check-ex">Check Rust Code</button>
+    <button type="button" class="btn-secondary" id="btn-hint-ex">Show Hint</button>
+  </div>
+  <div id="ex-feedback" class="feedback-box"></div>
+</section>
 
-      <div style="display: flex; gap: 0.75rem; align-items: center;">
-        <button type="button" class="btn-primary" id="btn-check-sch">Check Rust Code</button>
-        <button type="button" class="btn-secondary" id="btn-hint-sch">Show Hint</button>
-      </div>
-      <div id="sch-feedback" class="feedback-box"></div>
-    </section>
-
-    <!-- Interactive Skill 3: Cargo Verification & Mutation Coverage Gate -->
-    <section class="full-width-panel">
-      <div class="panel-header">
-        <span class="panel-title">Interactive Lab 3: Un-Skipping <code>eframe::App::update</code> with <code>egui_kittest</code></span>
-        <span class="panel-badge">cargo test + cargo mutants</span>
-      </div>
-      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-        Look at <code>apps/0006-schematic-symbols-and-text-rendering/.cargo/mutants.toml</code>: we have removed <code>"&lt;impl eframe::App for PcbReviewerApp&gt;::update"</code> from <code>exclude_re</code>! Because our <code>egui_kittest::Harness</code> test queries the rendered <code>SidePanel</code> labels and clicks its buttons, <code>cargo mutants</code> now mutates <code>update()</code> and <code>render_side_panel()</code>—and catches every single mutant!
-      </p>
-
-      <pre><code class="language-toml"># apps/0006-schematic-symbols-and-text-rendering/.cargo/mutants.toml
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 3: Un-Skipping <code>eframe::App::update</code> with <code>egui_kittest</code></span>
+    <span class="panel-badge">cargo test + cargo mutants</span>
+  </div>
+  <p>Look at <code>apps/0006-schematic-symbols-and-text-rendering/.cargo/mutants.toml</code>: we have removed <code>&quot;&lt;impl eframe::App for PcbReviewerApp&gt;::update&quot;</code> from <code>exclude_re</code>! Because our <code>egui_kittest::Harness</code> test queries the rendered <code>SidePanel</code> labels and clicks its buttons, <code>cargo mutants</code> now mutates <code>update()</code> and <code>render_side_panel()</code>—and catches every single mutant!</p>
+<pre><code class="language-toml"># apps/0006-schematic-symbols-and-text-rendering/.cargo/mutants.toml
 copy_target = true
 
 # Notice that `&lt;impl eframe::App for PcbReviewerApp&gt;::update` and `render_side_panel`
@@ -246,141 +212,131 @@ exclude_re = [
     "sample_pads",
     "sample_components",
 ]</code></pre>
-
-      <div class="mutation-scoreboard">
-        <div class="mutation-stat tier">
-          <div class="stat-label">Verification Tier</div>
-          <div class="stat-value">Tier 6: Headless UI (egui_kittest)</div>
-        </div>
-        <div class="mutation-stat caught">
-          <div class="stat-label">Target Caught Mutants</div>
-          <div class="stat-value">35 Caught (10 Unviable)</div>
-        </div>
-        <div class="mutation-stat missed">
-          <div class="stat-label">Target Missed Mutants</div>
-          <div class="stat-value">0 Missed</div>
-        </div>
-      </div>
-
+  <div class="mutation-scoreboard">
+    <div class="mutation-stat tier">
+      <div class="stat-label">Verification Tier</div>
+      <div class="stat-value">Tier 6: Headless UI (egui_kittest)</div>
+    </div>
+    <div class="mutation-stat caught">
+      <div class="stat-label">Target Caught Mutants</div>
+      <div class="stat-value">35 Caught (10 Unviable)</div>
+    </div>
+    <div class="mutation-stat missed">
+      <div class="stat-label">Target Missed Mutants</div>
+      <div class="stat-value">0 Missed</div>
+    </div>
+  </div>
       <ul class="step-checklist">
         <li>
-          <input type="checkbox" id="verify-0006-1">
-          <label for="verify-0006-1">
+          <input type="checkbox" id="verify-1">
+          <label for="verify-1">
             <strong>1. Run <code>cargo test</code> in <code>apps/0006-schematic-symbols-and-text-rendering</code>:</strong> Confirm all 14 unit + headless <code>egui_kittest</code> tests pass.
           </label>
         </li>
         <li>
-          <input type="checkbox" id="verify-0006-2">
-          <label for="verify-0006-2">
+          <input type="checkbox" id="verify-2">
+          <label for="verify-2">
             <strong>2. Run <code>cargo mutants --in-place</code>:</strong> Verify that all 35 viable mutants (including <code>update</code>, <code>render_side_panel</code>, <code>inspector_label</code>, and <code>NetId::signal_name</code>) are <strong>Caught</strong> with <strong>0 Missed</strong>.
           </label>
         </li>
       </ul>
-    </section>
+</section>
 
-    <!-- Interactive Skill 4: Retrieval Practice Quiz -->
-    <section class="full-width-panel">
-      <div class="panel-header">
-        <span class="panel-title">Retrieval Practice: <code>String</code> vs. <code>&amp;str</code>, <code>Align2</code>, and <code>egui_kittest</code></span>
-        <span class="panel-badge">3 Questions • Equal-Length Options</span>
-      </div>
-      <div id="quiz-0006"></div>
-    </section>
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Retrieval Practice: <code>String</code> vs. <code>&amp;str</code>, <code>Align2</code>, and <code>egui_kittest</code></span>
+    <span class="panel-badge">3 Questions • Equal-Length Options</span>
+  </div>
+  <div id="quiz-container"></div>
+</section>
 
-    <div class="prose-col">
-      <h2>Recommended Primary Source</h2>
-      <div class="callout">
-        <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui_kittest/latest/egui_kittest/struct.Harness.html" target="_blank" rel="noopener"><code>egui_kittest::Harness</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/book/ch08-02-strings.html" target="_blank" rel="noopener">The Rust Programming Language — §8.2 "Storing UTF-8 Encoded Text with Strings"</a>.
-      </div>
+<div class="prose-col">
+<h2>Recommended Primary Source</h2>
+<div class="callout">
+  <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui_kittest/latest/egui_kittest/struct.Harness.html"><code>egui_kittest::Harness</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/book/ch08-02-strings.html">The Rust Programming Language — §8.2 &quot;Storing UTF-8 Encoded Text with Strings&quot;</a>.
+</div>
+<div class="teacher-prompt-box">
+  <strong>Up Next (Lesson 0007):</strong> Now that we can render component symbols and verify our UI headlessly with <code>egui_kittest</code>, head to <a href="./0007-split-viewports-and-egui-scene.html"><strong>Lesson 0007: Split Viewports, <code>egui::Scene</code> &amp; Borrow-Checker State Splits</strong></a> to build a side-by-side Schematic + PCB cross-probing workspace!
+</div>
+</div>
+    </article>
+  </main>
 
-      <div class="teacher-prompt-box">
-        <strong>Up Next (Lesson 0007):</strong> Now that we can render component symbols and verify our UI headlessly with <code>egui_kittest</code>, head to <a href="./0007-split-viewports-and-egui-scene.html"><strong>Lesson 0007: Split Viewports, <code>egui::Scene</code> &amp; Borrow-Checker State Splits</strong></a> to build a side-by-side Schematic + PCB cross-probing workspace!
-      </div>
-    </div>
-  </article>
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
 
   <script src="../assets/course.js"></script>
   <script>
-    initSchematicTextSimulator("sch-text-sim");
-
     initCodeExercise({
-      checkBtnId: "btn-check-sch",
-      hintBtnId: "btn-hint-sch",
-      feedbackId: "sch-feedback",
+      checkBtnId: "btn-check-ex",
+      hintBtnId: "btn-hint-ex",
+      feedbackId: "ex-feedback",
       blanks: [
         {
-          inputId: "sch-blank-1",
+          inputId: "ex-blank-1",
           accepted: ["format!"],
           getErrorHint: (val) =>
-            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. Use the Rust standard library macro that interpolates values into an owned <code>String</code> (<code>format!</code>).`,
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Use the Rust standard library macro that interpolates values into an owned <code>String</code> (<code>format!</code>).",
         },
         {
-          inputId: "sch-blank-2",
+          inputId: "ex-blank-2",
           accepted: ["CENTER_CENTER"],
           getErrorHint: (val) =>
-            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. Use the <code>Align2</code> constant that centers horizontally and vertically (<code>CENTER_CENTER</code>).`,
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Use the <code>Align2</code> constant that centers horizontally and vertically (<code>CENTER_CENTER</code>).",
         },
         {
-          inputId: "sch-blank-3",
+          inputId: "ex-blank-3",
           accepted: ["get_by_label"],
           getErrorHint: (val) =>
-            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. Call the <code>Queryable</code> method that retrieves a widget node by its accessible text label (<code>get_by_label</code>).`,
-        },
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Call the <code>Queryable</code> method that retrieves a widget node by its accessible text label (<code>get_by_label</code>).",
+        }
       ],
-      hintMessage:
-        "<strong>Hints:</strong> (1) <code>format!</code>. (2) <code>CENTER_CENTER</code>. (3) <code>get_by_label</code>.",
-      successMessage:
-        "<strong>Spot on!</strong> <code>format!</code> builds the owned <code>String</code> summary, <code>Align2::CENTER_CENTER</code> anchors the silkscreen glyph, and <code>harness.get_by_label(...).click()</code> drives the UI headlessly.",
+      hintMessage: "<strong>Hints:</strong> (1) <code>format!</code>. (2) <code>CENTER_CENTER</code>. (3) <code>get_by_label</code>.",
+      successMessage: "<strong>Spot on!</strong> <code>format!</code> builds the owned <code>String</code> summary, <code>Align2::CENTER_CENTER</code> anchors the silkscreen glyph, and <code>harness.get_by_label(...).click()</code> drives the UI headlessly.",
     });
 
-    // Strict equal word-count AND equal character-count options per question (indices: 0 -> 1 -> 3)
-    initQuiz("quiz-0006", [
+    initQuiz("quiz-container", [
       {
-        question:
-          "Why does a read-only helper often accept `&str` while `format!()` returns an owned `String`?",
-        options: [
-          "String slices borrow existing UTF-8 bytes", // 6 words, 41 chars (Correct: A)
-          "String slices allocate buffers every pass", // 6 words, 41 chars
-          "Owned strings forbid dynamic runtime text", // 6 words, 41 chars
-          "Owned strings require static global state", // 6 words, 41 chars
-        ],
-        correctIndex: 0,
-        explanation:
-          "A `&str` slice borrows existing UTF-8 bytes without allocating, whereas `format!()` constructs a brand-new string at runtime and returns an owned heap-allocated `String`.",
-        wrongHint:
-          "Compare borrowing existing bytes (`&str`) with constructing new formatted bytes at runtime (`String`).",
+            "question": "Why does a read-only helper often accept `&str` while `format!()` returns an owned `String`?",
+            "options": [
+                  "String slices borrow existing UTF-8 bytes",
+                  "String slices allocate buffers every pass",
+                  "Owned strings forbid dynamic runtime text",
+                  "Owned strings require static global state"
+            ],
+            "correctIndex": 0,
+            "explanation": "A `&str` slice borrows existing UTF-8 bytes without allocating, whereas `format!()` constructs a brand-new string at runtime and returns an owned heap-allocated `String`.",
+            "wrongHint": "Compare borrowing existing bytes (`&str`) with constructing new formatted bytes at runtime (`String`)."
       },
       {
-        question:
-          "What does `Align2::CENTER_CENTER` do when passed to `painter.text(anchor_px, ...)`?",
-        options: [
-          "It scales font glyphs around board edges", // 6 words, 40 chars
-          "It centers text bounds over anchor point", // 6 words, 40 chars (Correct: B)
-          "It rotates text labels along copper nets", // 6 words, 40 chars
-          "It clamps font sizes inside panel frames", // 6 words, 40 chars
-        ],
-        correctIndex: 1,
-        explanation:
-          "`Align2::CENTER_CENTER` positions the geometric center of the rendered text bounding box directly on `anchor_px`.",
-        wrongHint:
-          "Think about which point of the text's bounding rectangle is placed at `anchor_px`.",
+            "question": "What does `Align2::CENTER_CENTER` do when passed to `painter.text(anchor_px, ...)`?",
+            "options": [
+                  "It scales font glyphs around board edges",
+                  "It centers text bounds over anchor point",
+                  "It rotates text labels along copper nets",
+                  "It clamps font sizes inside panel frames"
+            ],
+            "correctIndex": 1,
+            "explanation": "`Align2::CENTER_CENTER` positions the geometric center of the rendered text bounding box directly on `anchor_px`.",
+            "wrongHint": "Think about which point of the text's bounding rectangle is placed at `anchor_px`."
       },
       {
-        question:
-          "How does `egui_kittest::Harness` let us remove `eframe::App::update` from `.cargo/mutants.toml`?",
-        options: [
-          "It compiles shaders without running rustc", // 6 words, 41 chars
-          "It skips widget layout during cargo tests", // 6 words, 41 chars
-          "It mutates private fields inside main app", // 6 words, 41 chars
-          "It drives frames and queries widget nodes", // 6 words, 41 chars (Correct: D)
-        ],
-        correctIndex: 3,
-        explanation:
-          "`egui_kittest::Harness` runs `eframe::App::update` headlessly and exposes the AccessKit widget tree so tests can query labels and simulate clicks.",
-        wrongHint:
-          "Consider how `Harness::new_eframe` executes `update()` and inspects rendered widgets during `cargo test`.",
-      },
-    ]);
+            "question": "How does `egui_kittest::Harness` let us remove `eframe::App::update` from `.cargo/mutants.toml`?",
+            "options": [
+                  "It builds GPU shaders without using rustc",
+                  "It skips widget layout during cargo tests",
+                  "It mutates private fields inside main app",
+                  "It drives frames and queries widget nodes"
+            ],
+            "correctIndex": 3,
+            "explanation": "`egui_kittest::Harness` runs `eframe::App::update` headlessly and exposes the AccessKit widget tree so tests can query labels and simulate clicks.",
+            "wrongHint": "Consider how `Harness::new_eframe` executes `update()` and inspects rendered widgets during `cargo test`."
+      }
+]);
+
+    initSchematicTextSimulator("sch-text-sim");
   </script>
 </body>
 </html>

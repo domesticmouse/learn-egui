@@ -1,3 +1,6 @@
 apps/*/target/
 apps/*/mutants.out/
 apps/*/mutants.out.old/
+.venv/
+_site/
+__pycache__/

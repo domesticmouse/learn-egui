@@ -4,11 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
-  <title>Lesson 0005: Hit-Testing &amp; Net Cross-Probing — Learn egui</title>
+  <title>Lesson 0005: Hit-Testing &amp; Net Cross-Probing (`Option&lt;NetId&gt;`)</title>
   <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
-  <nav class="course-nav">
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
     <div>
       <a href="../index.html">Index</a>
       <a href="./0000-project-setup-and-eframe-boot.html">0000</a>
@@ -25,37 +26,31 @@
       <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
     </div>
-    <span class="mission-badge">Act I Finale: The 2D CAD Canvas &amp; Viewport</span>
+    <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
   </nav>
+  </header>
 
-  <article class="tufte-article">
-    <div class="prose-col">
-      <h1>Lesson 0005: Hit-Testing &amp; Net Cross-Probing (<code>Option&lt;NetId&gt;</code>)</h1>
-      <p class="subtitle">Hovering and clicking PCB pads in physical world coordinates to highlight connected nets and drive the <code>SidePanel</code> Net Inspector</p>
+  <main>
+    <article class="tufte-article">
+<div class="prose-col">
+<h1>Lesson 0005: Hit-Testing &amp; Net Cross-Probing (<code>Option&lt;NetId&gt;</code>)</h1>
+<p class="subtitle">Hovering and clicking PCB pads in physical world coordinates to highlight connected nets and drive the <code>SidePanel</code> Net Inspector</p>
 
-      <p>
-        In <a href="./0004-modeling-layers-traces-and-footprints.html">Lesson 0004</a>, we rendered our PCB traces in deterministic back-to-front Z-order. Now we complete <strong>Act I</strong> by making the 2D board interactive: when an engineer hovers over or clicks an SMD pad on the canvas, our application converts the mouse pointer from screen pixels back into physical millimeters (<code>screen_to_world</code>), checks which visible pad contains that coordinate, highlights every trace and pad belonging to that electrical net across all layers, and displays the net's details in the left <code>SidePanel</code>.
-      </p>
-
-      <figure class="mermaid-figure">
-        <pre class="mermaid">
+<p>In <a href="./0004-modeling-layers-traces-and-footprints.html">Lesson 0004</a>, we rendered our PCB traces in deterministic back-to-front Z-order. Now we complete <strong>Act I</strong> by making the 2D board interactive: when an engineer hovers over or clicks an SMD pad on the canvas, our application converts the mouse pointer from screen pixels back into physical millimeters (<code>screen_to_world</code>), checks which visible pad contains that coordinate, highlights every trace and pad belonging to that electrical net across all layers, and displays the net's details in the left <code>SidePanel</code>.</p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
 flowchart LR
-    Hover["response.hover_pos()<br/>Some(screen_pt)"] -->|"viewport.screen_to_world(screen_pt)"| World["world_mm: Pos2<br/>(Physical mm)"]
-    World -->|"hit_test_net_at_mm(world_mm)"| Hit["hovered_net: Option&lt;NetId&gt;<br/>Some(NetId(1)) or None"]
-    Hit -->|"if response.clicked()"| Sel["selected_net = hovered_net"]
-    Sel --> Active["active_net()<br/>self.selected_net.or(self.hovered_net)"]
-    Active --> Highlight["Highlights NET_1 pads &amp; traces on canvas<br/>+ Updates SidePanel Net Inspector"]
-        </pre>
-        <figcaption>Figure 5.1: Pointer screen coordinates are inverted into physical millimeters, hit-tested against visible pads in Z-order, and stored as <code>Option&lt;NetId&gt;</code>.</figcaption>
-      </figure>
-
-      <h2>1. Modeling Optional Selection with <code>Option&lt;NetId&gt;</code></h2>
-
-      <p>
-        When the mouse cursor sits over empty FR4 fiberglass, <em>no electrical net is hovered</em>. Languages with `null` pointers often represent this with `null` or magic numbers like `-1`. Rust eliminates null-pointer bugs at compile time using the standard library enum <a href="https://doc.rust-lang.org/std/option/enum.Option.html" target="_blank" rel="noopener"><code>Option&lt;T&gt;</code></a>:<span class="sidenote-number"></span><span class="sidenote">Notice how <code>pub struct NetId(pub u32);</code> is a <strong>tuple struct</strong> (<a href="https://doc.rust-lang.org/book/ch05-01-defining-structs.html#using-tuple-structs-without-named-fields-to-create-different-types" target="_blank" rel="noopener">Rust Book §5.1</a>)—a zero-cost wrapper around <code>u32</code> so you can never accidentally pass a pin count or layer rank where a <code>NetId</code> is expected!</span>
-      </p>
-
-      <pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    Hover["response.hover_pos()&lt;br/&gt;Some(screen_pt)"] --&gt;|"viewport.screen_to_world(screen_pt)"| World["world_mm: Pos2&lt;br/&gt;(Physical mm)"]
+    World --&gt;|"hit_test_net_at_mm(world_mm)"| Hit["hovered_net: Option&lt;NetId&gt;&lt;br/&gt;Some(NetId(1)) or None"]
+    Hit --&gt;|"if response.clicked()"| Sel["selected_net = hovered_net"]
+    Sel --&gt; Active["active_net()&lt;br/&gt;self.selected_net.or(self.hovered_net)"]
+    Active --&gt; Highlight["Highlights NET_1 pads &amp; traces on canvas&lt;br/&gt;+ Updates SidePanel Net Inspector"]
+  </pre>
+</figure>
+<p><em>Figure 5.1: Pointer screen coordinates are inverted into physical millimeters, hit-tested against visible pads in Z-order, and stored as <code>Option&lt;NetId&gt;</code></em></p>
+<h2>1. Modeling Optional Selection with <code>Option&lt;NetId&gt;</code></h2>
+<p>When the mouse cursor sits over empty FR4 fiberglass, <em>no electrical net is hovered</em>. Languages with <code>null</code> pointers often represent this with <code>null</code> or magic numbers like <code>-1</code>. Rust eliminates null-pointer bugs at compile time using the standard library enum <a href="https://doc.rust-lang.org/std/option/enum.Option.html"><code>Option&lt;T&gt;</code></a>:<span class="sidenote-number"></span><span class="sidenote">Notice how <code>pub struct NetId(pub u32);</code> is a <strong>tuple struct</strong> (<a href="https://doc.rust-lang.org/book/ch05-01-defining-structs.html#using-tuple-structs-without-named-fields-to-create-different-types">Rust Book §5.1</a>)—a zero-cost wrapper around <code>u32</code> so you can never accidentally pass a pin count or layer rank where a <code>NetId</code> is expected!</span></p>
+<pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NetId(pub u32);
 
 pub struct PcbReviewerApp {
@@ -63,29 +58,19 @@ pub struct PcbReviewerApp {
     pub hovered_net: Option&lt;NetId&gt;,
     pub selected_net: Option&lt;NetId&gt;,
 }</code></pre>
-
-      <p>
-        What if the user has clicked to lock `selected_net = Some(NetId(1))`, while also moving their mouse over `hovered_net = Some(NetId(2))`? Using <a href="https://doc.rust-lang.org/std/option/enum.Option.html#method.or" target="_blank" rel="noopener"><code>Option::or</code></a> expresses the priority rule in a single expression:
-      </p>
-
-      <pre><code class="language-rust">/// Returns `selected_net` if a net is locked by click, otherwise falls back to `hovered_net`.
+<p>What if the user has clicked to lock <code>selected_net = Some(NetId(1))</code>, while also moving their mouse over <code>hovered_net = Some(NetId(2))</code>? Using <a href="https://doc.rust-lang.org/std/option/enum.Option.html#method.or"><code>Option::or</code></a> expresses the priority rule in a single expression:</p>
+<pre><code class="language-rust">/// Returns `selected_net` if a net is locked by click, otherwise falls back to `hovered_net`.
 pub fn active_net(&amp;self) -&gt; Option&lt;NetId&gt; {
     self.selected_net.or(self.hovered_net)
 }</code></pre>
-
-      <h2>2. World-Space Hit-Testing Respecting Visibility &amp; Z-Order</h2>
-
-      <p>
-        Each SMD pad on the board knows its physical center (<code>center_mm</code>), dimensions (<code>size_mm</code>), layer (<code>PcbLayer</code>), and electrical net (<code>NetId</code>). Look at how <code>hit_test_net_at_mm</code> combines three rules:<span class="sidenote-number"></span><span class="sidenote">Why check <code>self.is_layer_visible(p.layer)</code> during hit-testing? If an engineer hides <code>TopCopper</code> to inspect <code>BottomCopper</code> routing underneath an IC, clicking where a hidden <code>TopCopper</code> pad used to be must <em>not</em> select the hidden layer!</span>
-      </p>
-
-      <ol>
-        <li>Only pads on <strong>currently visible layers</strong> (<code>self.is_layer_visible(p.layer)</code>) can be hit.</li>
-        <li>The world coordinate must fall inside <code>p.bounds_mm().contains(world_mm)</code>.</li>
-        <li>If pads on two visible layers overlap at the same `(x, y)` coordinate, sorting by <code>p.layer.z_rank()</code> and taking <code>.last()</code> selects the <strong>topmost</strong> visible pad.</li>
-      </ol>
-
-      <pre><code class="language-rust">impl SmdPad {
+<h2>2. World-Space Hit-Testing Respecting Visibility &amp; Z-Order</h2>
+<p>Each SMD pad on the board knows its physical center (<code>center_mm</code>), dimensions (<code>size_mm</code>), layer (<code>PcbLayer</code>), and electrical net (<code>NetId</code>). Look at how <code>hit_test_net_at_mm</code> combines three rules:<span class="sidenote-number"></span><span class="sidenote">Why check <code>self.is_layer_visible(p.layer)</code> during hit-testing? If an engineer hides <code>TopCopper</code> to inspect <code>BottomCopper</code> routing underneath an IC, clicking where a hidden <code>TopCopper</code> pad used to be must <em>not</em> select the hidden layer!</span></p>
+<ol>
+<li>Only pads on <strong>currently visible layers</strong> (<code>self.is_layer_visible(p.layer)</code>) can be hit.</li>
+<li>The world coordinate must fall inside <code>p.bounds_mm().contains(world_mm)</code>.</li>
+<li>If pads on two visible layers overlap at the same <code>(x, y)</code> coordinate, sorting by <code>p.layer.z_rank()</code> and taking <code>.last()</code> selects the <strong>topmost</strong> visible pad.</li>
+</ol>
+<pre><code class="language-rust">impl SmdPad {
     pub fn bounds_mm(&amp;self) -&gt; Rect {
         Rect::from_center_size(self.center_mm, self.size_mm)
     }
@@ -107,14 +92,9 @@ impl PcbReviewerApp {
         matching_pads.last().map(|p| p.net)
     }
 }</code></pre>
-
-      <h2>3. Unpacking <code>Option&lt;NetId&gt;</code> with <code>if let Some(...)</code></h2>
-
-      <p>
-        Inside the left <code>SidePanel</code>, we use <a href="https://doc.rust-lang.org/book/ch06-03-if-let.html" target="_blank" rel="noopener"><code>if let Some(net) = self.active_net()</code></a> to display the active net's name and a <strong>"Clear Selection"</strong> button only when a net is actually hovered or selected:
-      </p>
-
-      <pre><code class="language-rust">ui.heading("Net Inspector");
+<h2>3. Unpacking <code>Option&lt;NetId&gt;</code> with <code>if let Some(...)</code></h2>
+<p>Inside the left <code>SidePanel</code>, we use <a href="https://doc.rust-lang.org/book/ch06-03-if-let.html"><code>if let Some(net) = self.active_net()</code></a> to display the active net's name and a <strong>&quot;Clear Selection&quot;</strong> button only when a net is actually hovered or selected:</p>
+<pre><code class="language-rust">ui.heading("Net Inspector");
 if let Some(net) = self.active_net() {
     ui.label(format!("Active Net: NET_{}", net.0));
     if ui.button("Clear Selection").clicked() {
@@ -123,247 +103,222 @@ if let Some(net) = self.active_net() {
 } else {
     ui.label("Hover or click a pad to cross-probe its net.");
 }</code></pre>
+</div>
+
+<section class="full-width-panel" id="hittest-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Hover &amp; Click Pads to Cross-Probe Nets</span>
+    <span class="panel-badge">Option&lt;NetId&gt; • Sense::click_and_drag()</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    <strong>Hover</strong> over the SMD pads on the simulated PCB canvas below to preview <code>hovered_net</code>, or <strong>click</strong> a pad to lock <code>selected_net</code>. Watch how all traces and pads sharing that <code>NetId</code> highlight across layers and update the <code>SidePanel</code> Net Inspector.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Net Inspector (<code>SidePanel</code>)</h4>
+      <div data-role="net-inspector" style="font-size:0.86rem; line-height:1.55; margin-bottom:0.85rem;"></div>
+      <button type="button" class="egui-btn" data-action="clear-net">Clear Selection (<code>selected_net = None</code>)</button>
     </div>
 
-    <!-- Interactive Skill 1: Hit-Test & Cross-Probe Simulator -->
-    <section class="full-width-panel" id="hittest-sim">
-      <div class="panel-header">
-        <span class="panel-title">Interactive Lab 1: Hover &amp; Click Pads to Cross-Probe Nets</span>
-        <span class="panel-badge">Option&lt;NetId&gt; • Sense::click_and_drag()</span>
-      </div>
-      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-        <strong>Hover</strong> over the SMD pads on the simulated PCB canvas below to preview <code>hovered_net</code>, or <strong>click</strong> a pad to lock <code>selected_net</code>. Watch how all traces and pads sharing that <code>NetId</code> highlight across layers and update the <code>SidePanel</code> Net Inspector.
-      </p>
+    <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px;">
+      <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="Interactive Net Cross-Probing Canvas">
+        <rect x="18" y="14" width="284" height="182" rx="6" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
+        <path data-net="2" data-base-color="#3b8eea" d="M 80 150 L 210 150 L 245 120" fill="none" stroke="#3b8eea" stroke-width="5" stroke-linecap="round"/>
+        <line data-net="2" data-base-color="#6ff7ff" x1="80" y1="105" x2="210" y2="150" stroke="#6ff7ff" stroke-width="2" stroke-dasharray="4 4"/>
+        <path data-net="1" data-base-color="#3b8eea" d="M 195 95 L 245 95" fill="none" stroke="#3b8eea" stroke-width="5" stroke-linecap="round"/>
+        <path data-net="1" data-base-color="#e05243" d="M 80 65 L 165 65 L 195 95" fill="none" stroke="#e05243" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="195" cy="95" r="6" fill="#10281e" stroke="#e6c15a" stroke-width="3"/>
+        <rect data-net="1" data-hit-net="1" data-base-color="#e05243" x="66" y="57" width="28" height="16" rx="2" fill="#e05243" style="cursor:pointer;"/>
+        <rect data-net="1" data-hit-net="1" data-base-color="#e05243" x="234" y="87" width="24" height="16" rx="2" fill="#e05243" style="cursor:pointer;"/>
+        <rect data-net="2" data-hit-net="2" data-base-color="#e05243" x="66" y="97" width="28" height="16" rx="2" fill="#e05243" style="cursor:pointer;"/>
+        <rect data-net="2" data-hit-net="2" data-base-color="#3b8eea" x="66" y="142" width="28" height="16" rx="2" fill="#3b8eea" style="cursor:pointer;"/>
+        <rect data-net="2" data-hit-net="2" data-base-color="#3b8eea" x="234" y="112" width="24" height="16" rx="2" fill="#3b8eea" style="cursor:pointer;"/>
+        <text x="64" y="48" fill="#f0e68c" font-family="monospace" font-size="11">U1 (Hover/Click Pads)</text>
+        <text x="232" y="78" fill="#f0e68c" font-family="monospace" font-size="11">J1</text>
+      </svg>
+    </div>
 
-      <div class="sim-grid">
-        <div class="sim-box">
-          <h4>1. Net Inspector (<code>SidePanel</code>)</h4>
-          <div data-role="net-inspector" style="font-size:0.86rem; line-height:1.55; margin-bottom:0.85rem;"></div>
-          <button type="button" class="egui-btn" data-action="clear-net">Clear Selection (<code>selected_net = None</code>)</button>
-        </div>
+    <div class="sim-box">
+      <h4>2. Live <code>Option&lt;NetId&gt;</code> State</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.78rem; padding:0.8rem;"><code class="language-rust" data-role="hittest-state"></code></pre>
+    </div>
+  </div>
+</section>
 
-        <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px;">
-          <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="Interactive Net Cross-Probing Canvas">
-            <rect x="18" y="14" width="284" height="182" rx="6" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
-            <!-- Net 2 (SPI_CLK): Bottom Copper + Ratsnest -->
-            <path data-net="2" data-base-color="#3b8eea" d="M 80 150 L 210 150 L 245 120" fill="none" stroke="#3b8eea" stroke-width="5" stroke-linecap="round"/>
-            <line data-net="2" data-base-color="#6ff7ff" x1="80" y1="105" x2="210" y2="150" stroke="#6ff7ff" stroke-width="2" stroke-dasharray="4 4"/>
-            <!-- Net 1 (VCC_3V3): Top Copper + Bottom Continuation -->
-            <path data-net="1" data-base-color="#3b8eea" d="M 195 95 L 245 95" fill="none" stroke="#3b8eea" stroke-width="5" stroke-linecap="round"/>
-            <path data-net="1" data-base-color="#e05243" d="M 80 65 L 165 65 L 195 95" fill="none" stroke="#e05243" stroke-width="5" stroke-linecap="round"/>
-            <circle cx="195" cy="95" r="6" fill="#10281e" stroke="#e6c15a" stroke-width="3"/>
-
-            <!-- Interactive Pads -->
-            <rect data-net="1" data-hit-net="1" data-base-color="#e05243" x="66" y="57" width="28" height="16" rx="2" fill="#e05243" style="cursor:pointer;"/>
-            <rect data-net="1" data-hit-net="1" data-base-color="#e05243" x="234" y="87" width="24" height="16" rx="2" fill="#e05243" style="cursor:pointer;"/>
-            <rect data-net="2" data-hit-net="2" data-base-color="#e05243" x="66" y="97" width="28" height="16" rx="2" fill="#e05243" style="cursor:pointer;"/>
-            <rect data-net="2" data-hit-net="2" data-base-color="#3b8eea" x="66" y="142" width="28" height="16" rx="2" fill="#3b8eea" style="cursor:pointer;"/>
-            <rect data-net="2" data-hit-net="2" data-base-color="#3b8eea" x="234" y="112" width="24" height="16" rx="2" fill="#3b8eea" style="cursor:pointer;"/>
-
-            <text x="64" y="48" fill="#f0e68c" font-family="monospace" font-size="11">U1 (Hover/Click Pads)</text>
-            <text x="232" y="78" fill="#f0e68c" font-family="monospace" font-size="11">J1</text>
-          </svg>
-        </div>
-
-        <div class="sim-box">
-          <h4>2. Live <code>Option&lt;NetId&gt;</code> State</h4>
-          <pre class="language-rust" style="margin:0; font-size:0.78rem; padding:0.8rem;"><code class="language-rust" data-role="hittest-state"></code></pre>
-        </div>
-      </div>
-    </section>
-
-    <!-- Interactive Skill 2: Code Completion Lab -->
-    <section class="full-width-panel">
-      <div class="panel-header">
-        <span class="panel-title">Interactive Lab 2: Complete the Hit-Tester &amp; <code>Option</code> Combinator</span>
-        <span class="panel-badge">Skill Practice • Tight Feedback Loop</span>
-      </div>
-      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-        Fill in the three blanks below so that (1) <code>active_net</code> prioritizes <code>self.selected_net</code> over <code>self.hovered_net</code> using <code>.or(...)</code>, (2) the canvas allocates pointer sensing for both clicks and drags, and (3) clicking the canvas locks <code>self.selected_net</code>:
-      </p>
-
-      <pre class="keep-markup"><code class="language-rust">pub fn active_net(&amp;self) -&gt; Option&lt;NetId&gt; {
-    self.selected_net.<input id="ht-blank-1" class="code-challenge-input" style="width:175px;" placeholder="/* 1: fallback hover */" autocomplete="off">
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 2: Complete the Hit-Tester &amp; <code>Option</code> Combinator</span>
+    <span class="panel-badge">Skill Practice • Tight Feedback Loop</span>
+  </div>
+  <p>Fill in the three blanks below so that (1) <code>active_net</code> prioritizes <code>self.selected_net</code> over <code>self.hovered_net</code> using <code>.or(...)</code>, (2) the canvas allocates pointer sensing for both clicks and drags, and (3) clicking the canvas locks <code>self.selected_net</code>:</p>
+<pre class="keep-markup"><code class="language-rust">pub fn active_net(&amp;self) -&gt; Option&lt;NetId&gt; {
+    self.selected_net.<input id="ex-blank-1" class="code-challenge-input" style="width:175px;" placeholder="/* 1: fallback hover */" autocomplete="off">
 }
 
 // Inside PcbReviewerApp::update:
 let (response, painter) =
-    ui.allocate_painter(ui.available_size(), Sense::<input id="ht-blank-2" class="code-challenge-input" style="width:165px;" placeholder="/* 2: click+drag */" autocomplete="off">);
+    ui.allocate_painter(ui.available_size(), Sense::<input id="ex-blank-2" class="code-challenge-input" style="width:165px;" placeholder="/* 2: click+drag */" autocomplete="off">);
 
 if let Some(hover_pos) = response.hover_pos() {
     let world_mm = self.viewport.screen_to_world(hover_pos);
     self.hovered_net = self.hit_test_net_at_mm(world_mm);
-    if response.<input id="ht-blank-3" class="code-challenge-input" style="width:115px;" placeholder="/* 3: click? */" autocomplete="off"> {
+    if response.<input id="ex-blank-3" class="code-challenge-input" style="width:115px;" placeholder="/* 3: click? */" autocomplete="off"> {
         self.selected_net = self.hovered_net;
     }
 }</code></pre>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn-primary" id="btn-check-ex">Check Rust Code</button>
+    <button type="button" class="btn-secondary" id="btn-hint-ex">Show Hint</button>
+  </div>
+  <div id="ex-feedback" class="feedback-box"></div>
+</section>
 
-      <div style="display: flex; gap: 0.75rem; align-items: center;">
-        <button type="button" class="btn-primary" id="btn-check-ht">Check Rust Code</button>
-        <button type="button" class="btn-secondary" id="btn-hint-ht">Show Hint</button>
-      </div>
-      <div id="ht-feedback" class="feedback-box"></div>
-    </section>
-
-    <!-- Interactive Skill 3: Cargo Verification & Mutation Coverage Gate -->
-    <section class="full-width-panel">
-      <div class="panel-header">
-        <span class="panel-title">Interactive Lab 3: Catching <code>&amp;&amp;</code> vs. <code>||</code> Hit-Test Mutants</span>
-        <span class="panel-badge">cargo test + cargo mutants</span>
-      </div>
-      <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-        In <code>hit_test_net_at_mm</code>, look at the filter condition <code>self.is_layer_visible(p.layer) &amp;&amp; p.contains_world_point(world_mm)</code>. When <code>cargo mutants</code> flips <code>&amp;&amp;</code> to <code>||</code>, any test that only checks hitting a visible pad would still pass! By also testing (a) a point in empty space while layers are visible and (b) a point inside a pad whose layer is hidden, our unit test suite catches all 25 viable mutants across the entire Act I application!
-      </p>
-
-      <pre><code class="language-rust">#[test]
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 3: Catching <code>&amp;&amp;</code> vs. <code>||</code> Hit-Test Mutants</span>
+    <span class="panel-badge">cargo test + cargo mutants</span>
+  </div>
+  <p>In <code>hit_test_net_at_mm</code>, look at the filter condition <code>self.is_layer_visible(p.layer) &amp;&amp; p.contains_world_point(world_mm)</code>. When <code>cargo mutants</code> flips <code>&amp;&amp;</code> to <code>||</code>, any test that only checks hitting a visible pad would still pass! By also testing (a) a point in empty space while layers are visible and (b) a point inside a pad whose layer is hidden, our unit test suite catches all 25 viable mutants across the entire Act I application!</p>
+<pre><code class="language-rust">#[test]
 fn hit_test_net_at_mm_respects_pad_bounds_layer_visibility_and_z_order() {
     let mut app = PcbReviewerApp::default();
 
-    // 1. Point inside TopCopper pad at (20.0, 22.0) -> Some(NetId(1))
+    // 1. Point inside TopCopper pad at (20.0, 22.0) -&gt; Some(NetId(1))
     assert_eq!(app.hit_test_net_at_mm(pos2(20.5, 22.2)), Some(NetId(1)));
 
-    // 2. Point in empty board space -> None (catches && -> || mutant!)
+    // 2. Point in empty board space -&gt; None (catches &amp;&amp; -&gt; || mutant!)
     assert_eq!(app.hit_test_net_at_mm(pos2(80.0, 60.0)), None);
 
-    // 3. Hiding TopCopper makes the pad un-hittable -> None
+    // 3. Hiding TopCopper makes the pad un-hittable -&gt; None
     app.show_top_copper = false;
     assert_eq!(app.hit_test_net_at_mm(pos2(20.5, 22.2)), None);
 }</code></pre>
-
-      <div class="mutation-scoreboard">
-        <div class="mutation-stat tier">
-          <div class="stat-label">Verification Tier</div>
-          <div class="stat-value">Tier 2: Hit-Test &amp; Net Logic</div>
-        </div>
-        <div class="mutation-stat caught">
-          <div class="stat-label">Target Caught Mutants</div>
-          <div class="stat-value">25 Caught (10 Unviable)</div>
-        </div>
-        <div class="mutation-stat missed">
-          <div class="stat-label">Target Missed Mutants</div>
-          <div class="stat-value">0 Missed</div>
-        </div>
-      </div>
-
+  <div class="mutation-scoreboard">
+    <div class="mutation-stat tier">
+      <div class="stat-label">Verification Tier</div>
+      <div class="stat-value">Tier 2: Hit-Test &amp; Net Logic</div>
+    </div>
+    <div class="mutation-stat caught">
+      <div class="stat-label">Target Caught Mutants</div>
+      <div class="stat-value">25 Caught (10 Unviable)</div>
+    </div>
+    <div class="mutation-stat missed">
+      <div class="stat-label">Target Missed Mutants</div>
+      <div class="stat-value">0 Missed</div>
+    </div>
+  </div>
       <ul class="step-checklist">
         <li>
-          <input type="checkbox" id="verify-0005-1">
-          <label for="verify-0005-1">
+          <input type="checkbox" id="verify-1">
+          <label for="verify-1">
             <strong>1. Run <code>cargo test</code> in <code>apps/0005-hit-testing-and-net-cross-probing</code>:</strong> Confirm all 11 unit tests pass.
           </label>
         </li>
         <li>
-          <input type="checkbox" id="verify-0005-2">
-          <label for="verify-0005-2">
-            <strong>2. Run <code>cargo mutants --in-place</code>:</strong> Verify that all 25 viable mutants across Act I (`0000`–`0005`) are <strong>Caught</strong> (with 10 <strong>Unviable</strong> and <strong>0 Missed</strong>).
+          <input type="checkbox" id="verify-2">
+          <label for="verify-2">
+            <strong>2. Run <code>cargo mutants --in-place</code>:</strong> Verify that all 25 viable mutants across Act I (<code>0000</code>–<code>0005</code>) are <strong>Caught</strong> (with 10 <strong>Unviable</strong> and <strong>0 Missed</strong>).
           </label>
         </li>
       </ul>
-    </section>
+</section>
 
-    <!-- Interactive Skill 4: Retrieval Practice Quiz -->
-    <section class="full-width-panel">
-      <div class="panel-header">
-        <span class="panel-title">Retrieval Practice: <code>Option&lt;NetId&gt;</code> &amp; World-Space Hit-Testing</span>
-        <span class="panel-badge">3 Questions • Equal-Length Options</span>
-      </div>
-      <div id="quiz-0005"></div>
-    </section>
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Retrieval Practice: <code>Option&lt;NetId&gt;</code> &amp; World-Space Hit-Testing</span>
+    <span class="panel-badge">3 Questions • Equal-Length Options</span>
+  </div>
+  <div id="quiz-container"></div>
+</section>
 
-    <div class="prose-col">
-      <h2>Recommended Primary Source</h2>
-      <div class="callout">
-        <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantages-over-null-values" target="_blank" rel="noopener">The Rust Programming Language — §6.1 "The <code>Option</code> Enum"</a> and <a href="https://docs.rs/egui/latest/egui/struct.Sense.html" target="_blank" rel="noopener"><code>egui::Sense</code> API Docs</a>.
-      </div>
+<div class="prose-col">
+<h2>Recommended Primary Source</h2>
+<div class="callout">
+  <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html#the-option-enum-and-its-advantages-over-null-values">The Rust Programming Language — §6.1 &quot;The <code>Option</code> Enum&quot;</a> and <a href="https://docs.rs/egui/latest/egui/struct.Sense.html"><code>egui::Sense</code> API Docs</a>.
+</div>
+<div class="teacher-prompt-box">
+  <strong>Act I Complete!</strong> You have built a pan/zoomable, multi-layer 2D PCB viewport in physical millimeters with Z-ordered rendering, interactive pad hit-testing, and net cross-probing—backed by 11 unit tests and 100% caught mutants (<code>25 caught, 0 missed</code>). Continue to <a href="./0006-schematic-symbols-and-text-rendering.html"><strong>Lesson 0006: Schematic Symbols, Text Rendering &amp; Headless UI Verification (<code>egui_kittest</code>)</strong></a>!
+</div>
+</div>
+    </article>
+  </main>
 
-      <div class="teacher-prompt-box">
-        <strong>Act I Complete!</strong> You have built a pan/zoomable, multi-layer 2D PCB viewport in physical millimeters with Z-ordered rendering, interactive pad hit-testing, and net cross-probing—backed by 11 unit tests and 100% caught mutants (`25 caught, 0 missed`). Continue to <a href="./0006-schematic-symbols-and-text-rendering.html"><strong>Lesson 0006: Schematic Symbols, Text Rendering &amp; Headless UI Verification (`egui_kittest`)</strong></a>!
-      </div>
-    </div>
-  </article>
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
 
   <script src="../assets/course.js"></script>
   <script>
-    initHitTestCrossProbeSimulator("hittest-sim");
-
     initCodeExercise({
-      checkBtnId: "btn-check-ht",
-      hintBtnId: "btn-hint-ht",
-      feedbackId: "ht-feedback",
+      checkBtnId: "btn-check-ex",
+      hintBtnId: "btn-hint-ex",
+      feedbackId: "ex-feedback",
       blanks: [
         {
-          inputId: "ht-blank-1",
+          inputId: "ex-blank-1",
           accepted: ["or(self.hovered_net)"],
           getErrorHint: (val) =>
-            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. Call <code>or(self.hovered_net)</code> on <code>self.selected_net</code>.`,
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Call <code>or(self.hovered_net)</code> on <code>self.selected_net</code>.",
         },
         {
-          inputId: "ht-blank-2",
+          inputId: "ex-blank-2",
           accepted: ["click_and_drag()"],
           getErrorHint: (val) =>
-            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. Use the <code>Sense</code> constructor that listens for both clicks and drags (<code>click_and_drag()</code>).`,
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Use the <code>Sense</code> constructor that listens for both clicks and drags (<code>click_and_drag()</code>).",
         },
         {
-          inputId: "ht-blank-3",
+          inputId: "ex-blank-3",
           accepted: ["clicked()"],
           getErrorHint: (val) =>
-            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. Check whether <code>response</code> was clicked this frame (<code>clicked()</code>).`,
-        },
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Check whether <code>response</code> was clicked this frame (<code>clicked()</code>).",
+        }
       ],
-      hintMessage:
-        "<strong>Hints:</strong> (1) <code>or(self.hovered_net)</code>. (2) <code>click_and_drag()</code>. (3) <code>clicked()</code>.",
-      successMessage:
-        "<strong>Bravo!</strong> Your Net Inspector prioritizes locked selections with <code>.or(self.hovered_net)</code>, senses both clicks and drags on the 2D canvas, and locks <code>self.selected_net</code> on click.",
+      hintMessage: "<strong>Hints:</strong> (1) <code>or(self.hovered_net)</code>. (2) <code>click_and_drag()</code>. (3) <code>clicked()</code>.",
+      successMessage: "<strong>Bravo!</strong> Your Net Inspector prioritizes locked selections with <code>.or(self.hovered_net)</code>, senses both clicks and drags on the 2D canvas, and locks <code>self.selected_net</code> on click.",
     });
 
-    // Strict equal word-count AND equal character-count options per question (indices: 2 -> 0 -> 3)
-    initQuiz("quiz-0005", [
+    initQuiz("quiz-container", [
       {
-        question:
-          "Why does `hit_test_net_at_mm` return `Option<NetId>` instead of a sentinel integer like `0`?",
-        options: [
-          "Signed values cause panics inside test builds", // 7 words, 44 chars
-          "Option values disable borrow checks on draws", // 7 words, 44 chars
-          "Option requires callers to handle empty hits", // 7 words, 44 chars (Correct: C)
-          "Option stores texture tables inside GPU vram", // 7 words, 44 chars
-        ],
-        correctIndex: 2,
-        explanation:
-          "Returning `Option<NetId>` (`Some(NetId)` vs. `None`) forces the caller to explicitly handle the case where the cursor is over empty board space.",
-        wrongHint:
-          "Think about how Rust prevents null-pointer and magic-number bugs at compile time.",
+            "question": "Why does `hit_test_net_at_mm` return `Option<NetId>` instead of a sentinel integer like `0`?",
+            "options": [
+                  "Signed values cause panics inside test builds",
+                  "Option values disable borrow checks on draws",
+                  "Option requires callers to handle empty hits",
+                  "Option stores texture tables inside GPU vram"
+            ],
+            "correctIndex": 2,
+            "explanation": "Returning `Option<NetId>` (`Some(NetId)` vs. `None`) forces the caller to explicitly handle the case where the cursor is over empty board space.",
+            "wrongHint": "Think about how Rust prevents null-pointer and magic-number bugs at compile time."
       },
       {
-        question:
-          "What does `self.selected_net.or(self.hovered_net)` return when `selected_net` is `Some(NetId(1))` and `hovered_net` is `Some(NetId(2))`?",
-        options: [
-          "It returns Some containing the selected net", // 7 words, 43 chars (Correct: A)
-          "It returns Some containing the hovered item", // 7 words, 43 chars
-          "It returns None because two nets conflicted", // 7 words, 43 chars
-          "It panics because two Option fields matched", // 7 words, 43 chars
-        ],
-        correctIndex: 0,
-        explanation:
-          "`Option::or` returns the first `Option` (`self.selected_net`) if it is `Some`, and only evaluates the fallback (`self.hovered_net`) when the first is `None`.",
-        wrongHint:
-          "Check which `Option` appears on the left-hand side of `.or(...)`.",
+            "question": "What does `self.selected_net.or(self.hovered_net)` return when `selected_net` is `Some(NetId(1))` and `hovered_net` is `Some(NetId(2))`?",
+            "options": [
+                  "It returns Some containing the selected net",
+                  "It returns Some containing the hovered item",
+                  "It returns None because two nets conflicted",
+                  "It panics because two Option fields matched"
+            ],
+            "correctIndex": 0,
+            "explanation": "`Option::or` returns the first `Option` (`self.selected_net`) if it is `Some`, and only evaluates the fallback (`self.hovered_net`) when the first is `None`.",
+            "wrongHint": "Check which `Option` appears on the left-hand side of `.or(...)`."
       },
       {
-        question:
-          "Why must we convert `hover_pos` via `self.viewport.screen_to_world(hover_pos)` before calling `hit_test_net_at_mm`?",
-        options: [
-          "Pointer events arrive scaled in meters first", // 7 words, 44 chars
-          "Screen points vanish after panel closure run", // 7 words, 44 chars
-          "Painter resets pointer coords on every frame", // 7 words, 44 chars
-          "Pad bounds live in physical millimeter space", // 7 words, 44 chars (Correct: D)
-        ],
-        correctIndex: 3,
-        explanation:
-          "`response.hover_pos()` is reported in window screen pixels, whereas `SmdPad::bounds_mm()` is stored in physical board millimeters (`world_mm`).",
-        wrongHint:
-          "Compare the coordinate units of `response.hover_pos()` with `SmdPad.center_mm`.",
-      },
-    ]);
+            "question": "Why must we convert `hover_pos` via `self.viewport.screen_to_world(hover_pos)` before calling `hit_test_net_at_mm`?",
+            "options": [
+                  "Pointer events arrive scaled in meters first",
+                  "Screen points vanish after panel closure run",
+                  "Painter resets pointer coords on every frame",
+                  "Pad bounds live in physical millimeter space"
+            ],
+            "correctIndex": 3,
+            "explanation": "`response.hover_pos()` is reported in window screen pixels, whereas `SmdPad::bounds_mm()` is stored in physical board millimeters (`world_mm`).",
+            "wrongHint": "Compare the coordinate units of `response.hover_pos()` with `SmdPad.center_mm`."
+      }
+]);
+
+    initHitTestCrossProbeSimulator("hittest-sim");
   </script>
 </body>
 </html>

@@ -4,276 +4,259 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
-  <title>Learn Rust &amp; egui — Schematic and PCB Design Review System</title>
+  <title>Learn Rust &amp; `egui` by Building a Schematic &amp; PCB Design Reviewer</title>
   <link rel="stylesheet" href="./assets/style.css">
 </head>
 <body>
   <header>
-    <nav class="course-nav" aria-label="Course navigation">
-      <div>
-        <a href="./index.html" class="active">Index</a>
-        <a href="./lessons/0000-project-setup-and-eframe-boot.html">0000</a>
-        <a href="./lessons/0001-the-immediate-mode-loop.html">0001</a>
-        <a href="./lessons/0002-custom-2d-canvas-and-painter.html">0002</a>
-        <a href="./lessons/0003-world-to-screen-transforms-pan-and-zoom.html">0003</a>
-        <a href="./lessons/0004-modeling-layers-traces-and-footprints.html">0004</a>
-        <a href="./lessons/0005-hit-testing-and-net-cross-probing.html">0005</a>
-        <a href="./lessons/0006-schematic-symbols-and-text-rendering.html">0006</a>
-        <a href="./lessons/0007-split-viewports-and-egui-scene.html">0007</a>
-        <a href="./lessons/0008-searchable-netlist-and-bom-inspector.html">0008</a>
-        <a href="./lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html">0009</a>
-        <a href="./reference/glossary.html">Glossary</a>
-        <a href="./reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
-        <a href="./reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
-      </div>
-      <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
-    </nav>
+  <nav class="course-nav" aria-label="Course navigation">
+    <div>
+      <a href="./index.html" class="active">Index</a>
+      <a href="./lessons/0000-project-setup-and-eframe-boot.html">0000</a>
+      <a href="./lessons/0001-the-immediate-mode-loop.html">0001</a>
+      <a href="./lessons/0002-custom-2d-canvas-and-painter.html">0002</a>
+      <a href="./lessons/0003-world-to-screen-transforms-pan-and-zoom.html">0003</a>
+      <a href="./lessons/0004-modeling-layers-traces-and-footprints.html">0004</a>
+      <a href="./lessons/0005-hit-testing-and-net-cross-probing.html">0005</a>
+      <a href="./lessons/0006-schematic-symbols-and-text-rendering.html">0006</a>
+      <a href="./lessons/0007-split-viewports-and-egui-scene.html">0007</a>
+      <a href="./lessons/0008-searchable-netlist-and-bom-inspector.html">0008</a>
+      <a href="./lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html">0009</a>
+      <a href="./reference/glossary.html">Glossary</a>
+      <a href="./reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="./reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Mission: Schematic &amp; PCB Design Review System</span>
+  </nav>
   </header>
 
   <main>
     <article class="tufte-article">
-      <div class="prose-col">
-        <h1>Learn Rust &amp; <code>egui</code> by Building a Schematic &amp; PCB Design Reviewer</h1>
-        <p class="subtitle">A hands-on, mutation-tested engineering course from immediate-mode fundamentals to an engine-first CAD architecture</p>
+<div class="prose-col">
+<h1>Learn Rust &amp; <code>egui</code> by Building a Schematic &amp; PCB Design Reviewer</h1>
+<p class="subtitle">A hands-on, mutation-tested engineering course from immediate-mode fundamentals to an engine-first CAD architecture</p>
 
-        <p>
-          Welcome to the interactive course index.<span class="sidenote-number"></span><span class="sidenote">Every lesson in this repository pairs an interactive HTML tutorial (with live in-browser simulators, code-completion labs, and retrieval quizzes) with a real, runnable Cargo project under <code>./apps/&lt;NNNN-slug&gt;/</code>.</span>
-          Each lesson introduces <strong>one focused <code>egui</code> capability</strong> alongside <strong>one just-in-time Rust concept</strong> and verifies assertion strength continuously using <code>cargo test</code> and <a href="https://mutants.rs/" target="_blank" rel="noopener"><code>cargo-mutants</code></a>.
-        </p>
-
-        <figure class="mermaid-figure">
-          <pre class="mermaid">
+<p>Welcome to the interactive course index.<span class="sidenote-number"></span><span class="sidenote">Every lesson in this repository pairs an interactive HTML tutorial (with live in-browser simulators, code-completion labs, and retrieval quizzes) with a real, runnable Cargo project under <code>./apps/&lt;NNNN-slug&gt;/</code>.</span> Each lesson introduces <strong>one focused <code>egui</code> capability</strong> alongside <strong>one just-in-time Rust concept</strong> and verifies assertion strength continuously using <code>cargo test</code> and <a href="https://mutants.rs/"><code>cargo-mutants</code></a>.</p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
 flowchart LR
-  L0["0000–0001\nFoundation &amp; IMGUI Loop"] --> A1["Act I (0002–0005)\n2D CAD Canvas &amp; Hit-Testing"]
-  A1 --> A2["Act II (0006–0009)\nSchematics &amp; egui_kittest"]
-  A2 --> A3["Act III (0010–0013)\nDRC Overlays &amp; Review Pins"]
-  A3 --> A4["Act IV (0014–0017)\nMulti-Crate CoW Engine"]
-  A4 --> A5["Act V (0018–0025)\nKiCad nom Parser &amp; Turso SQL"]
-          </pre>
-          <figcaption>Five-Act Curriculum Progression: Every lesson builds toward a production Schematic &amp; PCB Design Review System verified with unit tests and mutation coverage.</figcaption>
-        </figure>
+  L0["0000–0001\nFoundation &amp; IMGUI Loop"] --&gt; A1["Act I (0002–0005)\n2D CAD Canvas &amp; Hit-Testing"]
+  A1 --&gt; A2["Act II (0006–0009)\nSchematics &amp; egui_kittest"]
+  A2 --&gt; A3["Act III (0010–0013)\nDRC Overlays &amp; Review Pins"]
+  A3 --&gt; A4["Act IV (0014–0017)\nMulti-Crate CoW Engine"]
+  A4 --&gt; A5["Act V (0018–0025)\nKiCad nom Parser &amp; Turso SQL"]
+  </pre>
+</figure>
+<p><em>Five-Act Curriculum Progression: Every lesson builds toward a production Schematic &amp; PCB Design Review System verified with unit tests and mutation coverage.</em></p>
+<h2>Published Interactive Lessons (<code>0000</code>–<code>0009</code>)</h2>
+<p>Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a> to set up your Cargo project and mutation-testing harness, or jump directly to any completed module below:</p>
+</div>
 
-        <h2>Published Interactive Lessons (<code>0000</code>–<code>0009</code>)</h2>
-        <p>
-          Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a> to set up your Cargo project and mutation-testing harness, or jump directly to any completed module below:
-        </p>
+<section class="lesson-grid" aria-label="Published lessons">
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0000</span>
+        <span class="lesson-card-mutants"></span>
       </div>
+      <h3><a href="./lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000: Bootstrapping Your Rust &amp; <code>eframe</code> Project</a></h3>
+      <p>Creating the Cargo workspace and native window shell that your PCB Reviewer code will inhabit</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> </span>
+      <span><strong>Rust Concept:</strong> </span>
+      <span><strong>Runnable App:</strong> <code>apps/0000-project-setup-and-eframe-boot</code></span>
+    </div>
+  </article>
 
-      <section class="lesson-grid" aria-label="Published lessons">
-        <article class="lesson-card">
-          <div>
-            <div class="lesson-card-header">
-              <span class="lesson-card-num">Lesson 0000</span>
-              <span class="lesson-card-mutants">1 / 1 Mutants Caught</span>
-            </div>
-            <h3><a href="./lessons/0000-project-setup-and-eframe-boot.html">Bootstrapping Your Rust &amp; <code>eframe</code> Project</a></h3>
-            <p>Create the Cargo package, configure dev-profile optimization for 60 FPS rendering, boot a native window with <code>eframe::run_native</code>, and catch your first mutant.</p>
-          </div>
-          <div class="lesson-card-meta">
-            <span><strong><code>egui</code> Skill:</strong> <code>eframe::run_native</code> &amp; <code>ViewportBuilder</code></span>
-            <span><strong>Rust Concept:</strong> <code>impl Default</code>, <code>Box::new</code>, <code>#[cfg(test)]</code></span>
-            <span><strong>Runnable App:</strong> <code>apps/0000-project-setup-and-eframe-boot</code></span>
-          </div>
-        </article>
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0001</span>
+        <span class="lesson-card-mutants"></span>
+      </div>
+      <h3><a href="./lessons/0001-the-immediate-mode-loop.html">Lesson 0001: The Immediate-Mode Loop &amp; Mutable State (<code>&amp;mut</code>)</a></h3>
+      <p>Building the PCB Layer Visibility Inspector inside your <code>eframe::App</code></p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> </span>
+      <span><strong>Rust Concept:</strong> </span>
+      <span><strong>Runnable App:</strong> <code>apps/0001-the-immediate-mode-loop</code></span>
+    </div>
+  </article>
 
-        <article class="lesson-card">
-          <div>
-            <div class="lesson-card-header">
-              <span class="lesson-card-num">Lesson 0001</span>
-              <span class="lesson-card-mutants">3 / 3 Mutants Caught</span>
-            </div>
-            <h3><a href="./lessons/0001-the-immediate-mode-loop.html">The Immediate-Mode Loop &amp; Mutable State (<code>&amp;mut</code>)</a></h3>
-            <p>Drive a PCB Layer Inspector sidebar with <code>SidePanel</code>, <code>CentralPanel</code>, <code>ui.checkbox</code>, and pure state-transition methods verified by unit and mutation tests.</p>
-          </div>
-          <div class="lesson-card-meta">
-            <span><strong><code>egui</code> Skill:</strong> <code>App::update</code>, <code>SidePanel</code>, <code>ui.checkbox</code></span>
-            <span><strong>Rust Concept:</strong> Mutable borrows (<code>&amp;mut self</code>) &amp; closures (<code>|ui|</code>)</span>
-            <span><strong>Runnable App:</strong> <code>apps/0001-the-immediate-mode-loop</code></span>
-          </div>
-        </article>
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0002</span>
+        <span class="lesson-card-mutants"></span>
+      </div>
+      <h3><a href="./lessons/0002-custom-2d-canvas-and-painter.html">Lesson 0002: Custom 2D Canvas &amp; <code>egui::Painter</code></a></h3>
+      <p>Turning the empty <code>CentralPanel</code> into a multi-layer PCB viewport with <code>Pos2</code>, <code>Vec2</code>, <code>Rect</code>, and <code>Copy</code> semantics</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> </span>
+      <span><strong>Rust Concept:</strong> </span>
+      <span><strong>Runnable App:</strong> <code>apps/0002-custom-2d-canvas-and-painter</code></span>
+    </div>
+  </article>
 
-        <article class="lesson-card">
-          <div>
-            <div class="lesson-card-header">
-              <span class="lesson-card-num">Lesson 0002</span>
-              <span class="lesson-card-mutants">23 / 23 Mutants Caught</span>
-            </div>
-            <h3><a href="./lessons/0002-custom-2d-canvas-and-painter.html">Custom 2D Canvas &amp; Drawing Primitives with <code>Painter</code></a></h3>
-            <p>Reserve an interactive 2D CAD viewport with <code>ui.allocate_painter</code> and render PCB substrate outlines, SMD pads, copper traces, and drill vias.</p>
-          </div>
-          <div class="lesson-card-meta">
-            <span><strong><code>egui</code> Skill:</strong> <code>ui.allocate_painter</code>, <code>Rect</code>, <code>Pos2</code>, <code>Stroke</code></span>
-            <span><strong>Rust Concept:</strong> Value semantics (<code>Copy</code>) &amp; pure geometry helpers</span>
-            <span><strong>Runnable App:</strong> <code>apps/0002-custom-2d-canvas-and-painter</code></span>
-          </div>
-        </article>
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0003</span>
+        <span class="lesson-card-mutants"></span>
+      </div>
+      <h3><a href="./lessons/0003-world-to-screen-transforms-pan-and-zoom.html">Lesson 0003: World-to-Screen Transforms, Pan &amp; Cursor Zoom</a></h3>
+      <p>Mapping physical PCB millimeters (<code>mm</code>) to screen pixels with <code>TSTransform</code>, <code>Sense::drag()</code>, and <code>ui.input</code></p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> </span>
+      <span><strong>Rust Concept:</strong> </span>
+      <span><strong>Runnable App:</strong> <code>apps/0003-world-to-screen-transforms-pan-and-zoom</code></span>
+    </div>
+  </article>
 
-        <article class="lesson-card">
-          <div>
-            <div class="lesson-card-header">
-              <span class="lesson-card-num">Lesson 0003</span>
-              <span class="lesson-card-mutants">14 / 14 Mutants Caught</span>
-            </div>
-            <h3><a href="./lessons/0003-world-to-screen-transforms-pan-and-zoom.html">World-to-Screen Transforms, Drag Panning &amp; Cursor-Centered Zoom</a></h3>
-            <p>Map physical board millimeters to screen points using <code>TSTransform</code>, pan with <code>Sense::drag()</code>, and zoom smoothly around the cursor position.</p>
-          </div>
-          <div class="lesson-card-meta">
-            <span><strong><code>egui</code> Skill:</strong> <code>TSTransform</code>, <code>Sense::drag()</code>, <code>ctx.input</code></span>
-            <span><strong>Rust Concept:</strong> Encapsulating math on <code>BoardViewport</code> &amp; <code>f32::clamp</code></span>
-            <span><strong>Runnable App:</strong> <code>apps/0003-world-to-screen-transforms-pan-and-zoom</code></span>
-          </div>
-        </article>
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0004</span>
+        <span class="lesson-card-mutants"></span>
+      </div>
+      <h3><a href="./lessons/0004-modeling-layers-traces-and-footprints.html">Lesson 0004: Modeling Layers, Traces &amp; Deterministic Z-Order</a></h3>
+      <p>Structuring PCB geometry with <code>enum PcbLayer</code>, <code>Vec&lt;TraceSegment&gt;</code>, exhaustive <code>match</code>, and shared loop borrowing</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> </span>
+      <span><strong>Rust Concept:</strong> </span>
+      <span><strong>Runnable App:</strong> <code>apps/0004-modeling-layers-traces-and-footprints</code></span>
+    </div>
+  </article>
 
-        <article class="lesson-card">
-          <div>
-            <div class="lesson-card-header">
-              <span class="lesson-card-num">Lesson 0004</span>
-              <span class="lesson-card-mutants">20 / 20 Mutants Caught</span>
-            </div>
-            <h3><a href="./lessons/0004-modeling-layers-traces-and-footprints.html">Modeling PCB Layers, Traces &amp; Deterministic Z-Ordering</a></h3>
-            <p>Model multi-layer board primitives with a strongly-typed <code>PcbLayer</code> enum and sort visible traces in deterministic back-to-front Z-order.</p>
-          </div>
-          <div class="lesson-card-meta">
-            <span><strong><code>egui</code> Skill:</strong> Multi-layer painter batching &amp; Z-order rendering</span>
-            <span><strong>Rust Concept:</strong> <code>enum</code>, exhaustive <code>match</code>, <code>Vec&lt;T&gt;</code> &amp; slices</span>
-            <span><strong>Runnable App:</strong> <code>apps/0004-modeling-layers-traces-and-footprints</code></span>
-          </div>
-        </article>
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0005</span>
+        <span class="lesson-card-mutants"></span>
+      </div>
+      <h3><a href="./lessons/0005-hit-testing-and-net-cross-probing.html">Lesson 0005: Hit-Testing &amp; Net Cross-Probing (<code>Option&lt;NetId&gt;</code>)</a></h3>
+      <p>Hovering and clicking PCB pads in physical world coordinates to highlight connected nets and drive the <code>SidePanel</code> Net Inspector</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> </span>
+      <span><strong>Rust Concept:</strong> </span>
+      <span><strong>Runnable App:</strong> <code>apps/0005-hit-testing-and-net-cross-probing</code></span>
+    </div>
+  </article>
 
-        <article class="lesson-card">
-          <div>
-            <div class="lesson-card-header">
-              <span class="lesson-card-num">Lesson 0005</span>
-              <span class="lesson-card-mutants">25 / 25 Mutants Caught</span>
-            </div>
-            <h3><a href="./lessons/0005-hit-testing-and-net-cross-probing.html">Spatial Hit-Testing, Selection State &amp; Net Cross-Probing</a></h3>
-            <p>Convert pointer coordinates back into physical millimeters, hit-test SMD pads in reverse Z-order, highlight connected nets, and populate the Net Inspector.</p>
-          </div>
-          <div class="lesson-card-meta">
-            <span><strong><code>egui</code> Skill:</strong> <code>Sense::click_and_drag()</code>, hover vs. locked selection</span>
-            <span><strong>Rust Concept:</strong> <code>Option&lt;NetId&gt;</code>, <code>if let Some(...)</code>, <code>.or(...)</code></span>
-            <span><strong>Runnable App:</strong> <code>apps/0005-hit-testing-and-net-cross-probing</code></span>
-          </div>
-        </article>
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0006</span>
+        <span class="lesson-card-mutants"></span>
+      </div>
+      <h3><a href="./lessons/0006-schematic-symbols-and-text-rendering.html">Lesson 0006: Schematic Symbols, Text Rendering &amp; Headless UI Testing (<code>egui_kittest</code>)</a></h3>
+      <p>Drawing IC reference designators (<code>U1</code>, <code>R12</code>, <code>J1</code>) with <code>Painter::text</code>, mastering <code>String</code> vs. <code>&amp;str</code>, and un-skipping <code>eframe::App::update</code> with <code>egui_kittest::Harness</code></p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> </span>
+      <span><strong>Rust Concept:</strong> </span>
+      <span><strong>Runnable App:</strong> <code>apps/0006-schematic-symbols-and-text-rendering</code></span>
+    </div>
+  </article>
 
-        <article class="lesson-card">
-          <div>
-            <div class="lesson-card-header">
-              <span class="lesson-card-num">Lesson 0006</span>
-              <span class="lesson-card-mutants">35 / 35 Mutants Caught</span>
-            </div>
-            <h3><a href="./lessons/0006-schematic-symbols-and-text-rendering.html">Schematic Symbols, Text Rendering &amp; Headless UI Verification (<code>egui_kittest</code>)</a></h3>
-            <p>Render silkscreen IC reference designators (`U1`, `R12`, `J1`) and net names using `Painter::text`, `FontId`, and `Align2`, and boot your app headlessly with `egui_kittest::Harness`.</p>
-          </div>
-          <div class="lesson-card-meta">
-            <span><strong><code>egui</code> Skill:</strong> <code>Painter::text</code>, <code>FontId</code>, <code>Align2</code>, <code>egui_kittest</code></span>
-            <span><strong>Rust Concept:</strong> Owned <code>String</code> vs. borrowed <code>&amp;str</code> &amp; <code>format!(...)</code></span>
-            <span><strong>Runnable App:</strong> <code>apps/0006-schematic-symbols-and-text-rendering</code></span>
-          </div>
-        </article>
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0007</span>
+        <span class="lesson-card-mutants"></span>
+      </div>
+      <h3><a href="./lessons/0007-split-viewports-and-egui-scene.html">Lesson 0007: Split Viewports, <code>egui::Scene</code> &amp; Borrow-Checker State Splits</a></h3>
+      <p>Cross-probing from a Schematic Symbol Bar into the 2D PCB camera using <code>TopBottomPanel</code>, <code>egui::Scene</code>, and disjoint struct borrowing (<code>&amp;BoardModel</code> + <code>&amp;mut ViewState</code>)</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> </span>
+      <span><strong>Rust Concept:</strong> </span>
+      <span><strong>Runnable App:</strong> <code>apps/0007-split-viewports-and-egui-scene</code></span>
+    </div>
+  </article>
 
-        <article class="lesson-card">
-          <div>
-            <div class="lesson-card-header">
-              <span class="lesson-card-num">Lesson 0007</span>
-              <span class="lesson-card-mutants">40 / 40 Mutants Caught</span>
-            </div>
-            <h3><a href="./lessons/0007-split-viewports-and-egui-scene.html">Split Viewports, <code>egui::Scene</code> &amp; Schematic-to-PCB Cross-Probing</a></h3>
-            <p>Add a top schematic symbol bar with `TopBottomPanel`, wrap the 2D board in `egui::Scene`, and cross-probe schematic components to center the PCB camera rectangle.</p>
-          </div>
-          <div class="lesson-card-meta">
-            <span><strong><code>egui</code> Skill:</strong> <code>TopBottomPanel</code>, <code>egui::Scene</code>, camera focusing</span>
-            <span><strong>Rust Concept:</strong> Disjoint struct borrows (<code>&amp;BoardModel</code> vs. <code>&amp;mut ViewState</code>)</span>
-            <span><strong>Runnable App:</strong> <code>apps/0007-split-viewports-and-egui-scene</code></span>
-          </div>
-        </article>
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0008</span>
+        <span class="lesson-card-mutants"></span>
+      </div>
+      <h3><a href="./lessons/0008-searchable-netlist-and-bom-inspector.html">Lesson 0008: Searchable Netlist, Virtualized BOM &amp; Iterator Adapters</a></h3>
+      <p>Filtering components and nets with <code>TextEdit::singleline</code>, <code>.filter()</code>, and virtualized scrolling via <code>ScrollArea::vertical().show_rows(...)</code></p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> </span>
+      <span><strong>Rust Concept:</strong> </span>
+      <span><strong>Runnable App:</strong> <code>apps/0008-searchable-netlist-and-bom-inspector</code></span>
+    </div>
+  </article>
 
-        <article class="lesson-card">
-          <div>
-            <div class="lesson-card-header">
-              <span class="lesson-card-num">Lesson 0008</span>
-              <span class="lesson-card-mutants">47 / 47 Mutants Caught</span>
-            </div>
-            <h3><a href="./lessons/0008-searchable-netlist-and-bom-inspector.html">Searchable Netlist, Virtualized BOM &amp; Iterator Adapters</a></h3>
-            <p>Filter components and nets live with `TextEdit::singleline`, lay out virtualized rows using `ScrollArea::show_rows` and `egui::Grid`, and catch boolean filter mutants.</p>
-          </div>
-          <div class="lesson-card-meta">
-            <span><strong><code>egui</code> Skill:</strong> <code>TextEdit::singleline</code>, <code>ScrollArea::show_rows</code>, <code>Grid</code></span>
-            <span><strong>Rust Concept:</strong> Iterator adapters (<code>.filter()</code>), slices &amp; case-insensitive search</span>
-            <span><strong>Runnable App:</strong> <code>apps/0008-searchable-netlist-and-bom-inspector</code></span>
-          </div>
-        </article>
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0009</span>
+        <span class="lesson-card-mutants"></span>
+      </div>
+      <h3><a href="./lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html">Lesson 0009: Keyboard Shortcuts, Data-Carrying Enums &amp; Point-to-Point CAD Ruler</a></h3>
+      <p>Binding CAD hotkeys (<code>F</code>, <code>M</code>, <code>Esc</code>) via <code>ctx.input_mut</code> + <code>consume_key</code>, modeling tool state machines with data-carrying Rust enums, and simulating key presses in <code>egui_kittest</code></p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> </span>
+      <span><strong>Rust Concept:</strong> </span>
+      <span><strong>Runnable App:</strong> <code>apps/0009-keyboard-shortcuts-and-point-to-point-ruler</code></span>
+    </div>
+  </article>
+</section>
 
-        <article class="lesson-card">
-          <div>
-            <div class="lesson-card-header">
-              <span class="lesson-card-num">Lesson 0009</span>
-              <span class="lesson-card-mutants">59 / 59 Mutants Caught</span>
-            </div>
-            <h3><a href="./lessons/0009-keyboard-shortcuts-and-point-to-point-ruler.html">Keyboard Shortcuts (<code>F</code>, <code>M</code>, <code>Esc</code>) &amp; Point-to-Point CAD Ruler</a></h3>
-            <p>Consume single-key CAD shortcuts with `ctx.input_mut` and `consume_key`, model tool states with data-carrying enums, and render a live $\Delta x / \Delta y$ distance ruler.</p>
-          </div>
-          <div class="lesson-card-meta">
-            <span><strong><code>egui</code> Skill:</strong> <code>InputState::consume_key</code>, <code>Key</code>, CAD ruler overlay</span>
-            <span><strong>Rust Concept:</strong> Data-carrying enums (<code>enum ActiveTool</code>) &amp; pattern matching</span>
-            <span><strong>Runnable App:</strong> <code>apps/0009-keyboard-shortcuts-and-point-to-point-ruler</code></span>
-          </div>
-        </article>
-      </section>
-
-      <div class="prose-col">
-        <h2>Reference Sheets &amp; Printable Cheat Sheets</h2>
-        <p>
-          These reference documents compress the core Rust, immediate-mode GUI, and mutation-testing mechanics into quick-lookup tables designed for both screen review and clean paper printing:
-        </p>
-
-        <table class="ref-table">
-          <thead>
-            <tr>
-              <th style="width: 34%;">Reference Sheet</th>
-              <th style="width: 66%;">What It Covers</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><a href="./reference/glossary.html"><strong>Glossary of Rust &amp; <code>egui</code> Terms</strong></a></td>
-              <td>Canonical definitions of Immediate-Mode vs. Retained-Mode GUI, <code>&amp;mut</code> borrows, closures, <code>TSTransform</code>, <code>Sense</code>, and PCB domain analogies.</td>
-            </tr>
-            <tr>
-              <td><a href="./reference/immediate-mode-cheatsheet.html"><strong>Immediate-Mode GUI Cheat Sheet</strong></a></td>
-              <td>The 5-step single-frame mental model, panel layout ordering rules (<code>SidePanel</code> before <code>CentralPanel</code>), and custom 2D CAD painter idioms.</td>
-            </tr>
-            <tr>
-              <td><a href="./reference/testing-and-mutation-cheatsheet.html"><strong>Testing &amp; Mutation Coverage Cheat Sheet</strong></a></td>
-              <td>Why line coverage lies, how <code>cargo-mutants</code> tests your tests, fast APFS copy-on-write workflows, and the 4-step evolutionary verification ladder.</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <h2>Running the Companion Rust Apps Locally</h2>
-        <p>
-          Every lesson is backed by a standalone, runnable Cargo package under <code>./apps/&lt;NNNN-lesson-slug&gt;/</code> that is verified to compile with zero warnings and pass both <code>cargo test</code> and <code>cargo mutants</code>:
-        </p>
-
-        <figure>
-          <figcaption>Clone the repository and run any lesson's companion desktop application or test suite:</figcaption>
-          <pre tabindex="0"><code class="language-bash"># Launch Lesson 0005's interactive PCB Reviewer desktop window
+<div class="prose-col">
+<h2>Reference Sheets &amp; Printable Cheat Sheets</h2>
+<p>These reference documents compress the core Rust, immediate-mode GUI, and mutation-testing mechanics into quick-lookup tables designed for both screen review and clean paper printing:</p>
+<table class="ref-table">
+<thead>
+<tr>
+<th>Reference Sheet</th>
+<th>What It Covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="./reference/glossary.html"><strong>Glossary of Rust &amp; <code>egui</code> Terms</strong></a></td>
+<td>Canonical definitions of Immediate-Mode vs. Retained-Mode GUI, <code>&amp;mut</code> borrows, closures, <code>TSTransform</code>, <code>Sense</code>, and PCB domain analogies.</td>
+</tr>
+<tr>
+<td><a href="./reference/immediate-mode-cheatsheet.html"><strong>Immediate-Mode GUI Cheat Sheet</strong></a></td>
+<td>The 5-step single-frame mental model, panel layout ordering rules (<code>SidePanel</code> before <code>CentralPanel</code>), and custom 2D CAD painter idioms.</td>
+</tr>
+<tr>
+<td><a href="./reference/testing-and-mutation-cheatsheet.html"><strong>Testing &amp; Mutation Coverage Cheat Sheet</strong></a></td>
+<td>Why line coverage lies, how <code>cargo-mutants</code> tests your tests, fast APFS copy-on-write workflows, and the 4-step evolutionary verification ladder.</td>
+</tr>
+</tbody>
+</table>
+<h2>Running the Companion Rust Apps Locally</h2>
+<p>Every lesson is backed by a standalone, runnable Cargo package under <code>./apps/&lt;NNNN-lesson-slug&gt;/</code> that is verified to compile with zero warnings and pass both <code>cargo test</code> and <code>cargo mutants</code>:</p>
+<pre><code class="language-bash"># Launch Lesson 0005's interactive PCB Reviewer desktop window
 cargo run --manifest-path ./apps/0005-hit-testing-and-net-cross-probing/Cargo.toml
 
 # Run unit tests and mutation coverage for Lesson 0005
 cargo test --manifest-path ./apps/0005-hit-testing-and-net-cross-probing/Cargo.toml
 cargo mutants -d ./apps/0005-hit-testing-and-net-cross-probing</code></pre>
-        </figure>
-      </div>
+<div class="teacher-prompt-box">
+  <strong>Ready to begin?</strong> Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html"><strong>Lesson 0000: Bootstrapping Your Rust &amp; <code>eframe</code> Project</strong></a> or jump to <a href="./lessons/0005-hit-testing-and-net-cross-probing.html"><strong>Lesson 0005: Spatial Hit-Testing &amp; Net Cross-Probing</strong></a>.
+</div>
+</div>
     </article>
   </main>
 
-  <footer>
-    <div class="prose-col">
-      <div class="teacher-prompt-box">
-        <strong>Ready to begin?</strong> Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html"><strong>Lesson 0000: Bootstrapping Your Rust &amp; <code>eframe</code> Project</strong></a> or jump to <a href="./lessons/0005-hit-testing-and-net-cross-probing.html"><strong>Lesson 0005: Spatial Hit-Testing &amp; Net Cross-Probing</strong></a>.
-      </div>
-    </div>
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
   </footer>
 
   <script src="./assets/course.js"></script>
