@@ -16,8 +16,9 @@ flowchart LR
   A3 --> A4["Act IV (0014–0017)\nMulti-Crate CoW Engine"]
   A4 --> A5["Act V (0018–0021)\nCommand Engine, Culling & Snapshots"]
   A5 --> A6["Act VI (0022–0025)\nKiCad nom Parser & Turso SQL"]
+  A6 --> A7["Act VII (0026–0029)\nMCP Server (rmcp) & Agent Workbench"]
 ```
-_Six-Act Curriculum Progression: Every lesson builds toward a production Schematic & PCB Design Review System verified with unit tests and mutation coverage._
+_Multi-Act Curriculum Progression: Every lesson builds toward an engine-first, AI-controllable Schematic & PCB Design Review System verified with unit tests and mutation coverage._
 
 ## Published Interactive Lessons (`0000`–`0021`)
 

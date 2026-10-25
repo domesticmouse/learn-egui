@@ -5,9 +5,9 @@
   - Always use **Prism.js** (`<pre><code class="language-rust">`, `language-toml`, `language-bash`, etc.) for syntax highlighting across all lessons and reference documents.
   - Always use **Mermaid.js** (`<pre class="mermaid">`) for architecture, lifecycle, and flow diagrams (avoid ASCII art diagrams).
 - **Testing & Mutation Coverage Preference**:
-  - Integrate testing gradually across the **entire narrative arc** (`0000`–`0025`), not as an isolated module near the end.
+  - Integrate testing gradually across the **entire narrative arc** (`0000`–`0029`+), not as an isolated module near the end.
   - **Every lesson** must include concrete **Cargo Verification Prompts** (`cargo test` + `cargo mutants`) so the learner continuously verifies new code and monitors real assertion coverage via mutation testing (`Caught` vs. `Missed` mutants).
-  - Use `.cargo/mutants.toml` (or `--exclude-re`) to explicitly demarcate what is currently excluded (such as the OS window launcher `fn main`) and progressively shrink exclusions as higher verification tiers (`egui_kittest` in Act II, offscreen `wgpu` snapshots in Act V) come online.
+  - Use `.cargo/mutants.toml` (or `--exclude-re`) to explicitly demarcate what is currently excluded (such as the OS window launcher `fn main`) and progressively shrink exclusions as higher verification tiers (`egui_kittest` in Act II, offscreen `wgpu` snapshots in Act V, in-memory `rmcp` duplex acceptance suites in Act VII) come online.
 - **Target Application**: Schematic and PCB design review system in Rust + `egui`.
 - **Key Ecosystem Crates & Tools Planned**:
   - `eframe` / `egui` (Immediate-mode GUI and 2D CAD canvas)
@@ -17,12 +17,13 @@
   - `serde` / `serde_json` (Structured serialization)
   - `nom` (Parser combinators for KiCad `.kicad_pcb` and `.kicad_sch` S-expression files)
   - `turso` / `libsql` (Embedded SQL database & local-first sync for engineering review threads and DRC audit logs)
+  - `rmcp` / `schemars` (Official Model Context Protocol Rust SDK + JSON Schema generation for Headless and Bridged MCP servers and the Mock MCP Client & Inspector Workbench)
 - **Rust Background**: Learning Rust alongside `egui` — introduce one Rust concept just-in-time alongside one `egui` skill and one verification/mutation step in every lesson.
 - **Installed Toolchain**: `cargo 1.97.1` / `rustc 1.97.1` on macOS.
 
 ---
 
-## Curriculum Arc (`0000`–`0025`) with Continuous Verification & Mutation Testing
+## Curriculum Arc (`0000`–`0029`+) with Continuous Verification & Mutation Testing
 
 ### Completed Lessons (`0000`–`0021`: Foundation + Act I + Act II + Act III + Act IV + Act V)
 - `0000-project-setup-and-eframe-boot.html` (App: `apps/0000-project-setup-and-eframe-boot`)
@@ -146,4 +147,26 @@
 - `0025-local-first-review-sync-and-audit-trail.html`
   - **`egui` Skill & PCB Feature**: Add a live database sync indicator, offline-first review merge view, and an interactive SQL audit-log timeline comparing engineering sign-offs across board revisions.
   - **Just-in-Time Rust**: Turso embedded replica sync (`Database::sync`), SQL transactions (`Transaction`), and thread-safe async state channels.
-  - **Cargo Verification & Mutation Coverage**: Test atomic transaction rollback on failure, concurrent engineer review merges, tamper-evident audit-log ordering, and compile our final self-auditing `docs/scorecard.md` summarizing test, corpus, perf, and `cargo mutants` coverage across the entire workspace.
+  - **Cargo Verification & Mutation Coverage**: Test atomic transaction rollback on failure, concurrent engineer review merges, tamper-evident audit-log ordering, and compile our workspace `docs/scorecard.md` summarizing test, corpus, perf, and `cargo mutants` coverage across the workspace.
+
+### Act VII: Agentic Hardware Review & Model Context Protocol (`rmcp`) (`0026`–`0029`)
+*Goal: Turn the PCB Reviewer into an AI-controllable engineering co-pilot via the official `rmcp` SDK (`egui-app-runner` & `egui-command-engine`), adding LLM-native spatial/topological queries, Headless and Bridged live-GUI MCP servers, and a companion **Mock MCP Client & Inspector Workbench** app to test and drive multi-step agent playbooks.*
+- `0026-llm-native-spatial-and-electrical-queries.html`
+  - **`egui` Skill & PCB Feature**: Equip the engine (`L2`/`L5`) with high-leverage queries that LLMs struggle to compute from raw S-expressions: spatial neighborhood radius lookups (`pcb.query_spatial_neighborhood` returning nearby pads/components and edge-to-edge copper gaps around a target pin like `U1.VDD`), net-topology summaries (`pcb.query_net_topology`), and parameterized custom DRC/decoupling checks (`pcb.run_custom_drc`), exposed in an interactive **Query Preview** inspector tab.
+  - **Just-in-Time Rust**: `schemars::JsonSchema` derive macros, structured JSON Schema 2020-12 introspection, and trait-based query dispatch.
+  - **Cargo Verification & Mutation Coverage**: Unit + `proptest!` suites on radius/topology queries and strict JSON Schema parameter validation; `100%` caught mutants in `pcb-doc` / `pcb-engine` via `cargo mutants`.
+- `0027-headless-mcp-server-rmcp-and-mock-client.html`
+  - **`egui` Skill & PCB Feature**: Implement `PcbMcpServer` in `crates/pcb-automation` (`L6`) using `rmcp` (`#[tool_router]`, `#[tool]`, `#[tool_handler]`), exposing `CommandSpec` execution, read-only `kicad://board/summary`, `kicad://net/{name}`, and `kicad://bom` MCP **Resources**, and engineering review **Prompts** (`review_power_integrity`, `triage_open_drc`), paired with a programmatic **Mock MCP Client** driving a headless in-process `Session`.
+  - **Just-in-Time Rust**: Async trait implementations (`rmcp::ServerHandler`), `Arc<Mutex<Session>>`, `Parameters<T>`, and bidirectional in-memory `tokio::io::duplex` streams.
+  - **Cargo Verification & Mutation Coverage**: Deterministic client$\leftrightarrow$server round-trip integration tests over `tokio::io::duplex` verifying `list_tools`, `read_resource`, `get_prompt`, `call_tool`, and structured MCP error codes under `cargo mutants -p pcb-automation`.
+- `0028-bridged-mcp-control-channel-and-live-gui-snapshots.html`
+  - **`egui` Skill & PCB Feature**: Add an authenticated loopback TCP control channel (`127.0.0.1` + bearer token file) to the `egui` desktop app so `PcbMcpServer` in `--bridge` mode can pan/zoom the live 2D CAD camera (`ui.focus_region`), toggle layers, drop review pins, and capture cropped board region PNG snapshots returned as MCP `Content::image` payloads for multimodal inspection.
+  - **Just-in-Time Rust**: Non-blocking TCP command polling on the `egui` immediate-mode frame loop (`try_recv` + `ctx.request_repaint()`), constant-time bearer token verification, and capability-scoped filesystem paths.
+  - **Cargo Verification & Mutation Coverage**: End-to-end bridged tests verifying unauthorized token rejection, live `egui` camera rect updates, and cropped PNG snapshot payload generation with `0 missed mutants`.
+- `0029-egui-mcp-inspector-workbench-and-agent-playbooks.html`
+  - **`egui` Skill & PCB Feature**: Build the companion **Mock MCP Client & Inspector Workbench** (`egui` app / dual-pane console) that connects to either the **Headless** or **Bridged Live-GUI** MCP server, featuring a live `tools/list` schema explorer, raw JSON-RPC frame inspector (`Request` $\leftrightarrow$ `Response` with latency telemetry), inline `Content::image` snapshot viewer, and one-click **Multi-Step Agent Playbooks** (e.g., *"Audit `U1` decoupling caps $\to$ Run custom DRC $\to$ Drop `Critical` pins $\to$ Focus GUI viewport"*).
+  - **Just-in-Time Rust**: Async-to-GUI command/event bridges (`tokio::sync::mpsc`), state-machine playbook runners, and dual-process/in-memory transport switching.
+  - **Cargo Verification & Mutation Coverage**: Tier 6 `agent_tasks` acceptance suite executing full multi-step playbooks across both Headless and Bridged backends, verified with `egui_kittest` and `cargo mutants`.
+
+### Future Acts Under Exploration (`Act VIII+`, `0030`+)
+- *The course remains open-ended beyond `0029`—future acts can explore Gerber/Excellon manufacturing output & visual copper XOR revision diffing (`Rev A` vs. `Rev B`), custom WGSL GPU shaders (`egui_wgpu::CallbackTrait`) for sub-pixel copper pour & thermal relief rendering, interactive length-tuning/impedance calculators, or multi-board panelization.*
