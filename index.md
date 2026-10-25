@@ -20,11 +20,64 @@ flowchart LR
 ```
 _Multi-Act Curriculum Progression: Every lesson builds toward an engine-first, AI-controllable Schematic & PCB Design Review System verified with unit tests and mutation coverage._
 
-## Published Interactive Lessons (`0000`–`0021`)
+## Published Interactive Lessons (`0000`–`0025`)
 
-Start with [Lesson 0000](./lessons/0000-project-setup-and-eframe-boot.html) to set up your Cargo project and mutation-testing harness, or jump straight into any completed module below:
+Start with [Lesson 0000](./lessons/0000-project-setup-and-eframe-boot.html) to set up your Cargo project and mutation-testing harness, or jump directly to any section using the curriculum table of contents below:
 
-{{widget:lesson-cards}}
+<nav class="act-toc" aria-label="Course curriculum table of contents">
+  <div class="act-toc-title">Curriculum Table of Contents</div>
+  <ol>
+    <li><a href="#foundation">Foundation: Project Setup &amp; Immediate-Mode Core</a> <span class="act-toc-badge">Lessons 0000–0001</span></li>
+    <li><a href="#act-1">Act I: The 2D CAD Canvas &amp; Viewport</a> <span class="act-toc-badge">Lessons 0002–0005</span></li>
+    <li><a href="#act-2">Act II: Schematic Views, Layout &amp; egui_kittest</a> <span class="act-toc-badge">Lessons 0006–0009</span></li>
+    <li><a href="#act-3">Act III: Design Review Workflows</a> <span class="act-toc-badge">Lessons 0010–0013</span></li>
+    <li><a href="#act-4">Act IV: Engine-First Architecture &amp; Persistence</a> <span class="act-toc-badge">Lessons 0014–0017</span></li>
+    <li><a href="#act-5">Act V: Command Engine, Performance &amp; Polish</a> <span class="act-toc-badge">Lessons 0018–0021</span></li>
+    <li><a href="#act-6">Act VI: Real-World KiCad Parsing (nom) &amp; Embedded SQL (Turso)</a> <span class="act-toc-badge">Lessons 0022–0025</span></li>
+  </ol>
+</nav>
+
+### Foundation: Project Setup & Immediate-Mode Core (`0000`–`0001`) {#foundation}
+
+Every hardware review tool starts with a reliable application shell and a clear understanding of how immediate-mode GUIs manage state. In this foundational module, we configure a high-performance Cargo project with dev-profile optimizations, boot a native desktop window with `eframe::run_native`, and explore Emil Ernerfeldt’s single-frame immediate-mode loop (`eframe::App::update`) by building an interactive PCB layer visibility inspector backed by mutation testing.
+
+{{widget:lesson-cards act="foundation"}}
+
+### Act I: The 2D CAD Canvas & Viewport (`0002`–`0005`) {#act-1}
+
+With a native window running, Act I transforms an empty `CentralPanel` into a responsive 2D CAD canvas. We reserve custom drawing space with `ui.allocate_painter`, master world-to-screen camera math for drag-panning and cursor-centered zoom, build deterministic multi-layer PCB models (substrate, copper traces, SMD pads, and vias), and implement spatial hit-testing for cross-probing interconnected nets under the mouse cursor.
+
+{{widget:lesson-cards act="1"}}
+
+### Act II: Schematic Views, Layout & `egui_kittest` (`0006`–`0009`) {#act-2}
+
+Act II bridges PCB layouts with schematic diagrams and inspector tooling. We render vector schematic symbols and reference designators, coordinate side-by-side viewports with shared `egui::Scene` navigation, build a virtualized Bill of Materials (BOM) table that scales to thousands of components, implement keyboard shortcuts and an interactive point-to-point CAD ruler, and verify headless UI widgets using `egui_kittest`.
+
+{{widget:lesson-cards act="2"}}
+
+### Act III: Design Review Workflows (`0010`–`0013`) {#act-3}
+
+Hardware design reviews require contextual annotations and clearance rule checks. Act III builds production review workflows: pinning interactive callout comments directly onto board coordinates, orchestrating a triage state machine with right-click context menus and severity filters, rendering Design Rule Check (DRC) violation halos with an interactive minimap, and packaging custom reusable `egui::Widget` layer swatches.
+
+{{widget:lesson-cards act="3"}}
+
+### Act IV: Engine-First Architecture & Persistence (`0014`–`0017`) {#act-4}
+
+As applications grow, UI code must separate from pure domain logic. Act IV refactors our single-file app into a strict multi-crate workspace (`pcb-doc` L1 vs. `pcb-reviewer` L6), introduces robust JSON serialization and file format upgrades with `serde` and `thiserror`, adopts copy-on-write `Arc` document snapshots for $O(1)$ zero-cost branching, and implements a multi-level undo/redo history stack with slider drag coalescing.
+
+{{widget:lesson-cards act="4"}}
+
+### Act V: Command Engine, Performance & Polish (`0018`–`0021`) {#act-5}
+
+Act V brings commercial CAD performance and reliability to the review system. We route all state mutations through a static `CommandSpec` registry with a searchable `Key::K` command palette and adversarial fuzz testing (`panic_hunt`), implement viewport bounding-box culling with cached tessellation for 60 FPS budgets, offload heavy file parsing to worker threads with non-blocking progress UI, and establish headless snapshot testing (`gpu_lock`) with WebAssembly (`wasm32`) deployment targets.
+
+{{widget:lesson-cards act="5"}}
+
+### Act VI: Real-World KiCad Parsing (`nom`) & Embedded SQL (`Turso`) (`0022`–`0025`) {#act-6}
+
+Act VI connects our CAD engine to real-world hardware files and relational review databases. We extract a standalone `L0` S-expression parser crate (`crates/kicad-sexpr`) using `nom` combinators, lower `.kicad_pcb` S-expression trees into `BoardModel` verified by a Tier 4 pinned corpus oracle (`CORPUS_PASS_FLOOR` & `CORPUS_ROUNDTRIP_FLOOR`), validate SQLite/Turso DDL and DML syntax with `turso_parser` inside an async-tested `TursoReviewStore`, and execute atomic `BEGIN` / `COMMIT` / `ROLLBACK` sign-off batches backed by a tamper-evident hash-chained audit trail (`verify_audit_chain`) and local-first replica sync.
+
+{{widget:lesson-cards act="6"}}
 
 ## Reference Sheets & Printable Cheat Sheets
 
@@ -41,14 +94,14 @@ Turns out, having a one-page cheat sheet next to your editor saves a lot of tab-
 Every lesson is backed by a standalone, runnable Cargo package or workspace under `./apps/<NNNN-lesson-slug>/` that compiles with zero warnings and passes both `cargo test` and `cargo mutants`:
 
 ```bash
-# Launch Lesson 0021's interactive multi-crate PCB Reviewer desktop window
-cargo run --manifest-path ./apps/0021-headless-snapshot-testing-and-wasm-build/Cargo.toml
+# Launch Lesson 0025's interactive 3-crate PCB Reviewer desktop window
+cargo run --manifest-path ./apps/0025-local-first-review-sync-and-audit-trail/Cargo.toml
 
-# Run workspace unit + proptest + panic_hunt suites and fast L1 domain mutation checks
-cargo test --manifest-path ./apps/0021-headless-snapshot-testing-and-wasm-build/Cargo.toml --workspace
-cargo mutants --manifest-path ./apps/0021-headless-snapshot-testing-and-wasm-build/Cargo.toml -p pcb-doc --in-place
+# Run workspace unit + proptest + tokio::test suites and fast L0/L1 mutation checks
+cargo test --manifest-path ./apps/0025-local-first-review-sync-and-audit-trail/Cargo.toml --workspace
+cargo mutants --manifest-path ./apps/0025-local-first-review-sync-and-audit-trail/Cargo.toml -p kicad-sexpr -p pcb-doc --in-place
 ```
 
 :::teacher-prompt
-**Ready to dive in?** Start with [**Lesson 0000: Bootstrapping Your Rust & `eframe` Project**](./lessons/0000-project-setup-and-eframe-boot.html) or jump straight to [**Lesson 0021: Offscreen Snapshot Parity (`gpu_lock`), Quality Scorecards & WebAssembly (`wasm32`)**](./lessons/0021-headless-snapshot-testing-and-wasm-build.html).
+**Ready to dive in?** Start with [**Lesson 0000: Bootstrapping Your Rust & `eframe` Project**](./lessons/0000-project-setup-and-eframe-boot.html) or jump straight to [**Lesson 0025: Local-First Replica Sync, Atomic SQL Transactions & Tamper-Evident Audit Trails**](./lessons/0025-local-first-review-sync-and-audit-trail.html).
 :::

@@ -52,7 +52,7 @@
 <h1>0022. KiCad S-Expression Tokenizer &amp; AST Inspector with <code>nom</code></h1>
 <p class="subtitle">Extracting a standalone <code>L0</code> <code>kicad-sexpr</code> parser crate with zero workspace or UI dependencies, composing <code>nom</code> parser combinators (<code>delimited</code>, <code>many0</code>, <code>alt</code>, <code>take_while1</code>) to build a recursive <code>SexprNode</code> syntax tree, and inspecting live KiCad <code>.kicad_pcb</code> trees with <code>egui::CollapsingHeader</code>.</p>
 
-<h2>Why KiCad Uses S-Expressions &amp; Why Parsers Live at Layer <code>L0</code></h2>
+<h2 id="why-kicad-uses-s-expressions-amp-why-parsers-live-at-layer-l0">Why KiCad Uses S-Expressions &amp; Why Parsers Live at Layer <code>L0</code></h2>
 <p>Real-world KiCad <code>.kicad_pcb</code> and <code>.kicad_sch</code> files store every board outline, net definition, footprint, pad, and copper trace segment as nested <strong>symbolic expressions (S-expressions)</strong>:<span class="sidenote-number"></span><span class="sidenote"><strong>Standalone <code>L0</code> Format Crates (<code>egui-app-architecture</code>):</strong> Principle #2 of our architecture requires format parsers like <code>crates/kicad-sexpr</code> to sit at Layer <code>L0</code> (<code>Standalone</code>) with <strong>zero workspace or UI dependencies</strong> (<code>validate_l0_standalone_manifest</code>). That keeps the parser independently testable, fuzzable, and reusable across CLI tools, WebAssembly builds, and language servers.</span></p>
 <pre><code class="language-text">(kicad_pcb
   (version 20240108)
@@ -75,7 +75,7 @@ flowchart LR
     style ErrSyn fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2>Recursive <code>SexprNode</code> Trees &amp; <code>nom</code> Combinators in <code>crates/kicad-sexpr</code></h2>
+<h2 id="recursive-sexprnode-trees-amp-nom-combinators-in-crates-kicad-sexpr">Recursive <code>SexprNode</code> Trees &amp; <code>nom</code> Combinators in <code>crates/kicad-sexpr</code></h2>
 <p>An S-expression has only three grammar productions:</p>
 <ol>
 <li><strong><code>SexprNode::Symbol(String)</code></strong>: An unquoted token of non-whitespace characters excluding <code>(</code>, <code>)</code>, and <code>&quot;</code> (parsed by <code>take_while1(is_symbol_char)</code>).</li>
@@ -258,7 +258,7 @@ cargo mutants --manifest-path ./apps/0022-sexpr-tokenizer-and-ast-with-nom/Cargo
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/nom/latest/nom/"><code>nom</code> Official Crate Documentation &amp; Combinator Recipes</a> and <a href="https://docs.rs/egui/latest/egui/containers/collapsing_header/struct.CollapsingHeader.html"><code>egui::CollapsingHeader</code> API Docs</a>.
 </div>

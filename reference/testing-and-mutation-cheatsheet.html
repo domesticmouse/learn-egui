@@ -51,7 +51,7 @@
 <h1>Reference: Continuous Verification &amp; Mutation Testing (<code>cargo-mutants</code>)</h1>
 <p class="subtitle">How we verify every PCB Reviewer feature with <code>cargo test</code> and measure real assertion coverage with <code>cargo mutants</code> across Acts I–VI.</p>
 
-<h2>1. Why Mutation Testing Beats Line Coverage in <code>egui</code></h2>
+<h2 id="1-why-mutation-testing-beats-line-coverage-in-egui">1. Why Mutation Testing Beats Line Coverage in <code>egui</code></h2>
 <p>Traditional line coverage only tells you whether a line of Rust code <em>executed</em> during a test—not whether your test would fail if that line were wrong. Turns out, in an immediate-mode GUI, calling <code>app.update(...)</code> executes almost every line of your panel layout even if your test contains zero assertions!</p>
 <p>So, we use Martin Pool's <a href="https://mutants.rs/"><code>cargo-mutants</code></a> to test our tests: it copies your project to a scratch directory, systematically injects small faults (<strong>mutants</strong>—such as flipping <code>true</code> to <code>false</code>, replacing <code>+</code> with <code>-</code>, or emptying a method body), and runs <code>cargo test</code> against each mutant.</p>
 <figure class="mermaid-figure">
@@ -64,7 +64,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>How <code>cargo mutants</code> distinguishes verified logic (Caught) from unasserted code paths (Missed).</em></p>
-<h2>2. Essential Commands &amp; Outcomes</h2>
+<h2 id="2-essential-commands-amp-outcomes">2. Essential Commands &amp; Outcomes</h2>
 <pre><code class="language-bash"># 1. Install cargo-mutants once (works with stable Rust, no nightly required)
 cargo install --locked cargo-mutants
 
@@ -107,7 +107,7 @@ cargo mutants -f src/main.rs</code></pre>
 </tr>
 </tbody>
 </table>
-<h2>3. Scoping Visual Entrypoints with <code>.cargo/mutants.toml</code></h2>
+<h2 id="3-scoping-visual-entrypoints-with-cargo-mutants-toml">3. Scoping Visual Entrypoints with <code>.cargo/mutants.toml</code></h2>
 <p>In a desktop application, <code>fn main()</code> opens a blocking OS window via <code>eframe::run_native</code>, which should not run inside headless unit tests. Create <code>.cargo/mutants.toml</code> in your crate root to explicitly track which functions are excluded from mutation until a higher-tier harness is introduced:</p>
 <pre><code class="language-toml"># .cargo/mutants.toml
 # Reuse the target directory across scratch builds so mutation runs finish quickly.
@@ -119,7 +119,7 @@ exclude_re = [
     "replace main",
     "&lt;impl eframe::App for PcbReviewerApp&gt;::update",
 ]</code></pre>
-<h2>4. Act IV Multi-Crate Workspace &amp; <code>proptest</code> Patterns (<code>0014</code>–<code>0017</code>)</h2>
+<h2 id="4-act-iv-multi-crate-workspace-amp-proptest-patterns-0014-0017">4. Act IV Multi-Crate Workspace &amp; <code>proptest</code> Patterns (<code>0014</code>–<code>0017</code>)</h2>
 <p>Once domain state lives in <code>crates/pcb-doc</code> (<code>L1</code>, depending only on <code>emath</code>), you can run <code>cargo test</code> and <code>cargo mutants</code> on the domain crate in milliseconds without compiling or linking <code>eframe</code>:</p>
 <pre><code class="language-bash"># Run only L1 domain tests or mutations (zero egui/eframe linking overhead)
 cargo test --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml -p pcb-doc
@@ -151,21 +151,21 @@ cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescin
         prop_assert_eq!(working.shared_arc_buffers(&amp;initial), 4);
     }
 }</code></pre>
-<h2>5. Act V <code>panic_hunt</code>, <code>gpu_lock()</code> Snapshot Digests &amp; Scorecards (<code>0018</code>–<code>0021</code>)</h2>
+<h2 id="5-act-v-panic-hunt-gpu-lock-snapshot-digests-amp-scorecards-0018-0021">5. Act V <code>panic_hunt</code>, <code>gpu_lock()</code> Snapshot Digests &amp; Scorecards (<code>0018</code>–<code>0021</code>)</h2>
 <p>In Act V, we harden the multi-crate workspace with three production gates:</p>
 <ol>
 <li><strong>Tier 5 <code>panic_hunt</code> Adversarial Command Fuzzing (<code>0018</code>)</strong>: Iterates over every registered <code>CommandSpec</code> in <code>COMMAND_SPECS</code> (asserting <code>COMMAND_SPECS.len() &gt;= COMMAND_PARITY_FLOOR</code>) and feeds malformed/out-of-bounds JSON payloads into <code>BoardModel::execute_command</code>, asserting <code>Err(EngineError::BadParams)</code> and zero panics.</li>
 <li><strong>Tier 2 + Tier 7 Spatial Culling Equivalence &amp; Budgets (<code>0019</code>)</strong>: Uses <code>proptest!</code> to prove <code>culled_pads_in_rect</code> and <code>culled_traces_in_rect</code> match reference filtering across arbitrary camera viewports while <code>check_cull_budget</code> enforces microsecond budgets.</li>
 <li><strong>Tier 3/6 <code>gpu_lock()</code> &amp; <code>FrameSnapshotDigest</code> (<code>0021</code>)</strong>: Acquires <code>let _gpu = gpu_lock();</code> (<code>OnceLock&lt;Mutex&lt;()&gt;&gt;</code> with <code>PoisonError::into_inner</code>) on the first line of snapshot tests, computes a deterministic 64-bit FNV-1a digest over visible layer bitmasks and culled geometry counts, and verifies release readiness via <code>QualityScorecard::is_release_ready()</code>.</li>
 </ol>
-<h2>6. Act VI Real-File KiCad Corpus Oracles &amp; Async Turso SQL Harnesses (<code>0022</code>–<code>0025</code>)</h2>
+<h2 id="6-act-vi-real-file-kicad-corpus-oracles-amp-async-turso-sql-harnesses-0022-0025">6. Act VI Real-File KiCad Corpus Oracles &amp; Async Turso SQL Harnesses (<code>0022</code>–<code>0025</code>)</h2>
 <p>In Act VI, we expand the workspace to 3 crates (<code>crates/kicad-sexpr</code> at <code>L0</code> Standalone, <code>crates/pcb-doc</code> at <code>L1</code>/<code>L4</code>, and <code>pcb-reviewer</code> at <code>L6</code>/<code>L7</code>) and add three new verification gates:</p>
 <ol>
 <li><strong>Tier 1 + Tier 2 <code>L0</code> Standalone Parser &amp; <code>proptest</code> Round-Tripping (<code>0022</code>)</strong>: Enforces <code>validate_l0_standalone_manifest</code> on <code>crates/kicad-sexpr/Cargo.toml</code> and uses <code>proptest!</code> (<code>prop_sexpr_parser_roundtrips_arbitrary_footprints</code>) to verify <code>parse_sexpr_str</code> across arbitrary KiCad S-expression trees in ~15 seconds for all 38 <code>L0</code> mutants.</li>
 <li><strong>Tier 4 Pinned <code>.kicad_pcb</code> Corpus Oracles &amp; Ratchet Floors (<code>0023</code>)</strong>: Runs <code>run_pinned_kicad_corpus()</code> across <code>PINNED_KICAD_CORPUS</code>, asserting <code>passed_files &gt;= CORPUS_PASS_FLOOR</code>, <code>roundtrip_files &gt;= CORPUS_ROUNDTRIP_FLOOR</code>, and <code>reloaded == board</code> (<code>from_kicad_pcb_sexpr</code> ↔ <code>to_kicad_pcb_sexpr</code>).</li>
 <li><strong>Tier 2 Async <code>#[tokio::test]</code> SQL AST, Atomic Rollback &amp; Audit Hash-Chain Gates (<code>0024</code>–<code>0025</code>)</strong>: Validates SQL DDL/DML/transaction statements via <code>turso_parser::parser::Parser</code>, verifies foreign-key rejection on unregistered <code>board_id</code>s, tests atomic rollback on invalid status transitions inside <code>execute_atomic_signoff_batch</code>, and verifies tamper detection in <code>verify_audit_chain()</code>.</li>
 </ol>
-<h2>7. Progression of Testing Across the Six Acts</h2>
+<h2 id="7-progression-of-testing-across-the-six-acts">7. Progression of Testing Across the Six Acts</h2>
 <table class="ref-table">
 <thead>
 <tr>

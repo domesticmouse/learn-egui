@@ -52,7 +52,7 @@
 <h1>0023. Lowering KiCad <code>.kicad_pcb</code> &amp; <code>.kicad_sch</code> ASTs into the Domain Model &amp; Corpus Oracles</h1>
 <p class="subtitle">Lowering untyped <code>SexprNode</code> syntax trees into typed <code>ComponentSymbol</code>, <code>SmdPad</code>, and <code>TraceSegment</code> domain structs with <code>KicadLowerError</code>, exporting lossless <code>.kicad_pcb</code> S-expressions, and enforcing Tier 4 pinned corpus oracle ratchets (<code>CORPUS_PASS_FLOOR</code> &amp; <code>CORPUS_ROUNDTRIP_FLOOR</code>).</p>
 
-<h2>Two-Phase Parsing: Untyped <code>SexprNode</code> (<code>L0</code>) $\to$ Typed <code>BoardModel</code> (<code>L1</code>/<code>L4</code>)</h2>
+<h2 id="two-phase-parsing-untyped-sexprnode-l0-to-typed-boardmodel-l1-l4">Two-Phase Parsing: Untyped <code>SexprNode</code> (<code>L0</code>) $\to$ Typed <code>BoardModel</code> (<code>L1</code>/<code>L4</code>)</h2>
 <p>In Lesson 0022, our standalone <code>L0</code> <code>kicad-sexpr</code> crate turned raw KiCad text into an untyped <code>SexprNode</code> tree. However, a syntactically valid S-expression like <code>(pad &quot;1&quot; smd (at 20.0 &quot;not_a_float&quot;) (layer &quot;Unknown.Layer&quot;))</code> is still semantically invalid for a 2D PCB CAD engine.<span class="sidenote-number"></span><span class="sidenote"><strong>Tier 4 Pinned Corpus Oracles (<code>egui-testing-infrastructure</code>):</strong> Real-world file importers are verified against a pinned corpus of <code>.kicad_pcb</code> fixtures (<code>PINNED_KICAD_CORPUS</code>). Every fixture must pass both import (<code>CORPUS_PASS_FLOOR</code>) and <code>import -&gt; export -&gt; re-import</code> round-trip equivalence (<code>CORPUS_ROUNDTRIP_FLOOR</code>), and ratchets only move up!</span></p>
 <p>By separating <strong>Phase 1 (Syntax Tokenization &amp; AST)</strong> from <strong>Phase 2 (Semantic Lowering into <code>BoardModel</code>)</strong>, we get clean, granular error reporting via <code>KicadLowerError</code>:</p>
 <figure class="mermaid-figure">
@@ -68,7 +68,7 @@ flowchart LR
     style ErrRoot fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2>Lowering <code>(footprint ...)</code>, <code>(pad ...)</code>, and <code>(segment ...)</code> with <code>KicadLowerError</code></h2>
+<h2 id="lowering-footprint-pad-and-segment-with-kicadlowererror">Lowering <code>(footprint ...)</code>, <code>(pad ...)</code>, and <code>(segment ...)</code> with <code>KicadLowerError</code></h2>
 <figure>
   <figcaption>Typed KiCad S-expression lowering and CorpusOracleReport in crates/pcb-doc/src/lib.rs</figcaption>
   <pre><code class="language-rust">pub const CORPUS_PASS_FLOOR: usize = 3;
@@ -225,7 +225,7 @@ cargo mutants --manifest-path ./apps/0023-parsing-kicad-pcb-and-sch-into-domain-
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/">KiCad Documentation — &quot;S-Expression Board File Format (<code>.kicad_pcb</code>)&quot;</a> and <a href="https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html">The Rust Programming Language — §9.2 &quot;Recoverable Errors with <code>Result</code> and the <code>?</code> Operator&quot;</a>.
 </div>

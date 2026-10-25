@@ -64,7 +64,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 8.1: <code>TextEdit::singleline</code> mutates the query string in place, <code>.filter()</code> selects matching components, and <code>show_rows</code> virtualises layout to only the visible slice <code>&amp;matching[row_range]</code>.</em></p>
-<h2>1. Just-in-Time Rust: Iterator Adapters (<code>.filter()</code>, <code>.enumerate()</code>) &amp; Slices (<code>&amp;[T]</code>)</h2>
+<h2 id="1-just-in-time-rust-iterator-adapters-filter-enumerate-amp-slices-amp-t">1. Just-in-Time Rust: Iterator Adapters (<code>.filter()</code>, <code>.enumerate()</code>) &amp; Slices (<code>&amp;[T]</code>)</h2>
 <p>To filter components case-insensitively across their reference designator (<code>U1</code>), value (<code>LDO_3V3</code>), package (<code>SOT-23</code>), or connected net name (<code>VCC_3V3</code>), we normalise the query with <code>.trim().to_ascii_lowercase()</code> and chain Rust's zero-cost iterator adapters (<a href="https://doc.rust-lang.org/book/ch13-02-iterators.html">Rust Book §13.2</a>):<span class="sidenote-number"></span><span class="sidenote">Why slice via <code>&amp;matching[row_range]</code>? A Rust slice <code>&amp;matching[row_range]</code> (<code>Range&lt;usize&gt;</code>) is a bounds-checked window into the contiguous vector that lets us iterate over just the visible viewport rows with <code>.enumerate()</code>.</span></p>
 <pre><code class="language-rust">impl ComponentSymbol {
     pub fn matches_query(&amp;self, query: &amp;str) -&gt; bool {
@@ -92,7 +92,7 @@ impl BoardModel {
             .collect()
     }
 }</code></pre>
-<h2>2. Virtualised Scrolling with <code>ScrollArea::show_rows</code> &amp; <code>Grid</code></h2>
+<h2 id="2-virtualised-scrolling-with-scrollarea-show-rows-amp-grid">2. Virtualised Scrolling with <code>ScrollArea::show_rows</code> &amp; <code>Grid</code></h2>
 <p>Now, even in an immediate-mode GUI, laying out 10,000 offscreen table rows on every 60 Hz frame is a great way to warm up your laptop fan for no reason.</p>
 <p>Turns out, <a href="https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows"><code>ScrollArea::show_rows</code></a> makes virtualised scrolling almost ridiculously simple: it calculates the exact <code>row_range: Range&lt;usize&gt;</code> currently visible inside the scroll viewport based on <code>row_height_sans_spacing</code> and calls your closure for <em>only those visible rows</em>:</p>
 <pre><code class="language-rust">ui.horizontal(|ui| {
@@ -258,7 +258,7 @@ fn matches_query_checks_ref_des_value_package_and_net_case_insensitively() {
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows"><code>egui::ScrollArea::show_rows</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/book/ch13-02-iterators.html">The Rust Programming Language — §13.2 &quot;Processing a Series of Items with Iterators&quot;</a>.
 </div>

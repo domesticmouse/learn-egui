@@ -52,7 +52,7 @@
 <h1>0016. Copy-on-Write Document Snapshots with <code>Arc</code> &amp; <code>Arc::make_mut</code></h1>
 <p class="subtitle">Wrapping <code>BoardModel</code> collections in <code>Arc&lt;Vec&lt;T&gt;&gt;</code> and <code>Arc&lt;HashMap&lt;K, V&gt;&gt;</code> (<code>serde</code> <code>rc</code> feature) so taking a snapshot is <code>O(1)</code>, mutating a review pin clones only the touched <code>HashMap</code>, and <code>proptest</code> verifies structural pointer sharing (<code>Arc::ptr_eq</code>).</p>
 
-<h2>Why <code>O(N)</code> Deep Clones Break 60 FPS Immediate-Mode CAD Apps</h2>
+<h2 id="why-o-n-deep-clones-break-60-fps-immediate-mode-cad-apps">Why <code>O(N)</code> Deep Clones Break 60 FPS Immediate-Mode CAD Apps</h2>
 <p>Suppose a production PCB layout holds 50,000 <code>TraceSegment</code>s, 20,000 <code>SmdPad</code>s, and 2,000 <code>ComponentSymbol</code>s, while an engineer adds or edits a single <code>ReviewNote</code> pin. If <code>BoardModel</code> stores plain <code>Vec&lt;T&gt;</code> and <code>HashMap&lt;K, V&gt;</code> fields, calling <code>let snapshot = self.board.clone()</code> before an edit allocates and copies <em>every</em> trace, pad, and component on the heap (<code>O(N)</code> memory and CPU time).<span class="sidenote-number"></span><span class="sidenote"><strong>Structural Sharing (<code>Arc</code> Copy-on-Write):</strong> By wrapping each collection in <code>Arc&lt;...&gt;</code> (<code>Arc&lt;Vec&lt;TraceSegment&gt;&gt;</code>, <code>Arc&lt;Vec&lt;SmdPad&gt;&gt;</code>, <code>Arc&lt;Vec&lt;ComponentSymbol&gt;&gt;</code>, <code>Arc&lt;HashMap&lt;PinId, ReviewNote&gt;&gt;</code>), <code>BoardModel::clone()</code> copies only four 8-byte pointers and increments four atomic reference counts (<code>O(1)</code>).</span></p>
 <p>When we need to mutate a collection—such as inserting or updating a review pin—we call <code>Arc::make_mut(&amp;mut self.review_pins)</code>:</p>
 <ul>
@@ -92,7 +92,7 @@ flowchart TD
     style HeapRNew fill:#2a1b14,stroke:#ff8b6b,color:#e6edf3
   </pre>
 </figure>
-<h2>Serializing <code>Arc&lt;T&gt;</code> with <code>serde</code>'s <code>&quot;rc&quot;</code> Feature &amp; Property Testing with <code>proptest</code></h2>
+<h2 id="serializing-arc-lt-t-gt-with-serde-s-quot-rc-quot-feature-amp-property-testing-with-proptest">Serializing <code>Arc&lt;T&gt;</code> with <code>serde</code>'s <code>&quot;rc&quot;</code> Feature &amp; Property Testing with <code>proptest</code></h2>
 <p>To keep <code>BoardModel</code>'s <code>#[derive(Serialize, Deserialize)]</code> working seamlessly across <code>Arc&lt;...&gt;</code> fields, we enable <code>serde = { version = &quot;1.0&quot;, features = [&quot;derive&quot;, &quot;rc&quot;] }</code> in <code>crates/pcb-doc/Cargo.toml</code>.<span class="sidenote-number"></span><span class="sidenote"><strong>Tier 2 Property-Based Testing (<code>proptest</code>):</strong> Unit tests check fixed examples; <code>proptest!</code> generates hundreds of randomized <code>(x, y, comment)</code> inputs and shrinks any failure to its minimal counterexample.</span> We also add <code>shared_arc_buffers(&amp;self, other: &amp;Self) -&gt; usize</code> using <code>Arc::ptr_eq</code> so both our <code>proptest!</code> suite and the <code>SidePanel::right</code> UI (<code>&quot;Shared Arc Buffers: 3 / 4&quot;</code>) can inspect structural sharing directly.</p>
 <figure>
   <figcaption>Copy-on-Write BoardModel with Arc::make_mut and Arc::ptr_eq in crates/pcb-doc/src/lib.rs</figcaption>
@@ -250,7 +250,7 @@ cargo mutants --manifest-path ./apps/0016-copy-on-write-arc-document-snapshots/C
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/std/sync/struct.Arc.html#method.make_mut"><code>std::sync::Arc::make_mut</code> Official Rust Standard Library Docs</a> and <a href="https://proptest-rs.github.io/proptest/proptest/getting-started.html">Proptest Book — &quot;Getting Started&quot;</a>.
 </div>

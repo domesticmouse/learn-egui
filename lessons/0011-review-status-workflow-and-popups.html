@@ -65,7 +65,7 @@ stateDiagram-v2
   </pre>
 </figure>
 <p><em>Figure 11.1: Engineering sign-off state machine enforced by <code>ReviewStatus::can_transition_to</code>: an <code>Open</code> issue must pass through <code>Resolved</code> before it can be marked <code>Verified</code>.</em></p>
-<h2>1. Just-in-Time Rust: Static Enum Slices (<code>&amp;'static [Self]</code>) &amp; Transition Guards</h2>
+<h2 id="1-just-in-time-rust-static-enum-slices-amp-static-self-amp-transition-guards">1. Just-in-Time Rust: Static Enum Slices (<code>&amp;'static [Self]</code>) &amp; Transition Guards</h2>
 <p>When rendering selector buttons or dropdowns in <code>egui</code> for every variant of an enum, you don't want to allocate a <code>Vec</code> on the heap every frame. Instead, we can define an associated constant <code>pub const ALL: &amp;'static [Self]</code> directly on the enum (<code>PinSeverity::ALL</code> and <code>ReviewStatus::ALL</code>) backed by static read-only binary memory:<span class="sidenote-number"></span><span class="sidenote">Why use <code>matches!((self, next), ...)</code> inside <code>can_transition_to</code>? Matching on the 2-tuple <code>(self, next)</code> lets us list the exact legal state-transition edges in one declarative expression and reject every other pair with <code>false</code>.</span></p>
 <pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PinSeverity {
@@ -108,7 +108,7 @@ impl ReviewStatus {
         )
     }
 }</code></pre>
-<h2>2. Multi-Criteria Triage Filtering &amp; <code>ui.selectable_value</code></h2>
+<h2 id="2-multi-criteria-triage-filtering-amp-ui-selectable-value">2. Multi-Criteria Triage Filtering &amp; <code>ui.selectable_value</code></h2>
 <p>In <code>SidePanel</code>, we iterate over <code>PinSeverity::ALL</code> and call <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.selectable_value"><code>ui.selectable_value(&amp;mut self.view.min_pin_severity, sev, sev.label())</code></a> to render a three-way severity selector pill bar, paired with an <code>&quot;Open Pins Only&quot;</code> checkbox (<code>self.view.filter_only_open_pins</code>).</p>
 <p>Then <code>BoardModel::filter_review_pins</code> combines both criteria:</p>
 <pre><code class="language-rust">pub fn filter_review_pins(
@@ -266,7 +266,7 @@ fn severity_ranks_status_transitions_and_filtering_enforce_signoff_rules() {
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.selectable_value"><code>egui::Ui::selectable_value</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/book/ch18-03-pattern-syntax.html">The Rust Programming Language — §18.3 &quot;Pattern Syntax&quot;</a>.
 </div>

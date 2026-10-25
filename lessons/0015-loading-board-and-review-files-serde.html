@@ -52,7 +52,7 @@
 <h1>0015. Loading &amp; Saving Board &amp; Review Session Files (<code>serde</code>, <code>serde_json</code> &amp; <code>thiserror</code>)</h1>
 <p class="subtitle">Serializing <code>BoardModel</code> and <code>ReviewNote</code> pins into a schema-versioned <code>ReviewSessionEnvelope</code> JSON payload, validating untrusted inputs with exhaustive destructuring, and surfacing <code>SessionIoError</code> banners in <code>egui::SidePanel::right</code> without panicking.</p>
 
-<h2>Versioned Envelope Persistence and Exhaustive Destructuring</h2>
+<h2 id="versioned-envelope-persistence-and-exhaustive-destructuring">Versioned Envelope Persistence and Exhaustive Destructuring</h2>
 <p>A hardware design review tool is only useful if engineers can save their review pins (<code>ReviewNote</code> status, severity, author, and millimetre coordinates) to a file, share it in a pull request, and reload it without losing state.<span class="sidenote-number"></span><span class="sidenote"><strong>Why Wrap <code>BoardModel</code> in <code>ReviewSessionEnvelope</code>?</strong> Serializing a raw <code>BoardModel</code> directly leaves no metadata to detect format changes later. Wrapping it in <code>ReviewSessionEnvelope { schema_version: 1, board_id, board }</code> lets <code>from_session_json</code> reject incompatible schema versions with a clear, typed error before touching application state.</span></p>
 <p>Because <code>pcb-doc</code> (<code>L1</code>) owns all domain types, adding persistence requires zero changes to our <code>egui</code> rendering code:</p>
 <ol>
@@ -74,7 +74,7 @@ flowchart LR
     style EmptyId fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2>Non-Destructive Error Recovery in <code>egui::SidePanel::right</code></h2>
+<h2 id="non-destructive-error-recovery-in-egui-sidepanel-right">Non-Destructive Error Recovery in <code>egui::SidePanel::right</code></h2>
 <p>When a user attempts to load a corrupt or incompatible JSON file in <code>PcbReviewerApp::import_session_from_json(&amp;mut self, raw: &amp;str)</code>, the UI must <strong>never</strong> overwrite <code>self.board</code> with partial data or crash.<span class="sidenote-number"></span><span class="sidenote"><strong>Why <code>SidePanel::right(&quot;session_panel&quot;)</code>?</strong> Placing session persistence, snapshot controls, and error banners in a dedicated right-hand inspector panel keeps the left layer/BOM panel (<code>SidePanel::left</code>) and top cross-probe bar (<code>TopBottomPanel::top</code>) within their vertical and horizontal layout budgets inside <code>800x600</code> viewports.</span> On <code>Err(err)</code>, <code>import_session_from_json</code> leaves <code>self.board</code> untouched, stores <code>Some(err.to_string())</code> in <code>self.view.last_io_error</code>, and renders a dismissible <code>&quot;I/O Error: ...&quot;</code> banner inside <code>SidePanel::right(&quot;session_panel&quot;)</code>.</p>
 <figure>
   <figcaption>Typed SessionIoError and exhaustive envelope validation in crates/pcb-doc/src/lib.rs</figcaption>
@@ -247,7 +247,7 @@ cargo mutants --manifest-path ./apps/0015-loading-board-and-review-files-serde/C
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://serde.rs/derive.html">Serde Official Documentation — &quot;Using Derive&quot;</a> and <a href="https://docs.rs/thiserror/latest/thiserror/"><code>thiserror</code> Crate Documentation</a>.
 </div>

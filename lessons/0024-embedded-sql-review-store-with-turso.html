@@ -52,7 +52,7 @@
 <h1>0024. Embedded SQL Review Store with Turso (<code>turso_parser</code> &amp; Async <code>tokio</code> Bridge)</h1>
 <p class="subtitle">Validating SQLite/Turso DDL and DML statements (<code>CREATE TABLE</code>, <code>INSERT INTO</code>, <code>SELECT</code>) with <code>turso_parser::parser::Parser</code>, enforcing idempotent schema migrations and foreign-key board constraints in <code>TursoReviewStore</code>, and bridging async <code>#[tokio::test]</code> storage into <code>egui</code>.</p>
 
-<h2>Why Engineering Design Reviews Need an Embedded Relational Store</h2>
+<h2 id="why-engineering-design-reviews-need-an-embedded-relational-store">Why Engineering Design Reviews Need an Embedded Relational Store</h2>
 <p>JSON session files (<code>Lesson 0015</code>) are great for single-file snapshots, but multi-engineer hardware reviews require <strong>relational integrity</strong>: every anchored review thread (<code>review_threads</code>) must reference a registered PCB revision (<code>boards</code>), enforce idempotent schema migrations (<code>CREATE TABLE IF NOT EXISTS ...</code>), and support fast multi-column queries across authors, statuses, and severities.<span class="sidenote-number"></span><span class="sidenote"><strong>Why <code>turso_parser</code> + Embedded Relational Tables?</strong> Using Turso's official Rust SQL parser (<code>turso_parser::parser::Parser</code>) lets us parse and verify real SQLite/Turso SQL syntax (<code>Stmt::CreateTable</code>, <code>Stmt::Insert</code>, <code>Stmt::Select</code>) into strongly typed AST nodes (<code>turso_parser::ast::Cmd</code>) in pure Rust—compiling in 5 seconds, running on <code>wasm32-unknown-unknown</code>, and executing deterministically under <code>cargo-mutants</code>.</span></p>
 <figure class="mermaid-figure">
   <pre class="mermaid">
@@ -68,7 +68,7 @@ flowchart LR
     style ErrFK fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2>Validating SQL ASTs with <code>turso_parser</code> &amp; Enforcing Foreign Keys in <code>TursoReviewStore</code></h2>
+<h2 id="validating-sql-asts-with-turso-parser-amp-enforcing-foreign-keys-in-tursoreviewstore">Validating SQL ASTs with <code>turso_parser</code> &amp; Enforcing Foreign Keys in <code>TursoReviewStore</code></h2>
 <figure>
   <figcaption>Validating SQL statements with turso_parser::parser::Parser in crates/pcb-doc/src/lib.rs</figcaption>
   <pre><code class="language-rust">use turso_parser::{
@@ -255,7 +255,7 @@ cargo mutants --manifest-path ./apps/0024-embedded-sql-review-store-with-turso/C
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.turso.tech/sdk/rust/quickstart">Turso / <code>libsql</code> Rust Documentation</a> and <a href="https://docs.rs/tokio/latest/tokio/attr.test.html">Tokio Documentation — <code>#[tokio::test]</code> Async Unit Testing</a>.
 </div>

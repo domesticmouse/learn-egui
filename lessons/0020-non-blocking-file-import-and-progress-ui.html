@@ -52,7 +52,7 @@
 <h1>0020. Non-Blocking Background File Import (<code>std::sync::mpsc</code>) &amp; Live <code>ProgressBar</code> UI</h1>
 <p class="subtitle">Offloading board and session parsing onto a background worker thread (<code>std::thread::spawn</code>), streaming staged progress over an <code>mpsc::channel</code>, polling <code>try_recv()</code> without blocking the 60-FPS <code>egui</code> loop, and driving an <code>egui::ProgressBar</code> with <code>ctx.request_repaint()</code>.</p>
 
-<h2>Why Synchronous File Parsing Freezes Immediate-Mode GUIs</h2>
+<h2 id="why-synchronous-file-parsing-freezes-immediate-mode-guis">Why Synchronous File Parsing Freezes Immediate-Mode GUIs</h2>
 <p>In Lesson <code>0015</code>, <code>import_session_from_json</code> ran synchronously on the main UI thread inside <code>update(&amp;mut self, ctx, frame)</code>. For a small 2 KB review envelope, that takes microseconds—but when an engineer opens a 50 MB industrial <code>.kicad_pcb</code> board file with 100,000 trace segments, synchronous parsing blocks <code>update()</code> for ratusan milliseconds, freezing panning, zooming, and OS window events.<span class="sidenote-number"></span><span class="sidenote"><strong>Never Block <code>eframe::App::update</code>:</strong> Because <code>egui</code> runs on a single UI thread, any operation taking more than ~4 ms should run on a background thread (<code>std::thread::spawn</code>) and communicate back via non-blocking message passing (<code>std::sync::mpsc::Receiver::try_recv</code>).</span></p>
 <p>We keep the UI locked at 60 FPS with a three-part pattern:</p>
 <ol>
@@ -76,7 +76,7 @@ sequenceDiagram
     Note over UI: Swaps self.board, sets ImportJobState::Succeeded
   </pre>
 </figure>
-<h2>Channel Messages &amp; <code>ImportJobState</code></h2>
+<h2 id="channel-messages-amp-importjobstate">Channel Messages &amp; <code>ImportJobState</code></h2>
 <figure>
   <figcaption>Background worker and ImportJobState in crates/pcb-doc/src/lib.rs</figcaption>
   <pre><code class="language-rust">#[derive(Clone, Debug, PartialEq)]
@@ -256,7 +256,7 @@ cargo mutants --manifest-path ./apps/0020-non-blocking-file-import-and-progress-
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/std/sync/mpsc/struct.Receiver.html#method.try_recv"><code>std::sync::mpsc::Receiver::try_recv</code> Standard Library Docs</a> and <a href="https://docs.rs/egui/latest/egui/widgets/struct.ProgressBar.html"><code>egui::ProgressBar</code> Official API Docs</a>.
 </div>

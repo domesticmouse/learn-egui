@@ -51,7 +51,7 @@
 <h1>Reference: The <code>eframe::App</code> Immediate-Mode Loop</h1>
 <p class="subtitle">One-page syntax and mental-model reference for Lessons 0000 &amp; 0001. Keep open or print while writing <code>egui</code> panels.</p>
 
-<h2>1. The Mental Model (One Frame = One Function Call)</h2>
+<h2 id="1-the-mental-model-one-frame-one-function-call">1. The Mental Model (One Frame = One Function Call)</h2>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 flowchart TD
@@ -64,7 +64,7 @@ flowchart TD
   </pre>
 </figure>
 <p><em>The <code>eframe::App::update</code> lifecycle across a single frame.</em></p>
-<h2>2. Complete Runnable Skeleton (<code>src/main.rs</code>)</h2>
+<h2 id="2-complete-runnable-skeleton-src-main-rs">2. Complete Runnable Skeleton (<code>src/main.rs</code>)</h2>
 <pre><code class="language-rust">use eframe::egui;
 
 fn main() -&gt; eframe::Result {
@@ -148,7 +148,7 @@ impl eframe::App for PcbReviewerApp {
         });
     }
 }</code></pre>
-<h2>3. Common Panel &amp; Widget Signatures</h2>
+<h2 id="3-common-panel-amp-widget-signatures">3. Common Panel &amp; Widget Signatures</h2>
 <table class="ref-table">
 <thead>
 <tr>

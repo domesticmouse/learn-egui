@@ -64,7 +64,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 10.1: <code>HashMap&lt;PinId, ReviewNote&gt;</code> provides $O(1)$ lookup by <code>PinId</code>, <code>HashMap::entry</code> prevents overwriting existing notes, <code>sorted_review_pins()</code> guarantees deterministic frame layout order, and <code>egui::Window</code> renders the floating callout.</em></p>
-<h2>1. Just-in-Time Rust: <code>HashMap&lt;PinId, ReviewNote&gt;</code>, <code>Hash</code> + <code>Eq</code> &amp; the <code>Entry</code> API</h2>
+<h2 id="1-just-in-time-rust-hashmap-lt-pinid-reviewnote-gt-hash-eq-amp-the-entry-api">1. Just-in-Time Rust: <code>HashMap&lt;PinId, ReviewNote&gt;</code>, <code>Hash</code> + <code>Eq</code> &amp; the <code>Entry</code> API</h2>
 <p>Why store review notes in <a href="https://doc.rust-lang.org/std/collections/struct.HashMap.html"><code>std::collections::HashMap&lt;PinId, ReviewNote&gt;</code></a> instead of a plain <code>Vec&lt;ReviewNote&gt;</code>? When <code>ViewState</code> holds <code>selected_pin: Option&lt;PinId&gt;</code>, we want direct lookup by <code>PinId</code> even if pins are later deleted, synced out of order, or imported from a database (<a href="https://doc.rust-lang.org/book/ch08-03-hash-maps.html">Rust Book §8.3</a>).</p>
 <p>To use our tuple struct <code>PinId(pub u32)</code> as a <code>HashMap</code> key, it derives <code>PartialEq</code>, <code>Eq</code>, and <code>Hash</code> (plus <code>PartialOrd</code> and <code>Ord</code> so we can sort pins by ID). And instead of calling <code>self.review_pins.insert(id, note)</code>—which would silently overwrite an existing note if a duplicate <code>PinId</code> arrived—we use <a href="https://doc.rust-lang.org/std/collections/struct.HashMap.html#method.entry"><code>HashMap::entry</code></a>:<span class="sidenote-number"></span><span class="sidenote">Why does <code>sorted_review_pins()</code> sort the <code>HashMap</code> values before we render buttons in <code>SidePanel</code>? Rust's <code>HashMap</code> uses a randomly seeded SipHash function per process to prevent hash-flooding attacks, so iterating over <code>review_pins.values()</code> directly would shuffle your UI buttons on every launch!</span></p>
 <pre><code class="language-rust">use std::collections::{HashMap, hash_map::Entry};
@@ -108,7 +108,7 @@ impl BoardModel {
         list
     }
 }</code></pre>
-<h2>2. Floating Callout Overlays with <code>egui::Window</code> and <code>egui::Id::new</code></h2>
+<h2 id="2-floating-callout-overlays-with-egui-window-and-egui-id-new">2. Floating Callout Overlays with <code>egui::Window</code> and <code>egui::Id::new</code></h2>
 <p>When the engineer clicks a review pin in the <code>SidePanel</code> (or drops a new pin on the canvas in <code>PlacePin</code> mode via hotkey <code>P</code>), <code>self.view.select_review_pin(&amp;self.board, pin.id)</code> sets <code>self.view.selected_pin = Some(pin.id)</code> and centres the PCB viewport on <code>pin.position_mm</code>.</p>
 <p>To display the floating callout overlay on top of the canvas, we use <a href="https://docs.rs/egui/latest/egui/containers/struct.Window.html"><code>egui::Window</code></a> keyed by a deterministic <a href="https://docs.rs/egui/latest/egui/struct.Id.html#method.new"><code>egui::Id::new((&quot;review_pin_callout&quot;, pin.id.0))</code></a>:</p>
 <pre><code class="language-rust">pub fn render_active_pin_callout(&amp;mut self, ctx: &amp;egui::Context) {
@@ -284,7 +284,7 @@ fn review_pin_entry_api_prevents_overwrites_and_sorts_deterministically() {
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://doc.rust-lang.org/book/ch08-03-hash-maps.html">The Rust Programming Language — §8.3 &quot;Storing Keys with Associated Values in Hash Maps&quot;</a> and <a href="https://docs.rs/egui/latest/egui/containers/struct.Window.html"><code>egui::Window</code> Official API Docs</a>.
 </div>

@@ -65,7 +65,7 @@ stateDiagram-v2
   </pre>
 </figure>
 <p><em>Figure 9.1: Tool state machine modelled with a data-carrying Rust <code>enum ActiveTool</code> so ruler coordinates only exist while in <code>Measure</code> mode.</em></p>
-<h2>1. Just-in-Time Rust: State Machines with Data-Carrying Enums</h2>
+<h2 id="1-just-in-time-rust-state-machines-with-data-carrying-enums">1. Just-in-Time Rust: State Machines with Data-Carrying Enums</h2>
 <p>Unlike C or Java enums that are glorified integer constants, each variant of a Rust <code>enum</code> can carry its own typed payload (<a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html">Rust Book §6.1</a>).</p>
 <p>So, by modelling our CAD tool as <code>ActiveTool</code>, it becomes impossible for stale ruler coordinates to hang around when the user switches back to <code>Select</code> mode:<span class="sidenote-number"></span><span class="sidenote">Making illegal states unrepresentable is one of Rust's best party tricks: instead of juggling separate <code>is_measuring: bool</code> and <code>ruler_start: Option&lt;Pos2&gt;</code> fields that inevitably get out of sync, the <code>ActiveTool::Measure</code> variant owns its endpoints directly.</span></p>
 <pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq)]
@@ -96,7 +96,7 @@ impl RulerMeasurement {
         }
     }
 }</code></pre>
-<h2>2. Consuming Keyboard Shortcuts with <code>ctx.input_mut</code> &amp; <code>consume_key</code></h2>
+<h2 id="2-consuming-keyboard-shortcuts-with-ctx-input-mut-amp-consume-key">2. Consuming Keyboard Shortcuts with <code>ctx.input_mut</code> &amp; <code>consume_key</code></h2>
 <p>Now, what happens if the user is typing <code>&quot;m&quot;</code> into the BOM search box from Lesson 0008? You definitely don't want that keystroke switching tools mid-search!</p>
 <p>So, we first check <code>!ctx.wants_keyboard_input()</code> to make sure no text box has keyboard focus, and then match our CAD hotkeys using <a href="https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key"><code>InputState::consume_key</code></a>. Calling <code>consume_key</code> both returns <code>true</code> when the key was pressed and removes the key event from the frame's queue so no other widget reacts to it twice:</p>
 <pre><code class="language-rust">pub fn handle_hotkeys(&amp;mut self, ctx: &amp;egui::Context) {
@@ -275,7 +275,7 @@ fn headless_hotkeys_switch_tools_and_fit_viewport() {
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key"><code>egui::InputState::consume_key</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html">The Rust Programming Language — §6.1 &quot;Defining an Enum&quot;</a>.
 </div>

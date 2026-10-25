@@ -855,6 +855,61 @@ table.ref-table th {
   border-bottom: 2px solid var(--border-strong);
 }
 
+/* Course Index Act Table of Contents */
+.act-toc {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--accent-copper);
+  border-radius: 6px;
+  padding: 1.15rem 1.4rem;
+  margin: 1.5rem 0 2.25rem 0;
+}
+
+.act-toc-title {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-copper);
+  margin-bottom: 0.75rem;
+}
+
+.act-toc ol {
+  margin: 0;
+  padding-left: 1.35rem;
+}
+
+.act-toc li {
+  margin: 0.45rem 0;
+  font-size: 0.93rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.act-toc li a {
+  font-weight: 600;
+  color: var(--text-main);
+  text-decoration: none;
+}
+
+.act-toc li a:hover {
+  color: var(--accent-silk);
+  text-decoration: underline;
+}
+
+.act-toc-badge {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--accent-copper);
+  background: var(--bg-code);
+  border: 1px solid var(--border-subtle);
+  padding: 0.12rem 0.45rem;
+  border-radius: 3px;
+  margin-left: 0.4rem;
+  white-space: nowrap;
+}
+
 /* Course Index Lesson Cards */
 .lesson-grid {
   display: grid;

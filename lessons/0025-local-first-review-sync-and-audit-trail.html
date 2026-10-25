@@ -52,7 +52,7 @@
 <h1>0025. Local-First Replica Sync, Atomic SQL Transactions &amp; Tamper-Evident Audit Trails</h1>
 <p class="subtitle">Executing all-or-nothing SQL sign-off batches (<code>BEGIN</code> / <code>COMMIT</code> / <code>ROLLBACK</code>), chaining tamper-evident 64-bit hashes across <code>AuditLogEntry</code> records (<code>verify_audit_chain</code>), merging remote engineer replicas (<code>sync_with_remote_replica</code>), and generating the Act VI <code>QualityScorecard</code>.</p>
 
-<h2>All-or-Nothing Sign-Off Transactions &amp; Tamper-Evident Audit Trails</h2>
+<h2 id="all-or-nothing-sign-off-transactions-amp-tamper-evident-audit-trails">All-or-Nothing Sign-Off Transactions &amp; Tamper-Evident Audit Trails</h2>
 <p>When a lead hardware engineer signs off a batch of resolved review pins before Gerber tape-out, partial updates are dangerous: if 2 of 3 pins transition cleanly (<code>Resolved -&gt; Verified</code>) but the 3rd pin is still <code>Open</code> (an illegal <code>Open -&gt; Verified</code> jump), the database must <strong>roll back</strong> the entire batch so the review store and its compliance audit log never diverge.<span class="sidenote-number"></span><span class="sidenote"><strong>Local-First Embedded Replicas &amp; Hash-Chained Audit Logs:</strong> Each <code>AuditLogEntry</code> commits <code>prev_hash: u64</code> into <code>compute_audit_entry_hash(seq, pin_id, from_status, to_status, prev_hash)</code>. Mutating or reordering any historical sign-off breaks <code>verify_audit_chain()</code> immediately.</span></p>
 <figure class="mermaid-figure">
   <pre class="mermaid">
@@ -67,7 +67,7 @@ flowchart LR
     style Rollback fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2>Atomic Sign-Off Batches, <code>AuditLogEntry</code> Hash Chains &amp; Replica Sync</h2>
+<h2 id="atomic-sign-off-batches-auditlogentry-hash-chains-amp-replica-sync">Atomic Sign-Off Batches, <code>AuditLogEntry</code> Hash Chains &amp; Replica Sync</h2>
 <figure>
   <figcaption>Atomic transactions, hash-chained audit logs, and replica sync in crates/pcb-doc/src/lib.rs</figcaption>
   <pre><code class="language-rust">#[derive(Clone, Debug, PartialEq, Eq)]
@@ -242,7 +242,7 @@ cargo mutants --manifest-path ./apps/0025-local-first-review-sync-and-audit-trai
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://www.sqlite.org/lang_transaction.html">SQLite / Turso Documentation — <code>BEGIN</code> / <code>COMMIT</code> / <code>ROLLBACK</code> Transactions</a> and <a href="https://docs.turso.tech/features/embedded-replicas/introduction">Turso Embedded Replicas Architecture Guide</a>.
 </div>

@@ -54,7 +54,7 @@
 
 <p>Hardcoding PCB pads in screen pixels works fine for a static demo, right up until you try to inspect a real board.</p>
 <p>In <a href="./0002-custom-2d-canvas-and-painter.html">Lesson 0002</a>, our pads and traces were drawn at fixed pixel offsets from the top-left corner of the window. Real KiCad boards, however, live in <strong>physical millimetres (<code>mm</code>)</strong>—say, a <code>100 mm × 70 mm</code> board with a <code>0.8 mm</code> power trace and a <code>4.0 mm × 2.2 mm</code> SMD pad—and you need to pan across the board and zoom smoothly into dense pin pitches around your mouse cursor.</p>
-<h2>1. Two Coordinate Spaces: World (<code>mm</code>) vs. Screen (<code>px</code>)</h2>
+<h2 id="1-two-coordinate-spaces-world-mm-vs-screen-px">1. Two Coordinate Spaces: World (<code>mm</code>) vs. Screen (<code>px</code>)</h2>
 <p>So, every 2D CAD viewport maintains a mathematical camera that converts between two coordinate systems:<span class="sidenote-number"></span><span class="sidenote">Turns out, <code>egui</code>'s maths crate (<code>emath</code>) provides <a href="https://docs.rs/emath/latest/emath/struct.TSTransform.html"><code>egui::emath::TSTransform</code></a> (&quot;Translation + Scaling Transform&quot;) out of the box, complete with operator overloading (<code>transform * pos</code>) and <code>.inverse()</code>.</span></p>
 <ul>
 <li><strong>World Space (<code>world_mm: Pos2</code>):</strong> Physical board coordinates in millimetres. A pad at <code>pos2(20.0, 22.0)</code> stays at <code>(20.0 mm, 22.0 mm)</code> forever, regardless of window size or zoom level.</li>
@@ -74,7 +74,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 3.1: <code>BoardViewport</code> wraps <code>TSTransform</code> to convert bi-directionally between physical millimetres and screen pixels.</em></p>
-<h2>2. Encapsulating the Camera in <code>struct BoardViewport</code></h2>
+<h2 id="2-encapsulating-the-camera-in-struct-boardviewport">2. Encapsulating the Camera in <code>struct BoardViewport</code></h2>
 <p>Let's wrap <code>TSTransform</code> inside a dedicated <code>BoardViewport</code> struct with four testable methods:<span class="sidenote-number"></span><span class="sidenote">The reason <code>zoom_around</code> adjusts <code>translation</code> is a classic CAD rite of passage: if you simply multiply <code>self.transform.scaling *= zoom_factor</code> on its own, the board zooms toward <code>(0, 0)</code> in the top-left corner and flies right away from your mouse cursor! Recording <code>world_anchor = self.screen_to_world(screen_anchor)</code> before scaling and solving $\text{translation} = \text{screen_anchor} - \text{world_anchor} \cdot \text{new_scale}$ keeps the exact PCB pad under your cursor pinned in place.</span></p>
 <pre><code class="language-rust">pub const MIN_ZOOM: f32 = 1.5;
 pub const MAX_ZOOM: f32 = 60.0;
@@ -113,7 +113,7 @@ impl BoardViewport {
             screen_anchor.to_vec2() - world_anchor.to_vec2() * new_scale;
     }
 }</code></pre>
-<h2>3. Wiring Drag-to-Pan &amp; Scroll-to-Zoom in <code>CentralPanel</code></h2>
+<h2 id="3-wiring-drag-to-pan-amp-scroll-to-zoom-in-centralpanel">3. Wiring Drag-to-Pan &amp; Scroll-to-Zoom in <code>CentralPanel</code></h2>
 <p>Now, inside <code>PcbReviewerApp::update</code>, we upgrade our canvas allocation from <code>Sense::hover()</code> to <a href="https://docs.rs/egui/latest/egui/struct.Sense.html#method.drag"><code>Sense::drag()</code></a> and inspect both <code>response.dragged()</code> and <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.input"><code>ui.input(|i| i.smooth_scroll_delta.y)</code></a>:</p>
 <pre><code class="language-rust">let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::drag());
 
@@ -271,7 +271,7 @@ fn zoom_around_keeps_cursor_world_point_stationary_and_clamps_scale() {
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/emath/latest/emath/struct.TSTransform.html"><code>egui::emath::TSTransform</code> API Documentation</a>.
 Inspect how <code>TSTransform::inverse()</code> and <code>Mul&lt;Pos2&gt;</code> are implemented in <code>emath</code>.

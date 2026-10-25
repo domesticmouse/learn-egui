@@ -63,7 +63,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 6.1: Component metadata feeds both <code>Painter::text</code> on the 2D canvas and semantic <code>ui.label</code> nodes verified headlessly by <code>egui_kittest::Harness</code>.</em></p>
-<h2>1. Just-in-Time Rust: Owned <code>String</code> vs. Borrowed <code>&amp;str</code> &amp; <code>format!()</code></h2>
+<h2 id="1-just-in-time-rust-owned-string-vs-borrowed-amp-str-amp-format">1. Just-in-Time Rust: Owned <code>String</code> vs. Borrowed <code>&amp;str</code> &amp; <code>format!()</code></h2>
 <p>When modelling a component symbol or net label in Rust, you will immediately run into two string types (<a href="https://doc.rust-lang.org/book/ch08-02-strings.html">Rust Book §8.2</a>):<span class="sidenote-number"></span><span class="sidenote">Because <code>&amp;String</code> automatically coerces to <code>&amp;str</code> (via the <code>Deref</code> trait), a function that accepts <code>&amp;str</code> can take both string literals like <code>&quot;U1&quot;</code> and borrowed heap strings like <code>&amp;comp.ref_des</code> without copying a single byte!</span></p>
 <ul>
 <li><strong><code>&amp;str</code> (String Slice):</strong> An immutable, fat-pointer view (<code>ptr + len</code>) borrowing existing UTF-8 bytes in memory (such as a compile-time string literal <code>&quot;Top Copper (F.Cu)&quot;</code> or a slice of a <code>String</code>). It is <code>Copy</code> and does not own heap memory.</li>
@@ -84,7 +84,7 @@ impl ComponentSymbol {
         format!("{}: {} ({})", self.ref_des, self.value, self.package_name)
     }
 }</code></pre>
-<h2>2. Drawing Silkscreen Reference Designators with <code>Painter::text</code></h2>
+<h2 id="2-drawing-silkscreen-reference-designators-with-painter-text">2. Drawing Silkscreen Reference Designators with <code>Painter::text</code></h2>
 <p>On the 2D canvas, <a href="https://docs.rs/egui/latest/egui/struct.Painter.html#method.text"><code>Painter::text</code></a> renders crisp vector-rasterised glyphs anchored to any screen-space <code>Pos2</code> using <a href="https://docs.rs/egui/latest/egui/enum.Align2.html"><code>Align2</code></a> and <a href="https://docs.rs/egui/latest/egui/struct.FontId.html"><code>FontId</code></a>:<span class="sidenote-number"></span><span class="sidenote">Using <code>Align2::CENTER_CENTER</code> places the exact geometric centre of the rendered glyph bounding box at <code>center_px</code>, keeping <code>U1</code> centred inside its IC body at any zoom level.</span></p>
 <pre><code class="language-rust">let center_px = self.viewport.world_to_screen(comp.center_mm);
 painter.text(
@@ -94,7 +94,7 @@ painter.text(
     egui::FontId::monospace((2.2 * scale).clamp(9.0, 22.0)),
     PcbLayer::Silkscreen.color(),
 );</code></pre>
-<h2>3. Headless UI Verification with <code>egui_kittest::Harness</code></h2>
+<h2 id="3-headless-ui-verification-with-egui-kittest-harness">3. Headless UI Verification with <code>egui_kittest::Harness</code></h2>
 <p>So, how do you test a GUI without opening a real OS window and hijacking your mouse cursor?</p>
 <p>Turns out, <code>egui_kittest</code> solves this cleanly by tapping into AccessKit's semantic accessibility node tree. By adding <code>egui_kittest = { version = &quot;0.33&quot;, features = [&quot;eframe&quot;] }</code> under <code>[dev-dependencies]</code>, we can spin up our entire <code>eframe::App</code> headlessly in milliseconds, query widgets by their label, and click buttons directly from <code>cargo test</code>:</p>
 <pre><code class="language-rust">use egui_kittest::{Harness, kittest::Queryable};
@@ -268,7 +268,7 @@ exclude_re = [
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui_kittest/latest/egui_kittest/struct.Harness.html"><code>egui_kittest::Harness</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/book/ch08-02-strings.html">The Rust Programming Language — §8.2 &quot;Storing UTF-8 Encoded Text with Strings&quot;</a>.
 </div>

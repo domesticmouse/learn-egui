@@ -68,7 +68,7 @@ flowchart TD
   </pre>
 </figure>
 <p><em>Figure 1.1: Inside a single call to <code>update(&amp;mut self, ctx, frame)</code>, <code>SidePanel</code> mutates <code>self</code> in-place via <code>&amp;mut</code> before <code>CentralPanel</code> reads <code>self</code> to paint the board.</em></p>
-<h2>1. Your Rust <code>struct</code> Is the Only State</h2>
+<h2 id="1-your-rust-struct-is-the-only-state">1. Your Rust <code>struct</code> Is the Only State</h2>
 <p>Recall the <code>PcbReviewerApp</code> struct we initialised in <a href="./0000-project-setup-and-eframe-boot.html">Lesson 0000</a>. Four <code>bool</code> fields track which PCB layers are currently visible:</p>
 <pre><code class="language-rust">pub struct PcbReviewerApp {
     pub show_top_copper: bool,
@@ -76,7 +76,7 @@ flowchart TD
     pub show_silkscreen: bool,
     pub show_ratsnest: bool,
 }</code></pre>
-<h2>2. Why <code>egui</code> Widgets Take <code>&amp;mut</code> References</h2>
+<h2 id="2-why-egui-widgets-take-amp-mut-references">2. Why <code>egui</code> Widgets Take <code>&amp;mut</code> References</h2>
 <p>When <code>eframe</code> redraws your window, it calls:<span class="sidenote-number"></span><span class="sidenote">In <a href="https://docs.rs/eframe/latest/eframe/trait.App.html#tymethod.update"><code>eframe::App::update</code></a>, <code>&amp;mut self</code> is shorthand for <code>self: &amp;mut PcbReviewerApp</code>—an exclusive mutable borrow of your struct for the duration of a single frame (<a href="https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html#mutable-references">Rust Book §4.2</a>).</span></p>
 <pre><code class="language-rust">fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame)</code></pre>
 <p>So, inside <code>update</code>, we place a left <a href="https://docs.rs/egui/latest/egui/containers/panel/struct.SidePanel.html"><code>egui::SidePanel</code></a> for our layer controls, followed by an <a href="https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html"><code>egui::CentralPanel</code></a> for our 2D PCB canvas. Look closely at what we pass into <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.checkbox"><code>ui.checkbox</code></a>:</p>
@@ -92,7 +92,7 @@ flowchart TD
 <li><strong>The Closure (<code>|ui| { ... }</code>):</strong> <code>.show(ctx, |ui| { ... })</code> takes an inline anonymous function (<a href="https://doc.rust-lang.org/book/ch13-01-closures.html">Rust Book §13.1</a>) receiving a temporary <a href="../reference/glossary.html"><code>&amp;mut egui::Ui</code></a> region. When the closure ends, <code>ui</code> is dropped—only your <code>self</code> struct persists to the next frame.</li>
 <li><strong>The Mutable Borrow (<code>&amp;mut self.show_top_copper</code>):</strong> Passing <code>&amp;mut</code> grants <code>ui.checkbox</code> temporary read-write access to that single <code>bool</code> field. In one function call, <code>ui.checkbox</code> <em>reads</em> the boolean to draw the tick mark, checks whether the mouse clicked that rectangle this frame, and if so, <em>flips the boolean in place</em> before returning. No listeners, no state-sync plumbing.</li>
 </ol>
-<h2>3. Making Button Actions Testable &amp; Mutant-Proof</h2>
+<h2 id="3-making-button-actions-testable-amp-mutant-proof">3. Making Button Actions Testable &amp; Mutant-Proof</h2>
 <p>Now, what about preset buttons like <strong>&quot;Isolate Top Copper&quot;</strong> or <strong>&quot;Show All Layers&quot;</strong>? When you click a button, <code>ui.button(&quot;...&quot;).clicked()</code> returns <code>true</code> for that single frame.</p>
 <p>It is tempting to inline the boolean assignments right inside the <code>if ui.button(...).clicked()</code> block. But, if you extract that state transition into a method on <code>PcbReviewerApp</code> taking <code>&amp;mut self</code>, your <code>update()</code> loop stays clean <em>and</em> you can test and mutate every state transition with <code>cargo test</code> and <a href="https://mutants.rs/"><code>cargo mutants</code></a> (<a href="../reference/testing-and-mutation-cheatsheet.html">Testing &amp; Mutation Cheat Sheet</a>):<span class="sidenote-number"></span><span class="sidenote">The reason our unit test setup matters here is interesting: if a test starts from a state where <code>show_top_copper</code> is <em>already</em> <code>true</code> and the other layers are already <code>false</code>, and then calls <code>app.isolate_top_copper()</code>, <code>cargo mutants</code> can replace the body of <code>isolate_top_copper</code> with an empty no-op <code>()</code> and the test will still pass! Starting from the opposite state forces the method to actually flip every field.</span></p>
 <pre><code class="language-rust">impl PcbReviewerApp {
@@ -348,7 +348,7 @@ fn show_all_layers_enables_every_layer() {
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/#understanding-immediate-mode"><code>egui</code> Crate Root Documentation — &quot;Understanding Immediate Mode&quot; &amp; &quot;Quick Start&quot;</a> by Emil Ernerfeldt.
 Pay special attention to how <code>ui.label</code>, <code>ui.button</code>, and mutable state fit together, and why <code>egui</code> has no widget lifecycle callbacks.

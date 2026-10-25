@@ -54,7 +54,7 @@
 
 <p>The joy of building a custom hardware tool is getting your own PCB viewport up on screen. The first hurdle, though, is getting past a blank terminal and figuring out which crate actually opens the window.</p>
 <p>Before we wire up the layer-visibility toggles in <a href="./0001-the-immediate-mode-loop.html">Lesson 0001</a>, our code needs a real, runnable Rust project to live in. So, let's set up Cargo, sort out how <a href="../reference/glossary.html"><code>eframe</code></a> and <a href="../reference/glossary.html"><code>egui</code></a> divide the work, and get <code>fn main()</code> booting a native desktop window.</p>
-<h2>1. <code>egui</code> vs. <code>eframe</code>: Who Does What?</h2>
+<h2 id="1-egui-vs-eframe-who-does-what">1. <code>egui</code> vs. <code>eframe</code>: Who Does What?</h2>
 <p>Turns out, Emil Ernerfeldt's <code>egui</code> crate doesn't actually open OS windows or talk directly to Metal, Vulkan, or OpenGL.<span class="sidenote-number"></span><span class="sidenote">Because <a href="https://docs.rs/egui/latest/egui/"><code>egui</code></a> only takes input events and outputs 2D triangles and textures, it can be embedded inside game engines, custom CAD renderers, or headless test runners.</span></p>
 <ul>
 <li><strong><code>egui</code> (The UI Core):</strong> Computes widget layouts, processes pointer/keyboard state, and generates 2D vector shapes for a single frame.</li>
@@ -71,7 +71,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 0.1: How Cargo and <code>eframe::run_native</code> initialise your state once, then drive the Lesson 0001 <code>update()</code> loop every frame.</em></p>
-<h2>2. Creating the Project &amp; Configuring <code>Cargo.toml</code></h2>
+<h2 id="2-creating-the-project-amp-configuring-cargo-toml">2. Creating the Project &amp; Configuring <code>Cargo.toml</code></h2>
 <p>In Rust, <a href="https://doc.rust-lang.org/cargo/guide/creating-a-new-project.html"><code>cargo new pcb-reviewer</code></a> generates a binary package with two key files: <code>Cargo.toml</code> (the manifest) and <code>src/main.rs</code> (the entry point).</p>
 <p>Here is the complete <code>Cargo.toml</code> for our Schematic &amp; PCB Reviewer:<span class="sidenote-number"></span><span class="sidenote"><strong>Tip: Single Dependency Import.</strong> Because <code>eframe</code> re-exports <code>egui</code> as <code>eframe::egui</code>, we only list <code>eframe</code> under <code>[dependencies]</code>. This guarantees your <code>egui</code> types never suffer a version mismatch with <code>eframe</code>.</span></p>
 <pre><code class="language-toml">[package]
@@ -87,7 +87,7 @@ eframe = "0.33"
 [profile.dev.package."*"]
 opt-level = 2</code></pre>
 <p>Now, those last three lines (<a href="https://doc.rust-lang.org/cargo/reference/profiles.html#overrides">Cargo Profile Overrides</a>) are doing a lot of heavy lifting. If you run a 2D CAD canvas in a stock Rust debug build (<code>opt-level = 0</code>), software rasterising and tessellation can feel like wading through treacle. By setting <code>opt-level = 2</code> on <code>package.&quot;*&quot;</code>, Cargo compiles third-party crates once at near-release speed so our viewport stays locked at 60 FPS, while our own edits in <code>src/main.rs</code> still recompile in under a second. Best of both worlds.</p>
-<h2>3. Anatomy of <code>src/main.rs</code></h2>
+<h2 id="3-anatomy-of-src-main-rs">3. Anatomy of <code>src/main.rs</code></h2>
 <p>So, let's look at the complete, runnable <code>src/main.rs</code> that hosts our <code>PcbReviewerApp</code> struct:<span class="sidenote-number"></span><span class="sidenote">In Rust, <a href="https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html"><code>Result&lt;T, E&gt;</code></a> represents an operation that either succeeds (<code>Ok(T)</code>) or fails (<code>Err(E)</code>). <code>eframe::Result</code> is a type alias for <code>Result&lt;(), eframe::Error&gt;</code>.</span></p>
 <pre><code class="language-rust">use eframe::egui;
 
@@ -154,17 +154,17 @@ mod tests {
         assert!(!app.show_ratsnest);
     }
 }</code></pre>
-<h3>Three Rust Details Worth Unpacking</h3>
+<h3 id="three-rust-details-worth-unpacking">Three Rust Details Worth Unpacking</h3>
 <ol>
 <li><strong>Builder Pattern on <code>ViewportBuilder</code>:</strong> When configuring <code>eframe::NativeOptions::default()</code>, we customise <code>options.viewport</code> with <code>egui::ViewportBuilder::default().with_inner_size([1024.0, 720.0])</code> to request a <code>1024×720</code> logical-point window while keeping all other window options at their defaults.</li>
 <li><strong>Custom <code>impl Default</code> Delegating to <code>reset_layers(&amp;mut self)</code>:</strong> Rust lets you slap <code>#[derive(Default)]</code> on a struct, which happily sets every <code>bool</code> field to <code>false</code>. Problem is, opening a PCB viewer where every copper and silkscreen layer is switched off looks suspiciously like a broken app. So, we write an explicit <code>impl Default for PcbReviewerApp</code> block that calls <code>app.reset_layers()</code>. The reason we pull <code>reset_layers(&amp;mut self)</code> out into its own method is also interesting: <code>cargo-mutants</code> skips <code>impl Default</code> blocks directly to avoid infinite recursion, so extracting a helper method lets our mutation runner actually verify our initialisation logic.</li>
 <li><strong>The App Creator Closure (<code>Box::new(|_cc| Ok(Box::new(...)))</code>):</strong> <a href="https://docs.rs/eframe/latest/eframe/fn.run_native.html"><code>eframe::run_native</code></a> takes a factory closure that runs <em>once</em> after the GPU context (<code>_cc: &amp;CreationContext</code>) is ready, allocating your <code>PcbReviewerApp</code> on the heap (<a href="https://doc.rust-lang.org/book/ch15-01-box.html"><code>Box::new</code></a>) and handing ownership to <code>eframe</code>.</li>
 </ol>
-<h2>4. Sanity-Saving Verification with <code>cargo-mutants</code></h2>
+<h2 id="4-sanity-saving-verification-with-cargo-mutants">4. Sanity-Saving Verification with <code>cargo-mutants</code></h2>
 <p>Writing unit tests feels great, right up until you realise a test can execute every line of a function without actually asserting anything useful.</p>
 <p>So, from Day 1, we pair <code>cargo test</code> with Martin Pool's <a href="https://mutants.rs/"><code>cargo-mutants</code></a> (<a href="../reference/testing-and-mutation-cheatsheet.html">Testing &amp; Mutation Cheat Sheet</a>).<span class="sidenote-number"></span><span class="sidenote">Why mutation testing? Standard line coverage only checks whether a line of code <em>ran</em> during a test. <a href="https://mutants.rs/"><code>cargo-mutants</code></a> deliberately hollows out method bodies or flips operators/booleans in your code and verifies that <code>cargo test</code> actually fails (a <strong>Caught Mutant</strong>) rather than silently passing (a <strong>Missed Mutant</strong>).</span> It is a fantastic sanity-saver that keeps our tests honest as the reviewer grows.</p>
 <p>Look at the <code>#[cfg(test)] mod tests</code> block at the bottom of <code>src/main.rs</code> above. The attribute <code>#[cfg(test)]</code> tells <code>rustc</code> to compile that module only when you run <code>cargo test</code> (<a href="https://doc.rust-lang.org/book/ch11-01-writing-tests.html">Rust Book §11.1</a>). When <code>cargo-mutants</code> replaces the body of <code>PcbReviewerApp::reset_layers</code> with an empty no-op <code>()</code>, <code>assert!(app.show_top_copper)</code> immediately fails and catches the mutant.</p>
-<h3>Installing <code>cargo-mutants</code></h3>
+<h3 id="installing-cargo-mutants">Installing <code>cargo-mutants</code></h3>
 <p><code>cargo-mutants</code> is a third-party Cargo subcommand that works directly with standard, stable Rust (no nightly toolchain required). Install it once globally with <code>cargo install</code>, then check it is on your <code>PATH</code>:</p>
 <pre><code class="language-bash"># Install the cargo-mutants subcommand once (takes ~30s to compile)
 cargo install --locked cargo-mutants
@@ -265,7 +265,7 @@ impl <input id="ex-blank-3" class="code-challenge-input" style="width:145px;" pl
 </section>
 
 <div class="prose-col">
-<h2>Recommended Primary Source</h2>
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
 <div class="callout">
   <strong>Read (5 mins):</strong> <a href="https://docs.rs/eframe/latest/eframe/#usage-native"><code>eframe</code> Crate Documentation — &quot;Usage, native&quot;</a>.
 Compare the minimal <code>eframe::run_native</code> example in the official docs with our <code>PcbReviewerApp</code> skeleton above.
