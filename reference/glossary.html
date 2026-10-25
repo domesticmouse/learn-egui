@@ -26,6 +26,10 @@
       <a href="../lessons/0011-review-status-workflow-and-popups.html">0011</a>
       <a href="../lessons/0012-drc-violation-overlay-and-minimap.html">0012</a>
       <a href="../lessons/0013-custom-layer-swatch-widget-and-design-tokens.html">0013</a>
+      <a href="../lessons/0014-multi-crate-workspace-doc-vs-ui-egui.html">0014</a>
+      <a href="../lessons/0015-loading-board-and-review-files-serde.html">0015</a>
+      <a href="../lessons/0016-copy-on-write-arc-document-snapshots.html">0016</a>
+      <a href="../lessons/0017-undo-redo-history-and-slider-coalescing.html">0017</a>
       <a href="./glossary.html" class="active">Glossary</a>
       <a href="./immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="./testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
@@ -179,6 +183,26 @@
       <td><strong>Struct Lifetime (<code>'a</code>) &amp; <code>egui::Widget</code></strong></td>
       <td>A generic lifetime annotation <code>&lt;'a&gt;</code> on a builder struct (such as <code>LayerSwatch&lt;'a&gt;</code>) proving that the struct cannot outlive the <code>&amp;'a mut</code> state fields it borrows while <code>impl&lt;'a&gt; egui::Widget for LayerSwatch&lt;'a&gt;</code> consumes <code>self</code> inside <code>ui.add(...)</code> (<a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html">Rust Book §10.3</a>).</td>
       <td><em>Avoid:</em> thinking lifetimes change runtime performance (<code>'a</code> is purely a compile-time borrow check erased before code generation).</td>
+    </tr>
+    <tr>
+      <td><strong>Engine-First Crate Layering (<code>L0</code>–<code>L7</code>)</strong></td>
+      <td>A multi-crate Cargo <code>[workspace]</code> architecture that isolates pure domain state (<code>crates/pcb-doc</code> at <code>L1</code>, depending only on <code>L0</code> <code>emath</code>) from UI rendering (<code>pcb-reviewer</code> at <code>L6</code>/<code>L7</code>), enforced by Tier 1 manifest gates (<code>validate_l1_manifest_no_ui_deps</code>) so domain tests and <code>cargo-mutants</code> run in milliseconds without linking <code>eframe</code> (<a href="https://doc.rust-lang.org/cargo/reference/workspaces.html">Cargo Book §3.3</a>).</td>
+      <td><em>Avoid:</em> importing <code>egui::Color32</code> or <code>eframe</code> inside <code>L1</code> domain crates (expose UI-agnostic RGB tuples or geometry primitives in <code>L1</code> and bridge them in <code>L6</code>).</td>
+    </tr>
+    <tr>
+      <td><strong>Versioned Envelope Serialization (<code>serde</code>, <code>thiserror</code>)</strong></td>
+      <td>Wrapping a serialized domain model in an explicit envelope struct (<code>ReviewSessionEnvelope { schema_version, board_id, board }</code>) and returning typed <code>Result&lt;T, SessionIoError&gt;</code> values derived via <code>thiserror::Error</code> so malformed JSON or incompatible schema versions surface as non-destructive UI banners rather than panics (<a href="https://serde.rs/">serde.rs</a>).</td>
+      <td><em>Avoid:</em> calling <code>.unwrap()</code> on <code>serde_json::from_str</code> or using <code>..</code> when destructuring persisted envelopes.</td>
+    </tr>
+    <tr>
+      <td><strong>Copy-on-Write (<code>Arc::make_mut</code>, <code>Arc::ptr_eq</code>)</strong></td>
+      <td>Wrapping document collections in <code>std::sync::Arc&lt;...&gt;</code> so cloning a <code>BoardModel</code> snapshot copies only four 8-byte pointers (<code>O(1)</code>), while mutating a collection via <code>Arc::make_mut</code> clones the inner buffer only when <code>strong_count &gt; 1</code> and leaves untouched buffers pointer-shared (<code>Arc::ptr_eq == true</code>) (<a href="https://doc.rust-lang.org/std/sync/struct.Arc.html#method.make_mut">std::sync::Arc</a>).</td>
+      <td><em>Avoid:</em> deep-cloning <code>Vec&lt;TraceSegment&gt;</code> or <code>HashMap&lt;PinId, ReviewNote&gt;</code> on every edit or snapshot.</td>
+    </tr>
+    <tr>
+      <td><strong>Undo/Redo Ring Buffer &amp; Drag Coalescing (<code>VecDeque</code>, <code>coalesce_key</code>)</strong></td>
+      <td>A bounded history stack (<code>VecDeque&lt;HistoryEntry&gt;</code>) that evicts oldest snapshots via <code>pop_front()</code>, swaps snapshots in <code>O(1)</code> via <code>std::mem::replace</code>, and merges consecutive 60-FPS <code>egui::Slider</code> drag frames sharing <code>Some(coalesce_key)</code> into a single undo entry until <code>Response::drag_stopped()</code> calls <code>commit_coalesce()</code> (<a href="https://doc.rust-lang.org/std/collections/struct.VecDeque.html">std::collections::VecDeque</a>).</td>
+      <td><em>Avoid:</em> pushing a new undo entry on every <code>slider_resp.changed()</code> frame without a <code>coalesce_key</code>.</td>
     </tr>
   </tbody>
 </table>

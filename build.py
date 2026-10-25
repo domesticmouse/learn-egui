@@ -1152,6 +1152,169 @@ def widget_drc_minimap_sim(scripts_out: list[str]) -> str:
 </section>"""
 
 
+def widget_workspace_layers_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initWorkspaceLayersSimulator("workspace-layers-sim");')
+    return """<section class="full-width-panel" id="workspace-layers-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Multi-Crate <code>L1</code>–<code>L6</code> Dependency Gate</span>
+    <span class="panel-badge">pcb-doc (L1) • pcb-reviewer (L6) • validate_l1_manifest_no_ui_deps</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Toggle dependencies in <code>crates/pcb-doc/Cargo.toml</code> below to test how the Tier 1 architecture gate enforces a one-way dependency DAG and keeps domain compilation decoupled from <code>egui</code> / <code>eframe</code>.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. <code>crates/pcb-doc/Cargo.toml</code></h4>
+      <label class="egui-checkbox" style="margin-bottom:0.45rem;">
+        <input type="checkbox" checked disabled>
+        <code>emath = "0.33"</code> (L0 math — allowed)
+      </label>
+      <label class="egui-checkbox" style="margin-bottom:0.45rem;">
+        <input type="checkbox" data-dep="egui">
+        Inject <code>egui = "0.33"</code> (L6 UI — forbidden!)
+      </label>
+      <label class="egui-checkbox" style="margin-bottom:0.45rem;">
+        <input type="checkbox" data-dep="eframe">
+        Inject <code>eframe = "0.33"</code> (L7 Shell — forbidden!)
+      </label>
+      <label class="egui-checkbox">
+        <input type="checkbox" data-dep="rfd">
+        Inject <code>rfd = "0.15"</code> (Native OS Dialog — forbidden!)
+      </label>
+    </div>
+
+    <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px;">
+      <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="Workspace Crate Layer Graph">
+        <rect x="24" y="20" width="272" height="52" rx="6" fill="#14231c" stroke="#3dd68c" stroke-width="2"/>
+        <text x="160" y="42" text-anchor="middle" fill="#e6edf3" font-family="monospace" font-size="12" font-weight="bold">pcb-reviewer (L6 UI / L7 App)</text>
+        <text x="160" y="59" text-anchor="middle" fill="#8b949e" font-family="monospace" font-size="10">eframe + egui + egui_kittest</text>
+
+        <line x1="160" y1="74" x2="160" y2="122" stroke="#3dd68c" stroke-width="2.5"/>
+        <polygon points="155,118 165,118 160,126" fill="#3dd68c"/>
+
+        <rect data-svg="l1-box" x="24" y="128" width="272" height="60" rx="6" fill="#141a21" stroke="#3b8eea" stroke-width="2"/>
+        <text x="160" y="152" text-anchor="middle" fill="#e6edf3" font-family="monospace" font-size="12" font-weight="bold">crates/pcb-doc (L1 Domain)</text>
+        <text data-svg="l1-status" x="160" y="172" text-anchor="middle" fill="#3dd68c" font-family="monospace" font-size="10">PASS: 0 UI crates in L1</text>
+      </svg>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Tier 1 Manifest Gate Output</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.75rem; padding:0.75rem;"><code class="language-rust" data-role="layers-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_serde_session_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initSerdeSessionSimulator("serde-session-sim");')
+    return """<section class="full-width-panel" id="serde-session-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Versioned <code>serde_json</code> Envelope &amp; Typed Error Recovery</span>
+    <span class="panel-badge">ReviewSessionEnvelope • thiserror • SessionIoError</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Switch between a valid v1 session payload, an unsupported v99 schema, an empty <code>board_id</code>, or truncated JSON below. Observe how <code>BoardModel::from_session_json</code> returns a typed <code>Result</code> without ever panicking or clobbering the active board.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Session Payload Scenario</h4>
+      <div class="btn-row" style="flex-direction:column; align-items:stretch; gap:0.45rem;">
+        <button class="action-btn" type="button" data-scenario="valid">1. Valid v1 Envelope (Load OK)</button>
+        <button class="action-btn" type="button" data-scenario="version99">2. schema_version: 99 (Reject)</button>
+        <button class="action-btn" type="button" data-scenario="emptyid">3. board_id: "   " (Reject)</button>
+        <button class="action-btn" type="button" data-scenario="corrupt">4. Truncated "{corrupt" (Reject)</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Raw JSON Input</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="serde-json-preview"></code></pre>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. <code>from_session_json</code> &amp; <code>ViewState</code></h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="serde-result-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_cow_arc_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initCowArcSimulator("cow-arc-sim");')
+    return """<section class="full-width-panel" id="cow-arc-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Copy-on-Write <code>Arc::make_mut</code> &amp; <code>Arc::ptr_eq</code> Visualizer</span>
+    <span class="panel-badge">Arc&lt;Vec&lt;T&gt;&gt; • Arc::make_mut • shared_arc_buffers</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Mutate individual collections on <code>working: BoardModel</code> or take/restore a baseline snapshot. Watch how <code>Arc::make_mut</code> clones <em>only</em> the touched collection when <code>strong_count &gt; 1</code>, leaving untouched buffers pointer-shared (<code>Arc::ptr_eq == true</code>).
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Document Operations</h4>
+      <div class="btn-row" style="flex-direction:column; align-items:stretch; gap:0.45rem;">
+        <button class="action-btn" type="button" data-cow="pin">Mutate <code>review_pins</code> (<code>Arc::make_mut</code>)</button>
+        <button class="action-btn" type="button" data-cow="pad">Mutate <code>pads</code> (<code>Arc::make_mut</code>)</button>
+        <button class="action-btn" type="button" data-cow="snapshot">Take Baseline Snapshot (<code>O(1) clone</code>)</button>
+        <button class="action-btn" type="button" data-cow="restore">Restore Snapshot (<code>O(1) clone</code>)</button>
+      </div>
+    </div>
+
+    <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px; padding:0.75rem;">
+      <div data-role="cow-bars" style="font-family:var(--font-mono); font-size:0.78rem; width:100%;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Pointer Sharing Telemetry</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.75rem; padding:0.75rem;"><code class="language-rust" data-role="cow-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
+def widget_undo_coalesce_sim(scripts_out: list[str]) -> str:
+    scripts_out.append('    initUndoCoalesceSimulator("undo-coalesce-sim");')
+    return """<section class="full-width-panel" id="undo-coalesce-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: <code>BoardHistory</code> Undo/Redo &amp; Slider Drag Coalescing</span>
+    <span class="panel-badge">VecDeque&lt;HistoryEntry&gt; • coalesce_key • commit_coalesce</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Drag the <strong>Pin #1 X (mm)</strong> slider across multiple intermediate values, then click <strong>Release Drag</strong> or <strong>Undo (Z)</strong>. Notice how 60 intermediate slider frames sharing <code>Some("drag_pin_1_x")</code> coalesce into a single undo entry that restores the exact pre-drag coordinate in one step!
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Continuous vs. Discrete Edits</h4>
+      <label style="display:block; font-family:var(--font-mono); font-size:0.78rem; margin-bottom:0.25rem;">
+        Slider: Pin #1 X (<span data-role="pin-x-label">20.0</span> mm)
+      </label>
+      <input type="range" data-param="pinX" min="10" max="85" step="2.5" value="20" style="width:100%; margin-bottom:0.55rem;">
+      <div class="btn-row" style="flex-wrap:wrap; gap:0.4rem;">
+        <button class="action-btn" type="button" data-hist="commit">Release Drag (<code>commit_coalesce</code>)</button>
+        <button class="action-btn" type="button" data-hist="discrete">Discrete Edit (+Pin)</button>
+        <button class="action-btn" type="button" data-hist="undo">Undo (Z)</button>
+        <button class="action-btn" type="button" data-hist="redo">Redo (Y)</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. <code>undo_stack</code> &amp; <code>redo_stack</code></h4>
+      <div data-role="undo-stack-list" style="font-family:var(--font-mono); font-size:0.76rem;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. <code>BoardHistory</code> State</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="undo-state"></code></pre>
+    </div>
+  </div>
+</section>"""
+
+
 def widget_layer_swatch_sim(scripts_out: list[str]) -> str:
     scripts_out.append('    initLayerSwatchSimulator("layer-swatch-sim");')
     return """<section class="full-width-panel" id="layer-swatch-sim">
@@ -1434,6 +1597,10 @@ def compile_markdown_body(
         "{{widget:review-triage-sim}}": lambda: widget_review_triage_sim(scripts_out),
         "{{widget:drc-minimap-sim}}": lambda: widget_drc_minimap_sim(scripts_out),
         "{{widget:layer-swatch-sim}}": lambda: widget_layer_swatch_sim(scripts_out),
+        "{{widget:workspace-layers-sim}}": lambda: widget_workspace_layers_sim(scripts_out),
+        "{{widget:serde-session-sim}}": lambda: widget_serde_session_sim(scripts_out),
+        "{{widget:cow-arc-sim}}": lambda: widget_cow_arc_sim(scripts_out),
+        "{{widget:undo-coalesce-sim}}": lambda: widget_undo_coalesce_sim(scripts_out),
     }
     for shortcode, factory in fullwidth_widgets.items():
         if shortcode in text:

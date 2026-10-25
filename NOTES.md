@@ -24,7 +24,7 @@
 
 ## Curriculum Arc (`0000`–`0025`) with Continuous Verification & Mutation Testing
 
-### Completed Lessons (`0000`–`0013`: Foundation + Act I + Act II + Act III)
+### Completed Lessons (`0000`–`0017`: Foundation + Act I + Act II + Act III + Act IV)
 - `0000-project-setup-and-eframe-boot.html` (App: `apps/0000-project-setup-and-eframe-boot`)
   - **`egui` Skill & PCB Feature**: Creating the Cargo crate (`Cargo.toml`, `eframe = "0.33"`, dev-profile optimization) and booting the native window with `eframe::run_native`.
   - **Just-in-Time Rust**: `impl Default` delegating to `reset_layers(&mut self)`, `ViewportBuilder` method chaining, `Box::new`, and `#[cfg(test)]` / `#[test]` / `assert!`.
@@ -91,24 +91,24 @@
   - **Just-in-Time Rust**: Implementing a foreign trait (`impl<'a> egui::Widget for LayerSwatch<'a>`) and struct lifetimes (`'a`).
   - **Cargo Verification & Mutation Coverage**: 24 unit + `egui_kittest` tests mounting `LayerSwatch<'a>` in isolation via `egui_kittest::Harness::new_ui_state` and inside the full `PcbReviewerApp` (`134 / 134 viable mutants caught, 21 unviable, 0 missed`).
 
-### Act IV: Scaling Up — Engine-First Architecture & Persistence (`0014`–`0017`)
+### Act IV: Scaling Up — Engine-First Architecture & Persistence (`0014`–`0017`) — *Completed*
 *Goal: Refactor the growing prototype into a clean multi-crate architecture (`egui-app-architecture` & `egui-cow-document-model`) with static lint gates, `proptest` property suites, and per-crate `cargo mutants -p <crate>`.*
-- `0014-multi-crate-workspace-doc-vs-ui-egui.html`
-  - **`egui` Skill & PCB Feature**: Split pure PCB/review domain data (`L1` `doc`) from `egui` rendering (`L6` `ui-egui`) so the core model compiles headlessly without UI dependencies.
-  - **Just-in-Time Rust**: Cargo workspaces, module visibility (`pub`, `pub(crate)`), and strict dependency layering.
-  - **Cargo Verification & Mutation Coverage**: Add Tier 1 static verification gates (`#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]`, `unsafe_code = "forbid"`, layer check) and run fast targeted `cargo test -p pcb-doc` + `cargo mutants -p pcb-doc` (which runs in seconds because `pcb-doc` never links `egui`/`wgpu`!).
-- `0015-loading-board-and-review-files-serde.html`
-  - **`egui` Skill & PCB Feature**: Serialize and deserialize board layouts and review sessions to JSON, surfacing clean error banners in `egui` when a file is malformed (no panics!).
-  - **Just-in-Time Rust**: `#[derive(Serialize, Deserialize)]`, `Result<T, E>`, the `?` operator, and `thiserror`.
-  - **Cargo Verification & Mutation Coverage**: Test lossless `save -> load` round-trips, schema version checks, and corrupt/truncated JSON inputs returning typed `Err`s; run `cargo mutants` to ensure error-mapping and validation branches cannot be bypassed.
-- `0016-copy-on-write-arc-document-snapshots.html`
-  - **`egui` Skill & PCB Feature**: Store board chunks and review annotations in `Arc<T>` so taking a full document snapshot before an edit costs only pointer copies.
-  - **Just-in-Time Rust**: Smart pointers (`Arc<T>`), `Arc::make_mut` copy-on-write mutation, and structural sharing.
-  - **Cargo Verification & Mutation Coverage**: Introduce [`proptest`](https://docs.rs/proptest/latest/proptest/) (Tier 2 verification)! Prove that mutating a cloned `Document` via `Arc::make_mut` never alters an older snapshot and preserves `Arc::ptr_eq` on untouched layers; verify with `cargo mutants`.
-- `0017-undo-redo-history-and-slider-coalescing.html`
-  - **`egui` Skill & PCB Feature**: Wire `Cmd+Z` / `Cmd+Shift+Z` and a visual History panel; coalesce continuous `egui` drags/sliders into a single undo step on release.
-  - **Just-in-Time Rust**: `VecDeque<HistoryState>`, snapshot diffing/revision counters, and drag-lifecycle detection.
-  - **Cargo Verification & Mutation Coverage**: Write a stateful `proptest!` sequence generator (`ApplyEdit`, `DragStep`, `CommitDrag`, `Undo`, `Redo`) verifying history invariants, and run `cargo mutants` on the history engine to achieve `0 missed mutants`.
+- `0014-multi-crate-workspace-doc-vs-ui-egui.html` (App: `apps/0014-multi-crate-workspace-doc-vs-ui-egui`)
+  - **`egui` Skill & PCB Feature**: Split pure PCB/review domain data (`L1` `crates/pcb-doc`, depending only on `emath`) from `egui` rendering (`L6`/`L7` `pcb-reviewer`) so the core model compiles headlessly without UI dependencies.
+  - **Just-in-Time Rust**: Cargo `[workspace]`, module visibility (`pub`, `pub(crate)`), and strict dependency layering (`validate_l1_manifest_no_ui_deps`).
+  - **Cargo Verification & Mutation Coverage**: Added Tier 1 static verification gates (`#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]`, `#![forbid(unsafe_code)]`, `validate_l1_manifest_no_ui_deps`) and verified 11 workspace tests (`98 / 98 caught` in `pcb-doc`, `46 / 46 caught` in `pcb-reviewer`; `144 / 144 viable mutants caught, 21 unviable, 0 missed`).
+- `0015-loading-board-and-review-files-serde.html` (App: `apps/0015-loading-board-and-review-files-serde`)
+  - **`egui` Skill & PCB Feature**: Serialize and deserialize board layouts and review sessions to versioned JSON (`ReviewSessionEnvelope`), surfacing dismissible `SessionIoError` banners in `SidePanel::right` without panicking.
+  - **Just-in-Time Rust**: `#[derive(Serialize, Deserialize)]` (`emath` `"serde"` feature), `Result<T, E>`, exhaustive struct destructuring, and `thiserror`.
+  - **Cargo Verification & Mutation Coverage**: 12 workspace tests verifying lossless `to_session_json -> from_session_json` round-trips, `CURRENT_SCHEMA_VERSION` validation, empty `board_id` rejection, and corrupt JSON recovery (`155 / 155 viable mutants caught, 21 unviable, 0 missed`).
+- `0016-copy-on-write-arc-document-snapshots.html` (App: `apps/0016-copy-on-write-arc-document-snapshots`)
+  - **`egui` Skill & PCB Feature**: Store `BoardModel` collections in `Arc<Vec<...>>` and `Arc<HashMap<...>>` (`serde` `"rc"` feature) so taking or restoring a baseline snapshot in `SidePanel::right` costs only 4 pointer copies (`O(1)`), with live `Shared Arc Buffers: X / 4` telemetry.
+  - **Just-in-Time Rust**: Smart pointers (`Arc<T>`), `Arc::make_mut` copy-on-write mutation, `Arc::ptr_eq`, and `proptest!`.
+  - **Cargo Verification & Mutation Coverage**: 14 workspace tests (including `prop_cow_pin_mutation_preserves_baseline_snapshot_and_shares_untouched_arcs`) verifying `4 -> 3 -> 2 -> 1 -> 0` pointer sharing (`169 / 169 viable mutants caught, 21 unviable, 0 missed`).
+- `0017-undo-redo-history-and-slider-coalescing.html` (App: `apps/0017-undo-redo-history-and-slider-coalescing`)
+  - **`egui` Skill & PCB Feature**: Wire `Z` / `Y` hotkeys, `Undo (Z)` / `Redo (Y)` buttons in `SidePanel::right`, and coalesce continuous 60-FPS `egui::Slider` pin X drags into a single undo step via `coalesce_key` and `Response::drag_stopped()`.
+  - **Just-in-Time Rust**: Bounded `VecDeque<HistoryEntry>` ring buffer, `std::mem::replace` zero-clone state swaps, and randomized drag-sequence `proptest!`.
+  - **Cargo Verification & Mutation Coverage**: 16 workspace tests (including `prop_coalesced_drag_restores_exact_initial_state_in_single_undo`) verifying coalescing, `commit_coalesce()`, redo clearing, and ring-buffer eviction (`217 / 217 viable mutants caught, 22 unviable, 0 missed`).
 
 ### Act V: Command Engine, Performance & Polish (`0018`–`0021`)
 *Goal: Unify menus/shortcuts/CLI into a Command Engine (`egui-command-engine` & `egui-app-runner`), add `panic_hunt` command fuzzing, enforce performance budgets, and run offscreen GPU visual snapshot tests.*

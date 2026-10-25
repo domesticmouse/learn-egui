@@ -20,6 +20,10 @@ Interactive engineering course for learning **Rust** and **[`egui`](https://docs
   - [Lesson 0011: Review Status Triage, Severity Filtering & Sign-Off Rules](https://domesticmouse.github.io/learn-egui/lessons/0011-review-status-workflow-and-popups.html) (`apps/0011-review-status-workflow-and-popups`)
   - [Lesson 0012: DRC Clearance Violation Halos, Bounding-Box Reduction & Minimap Clamping](https://domesticmouse.github.io/learn-egui/lessons/0012-drc-violation-overlay-and-minimap.html) (`apps/0012-drc-violation-overlay-and-minimap`)
   - [Lesson 0013: Custom `egui::Widget` Layer Swatches, Struct Lifetimes (`'a`) & `Harness::new_ui_state`](https://domesticmouse.github.io/learn-egui/lessons/0013-custom-layer-swatch-widget-and-design-tokens.html) (`apps/0013-custom-layer-swatch-widget-and-design-tokens`)
+  - [Lesson 0014: Multi-Crate Workspace — Separating `pcb-doc` (`L1`) from `pcb-reviewer` (`L6`)](https://domesticmouse.github.io/learn-egui/lessons/0014-multi-crate-workspace-doc-vs-ui-egui.html) (`apps/0014-multi-crate-workspace-doc-vs-ui-egui`)
+  - [Lesson 0015: Loading & Saving Board & Review Session Files (`serde`, `serde_json` & `thiserror`)](https://domesticmouse.github.io/learn-egui/lessons/0015-loading-board-and-review-files-serde.html) (`apps/0015-loading-board-and-review-files-serde`)
+  - [Lesson 0016: Copy-on-Write Document Snapshots with `Arc` & `Arc::make_mut`](https://domesticmouse.github.io/learn-egui/lessons/0016-copy-on-write-arc-document-snapshots.html) (`apps/0016-copy-on-write-arc-document-snapshots`)
+  - [Lesson 0017: Undo/Redo History (`VecDeque`) & Continuous Slider Drag Coalescing](https://domesticmouse.github.io/learn-egui/lessons/0017-undo-redo-history-and-slider-coalescing.html) (`apps/0017-undo-redo-history-and-slider-coalescing`)
 - **Reference & Cheat Sheets:**
   - [Glossary of Rust & `egui` Terms](https://domesticmouse.github.io/learn-egui/reference/glossary.html)
   - [Immediate-Mode GUI Cheat Sheet](https://domesticmouse.github.io/learn-egui/reference/immediate-mode-cheatsheet.html)

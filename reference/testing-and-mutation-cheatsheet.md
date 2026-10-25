@@ -59,7 +59,48 @@ exclude_re = [
 ]
 ```
 
-## 4. Progression of Testing Across the Six Acts
+## 4. Act IV Multi-Crate Workspace & `proptest` Patterns (`0014`–`0017`)
+
+Once domain state lives in `crates/pcb-doc` (`L1`, depending only on `emath`), you can run `cargo test` and `cargo mutants` on the domain crate in milliseconds without compiling or linking `eframe`:
+
+```bash
+# Run only L1 domain tests or mutations (zero egui/eframe linking overhead)
+cargo test --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml -p pcb-doc
+cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml -p pcb-doc --in-place
+
+# Filter cargo-mutants to specific functions across the workspace
+cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml --workspace --in-place -F "BoardHistory|record_edit|undo|redo"
+```
+
+Combine `proptest!` with `Arc::ptr_eq` to assert both value equivalence and copy-on-write pointer sharing across randomized drag sequences:
+
+```rust
+proptest! {
+    #[test]
+    fn prop_coalesced_drag_restores_exact_initial_state_in_single_undo(
+        drag_steps in prop::collection::vec(10.0_f32..90.0_f32, 2..12),
+    ) {
+        let initial = BoardModel::default();
+        let mut working = initial.clone();
+        let mut history = BoardHistory::default();
+
+        for x in &drag_steps {
+            let before = working.clone();
+            working.move_review_pin_x(PinId(1), *x);
+            history.record_edit("Drag Pin #1 X", before, Some("drag_pin_1_x"));
+        }
+        history.commit_coalesce();
+
+        prop_assert_eq!(history.undo_len(), 1);
+        let undone_label = history.undo(&mut working);
+        prop_assert_eq!(undone_label.as_deref(), Some("Drag Pin #1 X"));
+        prop_assert_eq!(&working, &initial);
+        prop_assert_eq!(working.shared_arc_buffers(&initial), 4);
+    }
+}
+```
+
+## 5. Progression of Testing Across the Six Acts
 
 | Curriculum Stage | Testing Mechanism Introduced | What `cargo test` + `cargo mutants` Verifies |
 | --- | --- | --- |

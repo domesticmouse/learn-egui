@@ -26,6 +26,10 @@
       <a href="./lessons/0011-review-status-workflow-and-popups.html">0011</a>
       <a href="./lessons/0012-drc-violation-overlay-and-minimap.html">0012</a>
       <a href="./lessons/0013-custom-layer-swatch-widget-and-design-tokens.html">0013</a>
+      <a href="./lessons/0014-multi-crate-workspace-doc-vs-ui-egui.html">0014</a>
+      <a href="./lessons/0015-loading-board-and-review-files-serde.html">0015</a>
+      <a href="./lessons/0016-copy-on-write-arc-document-snapshots.html">0016</a>
+      <a href="./lessons/0017-undo-redo-history-and-slider-coalescing.html">0017</a>
       <a href="./reference/glossary.html">Glossary</a>
       <a href="./reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="./reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
@@ -53,7 +57,7 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Five-Act Curriculum Progression: Every lesson builds toward a production Schematic &amp; PCB Design Review System verified with unit tests and mutation coverage.</em></p>
-<h2>Published Interactive Lessons (<code>0000</code>–<code>0013</code>)</h2>
+<h2>Published Interactive Lessons (<code>0000</code>–<code>0017</code>)</h2>
 <p>Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html">Lesson 0000</a> to set up your Cargo project and mutation-testing harness, or jump straight into any completed module below:</p>
 </div>
 
@@ -281,6 +285,70 @@ flowchart LR
       <span><strong>Runnable App:</strong> <code>apps/0013-custom-layer-swatch-widget-and-design-tokens</code></span>
     </div>
   </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0014</span>
+        <span class="lesson-card-mutants">144 / 144 Caught</span>
+      </div>
+      <h3><a href="./lessons/0014-multi-crate-workspace-doc-vs-ui-egui.html">Multi-Crate Workspace (<code>pcb-doc</code> L1 vs. <code>pcb-reviewer</code> L6)</a></h3>
+      <p>Refactor the single-file app into a Cargo <code>[workspace]</code> separating pure <code>L1</code> domain state (<code>crates/pcb-doc</code>, depending only on <code>emath</code>) from the <code>L6</code>/<code>L7</code> <code>eframe</code> UI crate, enforced by a Tier 1 manifest dependency gate.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> Engine-First Layering (<code>L1</code> Domain vs. <code>L6</code> UI)</span>
+      <span><strong>Rust Concept:</strong> Cargo <code>[workspace]</code>, <code>pub</code>/<code>pub(crate)</code> Visibility &amp; Lint Gates</span>
+      <span><strong>Runnable App:</strong> <code>apps/0014-multi-crate-workspace-doc-vs-ui-egui</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0015</span>
+        <span class="lesson-card-mutants">155 / 155 Caught</span>
+      </div>
+      <h3><a href="./lessons/0015-loading-board-and-review-files-serde.html">Loading &amp; Saving Board &amp; Review Session Files (<code>serde</code> &amp; <code>thiserror</code>)</a></h3>
+      <p>Serialize and deserialize PCB geometry and review pins with <code>serde_json</code> (<code>emath</code> <code>serde</code> feature), enforce <code>CURRENT_SCHEMA_VERSION = 1</code> with <code>thiserror</code> (<code>SessionIoError</code>), and display dismissible I/O error banners in <code>SidePanel::right</code>.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> <code>SidePanel::right</code> Session Persistence &amp; Error Banner UI</span>
+      <span><strong>Rust Concept:</strong> <code>serde</code> (<code>Serialize</code>/<code>Deserialize</code>), <code>thiserror::Error</code> &amp; Exhaustive Destructuring</span>
+      <span><strong>Runnable App:</strong> <code>apps/0015-loading-board-and-review-files-serde</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0016</span>
+        <span class="lesson-card-mutants">169 / 169 Caught</span>
+      </div>
+      <h3><a href="./lessons/0016-copy-on-write-arc-document-snapshots.html">Copy-on-Write Document Snapshots (<code>Arc</code> &amp; <code>Arc::make_mut</code>)</a></h3>
+      <p>Upgrade <code>BoardModel</code> collections to <code>Arc&lt;Vec&lt;...&gt;&gt;</code> and <code>Arc&lt;HashMap&lt;...&gt;&gt;</code>, mutate touched buffers with <code>Arc::make_mut</code>, and verify <code>O(1)</code> snapshot structural sharing (<code>Arc::ptr_eq</code>) with <code>proptest</code>.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> Snapshot Telemetry &amp; Instant <code>O(1)</code> Rollback UI</span>
+      <span><strong>Rust Concept:</strong> <code>std::sync::Arc</code>, <code>Arc::make_mut</code>, <code>Arc::ptr_eq</code> &amp; <code>proptest</code></span>
+      <span><strong>Runnable App:</strong> <code>apps/0016-copy-on-write-arc-document-snapshots</code></span>
+    </div>
+  </article>
+
+  <article class="lesson-card">
+    <div>
+      <div class="lesson-card-header">
+        <span class="lesson-card-num">Lesson 0017</span>
+        <span class="lesson-card-mutants">217 / 217 Caught</span>
+      </div>
+      <h3><a href="./lessons/0017-undo-redo-history-and-slider-coalescing.html">Undo/Redo History (<code>VecDeque</code>) &amp; Slider Drag Coalescing</a></h3>
+      <p>Implement a bounded <code>BoardHistory</code> (<code>VecDeque&lt;HistoryEntry&gt;</code>, <code>redo_stack</code>, <code>revision</code>), coalesce continuous <code>egui::Slider</code> drags using <code>coalesce_key</code> and <code>Response::drag_stopped()</code>, wire <code>Z</code>/<code>Y</code> hotkeys, and verify with <code>proptest</code>.</p>
+    </div>
+    <div class="lesson-card-meta">
+      <span><strong><code>egui</code> Skill:</strong> <code>Response::changed()</code> + <code>Response::drag_stopped()</code> Coalescing &amp; <code>Z</code>/<code>Y</code> Undo/Redo</span>
+      <span><strong>Rust Concept:</strong> <code>VecDeque</code> Ring Buffer, <code>std::mem::replace</code> &amp; Stateful <code>proptest</code></span>
+      <span><strong>Runnable App:</strong> <code>apps/0017-undo-redo-history-and-slider-coalescing</code></span>
+    </div>
+  </article>
 </section>
 
 <div class="prose-col">
@@ -296,7 +364,7 @@ flowchart LR
 <tbody>
 <tr>
 <td><a href="./reference/glossary.html"><strong>Glossary of Rust &amp; <code>egui</code> Terms</strong></a></td>
-<td>Canonical definitions of Immediate-Mode vs. Retained-Mode GUI, <code>&amp;mut</code> borrows, closures, <code>TSTransform</code>, <code>Sense</code>, and PCB domain analogies.</td>
+<td>Canonical definitions of Immediate-Mode vs. Retained-Mode GUI, <code>&amp;mut</code> borrows, closures, <code>TSTransform</code>, <code>Sense</code>, <code>Arc::make_mut</code>, and PCB domain analogies.</td>
 </tr>
 <tr>
 <td><a href="./reference/immediate-mode-cheatsheet.html"><strong>Immediate-Mode GUI Cheat Sheet</strong></a></td>
@@ -304,20 +372,20 @@ flowchart LR
 </tr>
 <tr>
 <td><a href="./reference/testing-and-mutation-cheatsheet.html"><strong>Testing &amp; Mutation Coverage Cheat Sheet</strong></a></td>
-<td>Why line coverage lies, how <code>cargo-mutants</code> tests your tests, fast APFS copy-on-write workflows, and the 4-step evolutionary verification ladder.</td>
+<td>Why line coverage lies, how <code>cargo-mutants</code> tests your tests, fast APFS copy-on-write workflows, and the evolutionary verification ladder (<code>proptest</code>, workspace gates, and <code>egui_kittest</code>).</td>
 </tr>
 </tbody>
 </table>
 <h2>Running the Companion Rust Apps Locally</h2>
-<p>Every lesson is backed by a standalone, runnable Cargo package under <code>./apps/&lt;NNNN-lesson-slug&gt;/</code> that compiles with zero warnings and passes both <code>cargo test</code> and <code>cargo mutants</code>:</p>
-<pre><code class="language-bash"># Launch Lesson 0005's interactive PCB Reviewer desktop window
-cargo run --manifest-path ./apps/0005-hit-testing-and-net-cross-probing/Cargo.toml
+<p>Every lesson is backed by a standalone, runnable Cargo package or workspace under <code>./apps/&lt;NNNN-lesson-slug&gt;/</code> that compiles with zero warnings and passes both <code>cargo test</code> and <code>cargo mutants</code>:</p>
+<pre><code class="language-bash"># Launch Lesson 0017's interactive multi-crate PCB Reviewer desktop window
+cargo run --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml
 
-# Run unit tests and mutation coverage for Lesson 0005
-cargo test --manifest-path ./apps/0005-hit-testing-and-net-cross-probing/Cargo.toml
-cargo mutants -d ./apps/0005-hit-testing-and-net-cross-probing</code></pre>
+# Run workspace unit + proptest suites and fast L1 domain mutation checks
+cargo test --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml --workspace
+cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml -p pcb-doc --in-place</code></pre>
 <div class="teacher-prompt-box">
-  <strong>Ready to dive in?</strong> Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html"><strong>Lesson 0000: Bootstrapping Your Rust &amp; <code>eframe</code> Project</strong></a> or jump straight to <a href="./lessons/0005-hit-testing-and-net-cross-probing.html"><strong>Lesson 0005: Spatial Hit-Testing &amp; Net Cross-Probing</strong></a>.
+  <strong>Ready to dive in?</strong> Start with <a href="./lessons/0000-project-setup-and-eframe-boot.html"><strong>Lesson 0000: Bootstrapping Your Rust &amp; <code>eframe</code> Project</strong></a> or jump straight to <a href="./lessons/0017-undo-redo-history-and-slider-coalescing.html"><strong>Lesson 0017: Undo/Redo History (<code>VecDeque</code>) &amp; Continuous Slider Drag Coalescing</strong></a>.
 </div>
 </div>
     </article>

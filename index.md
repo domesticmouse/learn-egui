@@ -18,7 +18,7 @@ flowchart LR
 ```
 _Five-Act Curriculum Progression: Every lesson builds toward a production Schematic & PCB Design Review System verified with unit tests and mutation coverage._
 
-## Published Interactive Lessons (`0000`–`0013`)
+## Published Interactive Lessons (`0000`–`0017`)
 
 Start with [Lesson 0000](./lessons/0000-project-setup-and-eframe-boot.html) to set up your Cargo project and mutation-testing harness, or jump straight into any completed module below:
 
@@ -30,23 +30,23 @@ Turns out, having a one-page cheat sheet next to your editor saves a lot of tab-
 
 | Reference Sheet | What It Covers |
 | --- | --- |
-| [**Glossary of Rust & `egui` Terms**](./reference/glossary.html) | Canonical definitions of Immediate-Mode vs. Retained-Mode GUI, `&mut` borrows, closures, `TSTransform`, `Sense`, and PCB domain analogies. |
+| [**Glossary of Rust & `egui` Terms**](./reference/glossary.html) | Canonical definitions of Immediate-Mode vs. Retained-Mode GUI, `&mut` borrows, closures, `TSTransform`, `Sense`, `Arc::make_mut`, and PCB domain analogies. |
 | [**Immediate-Mode GUI Cheat Sheet**](./reference/immediate-mode-cheatsheet.html) | The 5-step single-frame mental model, panel layout ordering rules (`SidePanel` before `CentralPanel`), and custom 2D CAD painter idioms. |
-| [**Testing & Mutation Coverage Cheat Sheet**](./reference/testing-and-mutation-cheatsheet.html) | Why line coverage lies, how `cargo-mutants` tests your tests, fast APFS copy-on-write workflows, and the 4-step evolutionary verification ladder. |
+| [**Testing & Mutation Coverage Cheat Sheet**](./reference/testing-and-mutation-cheatsheet.html) | Why line coverage lies, how `cargo-mutants` tests your tests, fast APFS copy-on-write workflows, and the evolutionary verification ladder (`proptest`, workspace gates, and `egui_kittest`). |
 
 ## Running the Companion Rust Apps Locally
 
-Every lesson is backed by a standalone, runnable Cargo package under `./apps/<NNNN-lesson-slug>/` that compiles with zero warnings and passes both `cargo test` and `cargo mutants`:
+Every lesson is backed by a standalone, runnable Cargo package or workspace under `./apps/<NNNN-lesson-slug>/` that compiles with zero warnings and passes both `cargo test` and `cargo mutants`:
 
 ```bash
-# Launch Lesson 0005's interactive PCB Reviewer desktop window
-cargo run --manifest-path ./apps/0005-hit-testing-and-net-cross-probing/Cargo.toml
+# Launch Lesson 0017's interactive multi-crate PCB Reviewer desktop window
+cargo run --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml
 
-# Run unit tests and mutation coverage for Lesson 0005
-cargo test --manifest-path ./apps/0005-hit-testing-and-net-cross-probing/Cargo.toml
-cargo mutants -d ./apps/0005-hit-testing-and-net-cross-probing
+# Run workspace unit + proptest suites and fast L1 domain mutation checks
+cargo test --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml --workspace
+cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml -p pcb-doc --in-place
 ```
 
 :::teacher-prompt
-**Ready to dive in?** Start with [**Lesson 0000: Bootstrapping Your Rust & `eframe` Project**](./lessons/0000-project-setup-and-eframe-boot.html) or jump straight to [**Lesson 0005: Spatial Hit-Testing & Net Cross-Probing**](./lessons/0005-hit-testing-and-net-cross-probing.html).
+**Ready to dive in?** Start with [**Lesson 0000: Bootstrapping Your Rust & `eframe` Project**](./lessons/0000-project-setup-and-eframe-boot.html) or jump straight to [**Lesson 0017: Undo/Redo History (`VecDeque`) & Continuous Slider Drag Coalescing**](./lessons/0017-undo-redo-history-and-slider-coalescing.html).
 :::

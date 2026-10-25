@@ -1596,3 +1596,365 @@ Color32::from_rgba_unmultiplied(224, 82, 67, ${alphaTop})`;
   render();
 }
 
+/**
+ * 16. Lesson 0014 Simulator: Multi-Crate L1-L6 Workspace Layering & Manifest Gate
+ */
+function initWorkspaceLayersSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const state = {
+    egui: false,
+    eframe: false,
+    rfd: false,
+  };
+
+  function render() {
+    const forbiddenOrder = ["egui", "eframe", "rfd"];
+    const firstViolation = forbiddenOrder.find((dep) => state[dep]) || null;
+
+    const l1Box = root.querySelector("[data-svg='l1-box']");
+    const l1Status = root.querySelector("[data-svg='l1-status']");
+    if (l1Box && l1Status) {
+      if (firstViolation) {
+        l1Box.setAttribute("stroke", "#ff5555");
+        l1Box.setAttribute("fill", "#2a1418");
+        l1Status.setAttribute("fill", "#ff8b6b");
+        l1Status.textContent = `ERR: "${firstViolation}" forbidden in L1!`;
+      } else {
+        l1Box.setAttribute("stroke", "#3b8eea");
+        l1Box.setAttribute("fill", "#141a21");
+        l1Status.setAttribute("fill", "#3dd68c");
+        l1Status.textContent = "PASS: 0 UI crates in L1";
+      }
+    }
+
+    const extraLines = forbiddenOrder
+      .filter((dep) => state[dep])
+      .map((dep) => `${dep} = "0.33"`)
+      .join("\n");
+    const tomlSnippet = `[package]\nname = "pcb-doc"\n\n[dependencies]\nemath = "0.33"${extraLines ? "\n" + extraLines : ""}`;
+    const gateResult = firstViolation ? `Err("${firstViolation}")` : "Ok(())";
+
+    const stateEl = root.querySelector("[data-role='layers-state']");
+    if (stateEl) {
+      stateEl.textContent = `// crates/pcb-doc/Cargo.toml
+${tomlSnippet}
+
+// validate_l1_manifest_no_ui_deps(cargo_toml):
+=> ${gateResult}`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-dep]").forEach((el) => {
+    const dep = el.getAttribute("data-dep");
+    el.addEventListener("change", () => {
+      state[dep] = el.checked;
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 17. Lesson 0015 Simulator: Serde Session Envelope & Typed Error Recovery
+ */
+function initSerdeSessionSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const scenarios = {
+    valid: {
+      json: `{
+  "schema_version": 1,
+  "board_id": "pwr-stage-rev-b",
+  "board": {
+    "traces": [ /* 6 segments */ ],
+    "pads": [ /* 3 pads */ ],
+    "review_pins": { "1": { "status": "Open" } }
+  }
+}`,
+      result: `Ok(("pwr-stage-rev-b", BoardModel { .. }))
+// ViewState after import:
+active_board_id: "pwr-stage-rev-b",
+last_io_error: None,`,
+    },
+    version99: {
+      json: `{
+  "schema_version": 99,
+  "board_id": "pwr-stage-rev-b",
+  "board": { /* ... */ }
+}`,
+      result: `Err(SessionIoError::UnsupportedSchemaVersion {
+    found: 99,
+    expected: 1,
+})
+// Active board preserved! UI banner:
+last_io_error: Some("unsupported schema_version 99 (expected 1)")`,
+    },
+    emptyid: {
+      json: `{
+  "schema_version": 1,
+  "board_id": "   ",
+  "board": { /* ... */ }
+}`,
+      result: `Err(SessionIoError::EmptyBoardId)
+// Active board preserved! UI banner:
+last_io_error: Some("board_id must not be empty")`,
+    },
+    corrupt: {
+      json: `{corrupt`,
+      result: `Err(SessionIoError::MalformedJson(
+    "key must be a string at line 1 column 2"
+))
+// Active board preserved! UI banner:
+last_io_error: Some("malformed session JSON: ...")`,
+    },
+  };
+
+  let current = "valid";
+
+  function render() {
+    const item = scenarios[current] || scenarios.valid;
+    const jsonEl = root.querySelector("[data-role='serde-json-preview']");
+    if (jsonEl) {
+      jsonEl.textContent = item.json;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(jsonEl);
+      }
+    }
+    const resEl = root.querySelector("[data-role='serde-result-state']");
+    if (resEl) {
+      resEl.textContent = item.result;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(resEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-scenario]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      current = btn.getAttribute("data-scenario");
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 18. Lesson 0016 Simulator: Copy-on-Write Arc::make_mut & Arc::ptr_eq Visualizer
+ */
+function initCowArcSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  let allocCounter = 104;
+  const state = {
+    baseline: { traces: 100, pads: 101, components: 102, review_pins: 103 },
+    working: { traces: 100, pads: 101, components: 102, review_pins: 103 },
+    lastOp: "let working = baseline.clone(); // O(1) — 4 Arcs shared",
+  };
+
+  function render() {
+    const keys = ["traces", "pads", "components", "review_pins"];
+    let sharedCount = 0;
+    const barsEl = root.querySelector("[data-role='cow-bars']");
+    if (barsEl) {
+      barsEl.innerHTML = keys
+        .map((k) => {
+          const shared = state.baseline[k] === state.working[k];
+          if (shared) sharedCount += 1;
+          const badgeColor = shared ? "#3dd68c" : "#ff8b6b";
+          const status = shared
+            ? `SHARED (0x${state.working[k].toString(16)})`
+            : `DETACHED (base=0x${state.baseline[k].toString(16)}, work=0x${state.working[k].toString(16)})`;
+          return `<div style="display:flex; justify-content:space-between; padding:0.42rem 0.55rem; margin-bottom:0.35rem; background:#141a21; border:1px solid ${badgeColor}; border-radius:4px;">
+            <span><strong>${k}</strong></span>
+            <span style="color:${badgeColor};">${status}</span>
+          </div>`;
+        })
+        .join("");
+    } else {
+      keys.forEach((k) => {
+        if (state.baseline[k] === state.working[k]) sharedCount += 1;
+      });
+    }
+
+    const stateEl = root.querySelector("[data-role='cow-state']");
+    if (stateEl) {
+      stateEl.textContent = `// ${state.lastOp}
+Arc::ptr_eq(&base.traces, &work.traces): ${state.baseline.traces === state.working.traces},
+Arc::ptr_eq(&base.pads, &work.pads): ${state.baseline.pads === state.working.pads},
+Arc::ptr_eq(&base.components, &work.components): ${state.baseline.components === state.working.components},
+Arc::ptr_eq(&base.review_pins, &work.review_pins): ${state.baseline.review_pins === state.working.review_pins},
+working.shared_arc_buffers(&baseline): ${sharedCount} / 4`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
+    }
+  }
+
+  root.querySelectorAll("[data-cow]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-cow");
+      if (action === "pin") {
+        if (state.working.review_pins === state.baseline.review_pins) {
+          allocCounter += 1;
+          state.working.review_pins = allocCounter;
+          state.lastOp = "Arc::make_mut(&mut work.review_pins) -> cloned 1 buffer (strong_count == 2)";
+        } else {
+          state.lastOp = "Arc::make_mut(&mut work.review_pins) -> mutated in-place (strong_count == 1)";
+        }
+      } else if (action === "pad") {
+        if (state.working.pads === state.baseline.pads) {
+          allocCounter += 1;
+          state.working.pads = allocCounter;
+          state.lastOp = "Arc::make_mut(&mut work.pads) -> cloned 1 buffer (strong_count == 2)";
+        } else {
+          state.lastOp = "Arc::make_mut(&mut work.pads) -> mutated in-place (strong_count == 1)";
+        }
+      } else if (action === "snapshot") {
+        state.baseline = { ...state.working };
+        state.lastOp = "baseline = working.clone(); // O(1) — all 4 Arcs shared again";
+      } else if (action === "restore") {
+        state.working = { ...state.baseline };
+        state.lastOp = "working = baseline.clone(); // O(1) instant rollback";
+      }
+      render();
+    });
+  });
+
+  render();
+}
+
+/**
+ * 19. Lesson 0017 Simulator: BoardHistory Undo/Redo & Slider Drag Coalescing
+ */
+function initUndoCoalesceSimulator(containerId) {
+  const root = document.getElementById(containerId);
+  if (!root) return;
+
+  const state = {
+    pinX: 20.0,
+    pinCount: 2,
+    undoStack: [],
+    redoStack: [],
+    activeCoalesceKey: null,
+    revision: 0,
+  };
+
+  function recordEdit(label, beforeSnapshot, coalesceKey) {
+    const shouldCoalesce =
+      state.activeCoalesceKey !== null &&
+      coalesceKey !== null &&
+      state.activeCoalesceKey === coalesceKey &&
+      state.undoStack.length > 0;
+
+    if (!shouldCoalesce) {
+      state.undoStack.push({ label, doc: beforeSnapshot });
+      if (state.undoStack.length > 6) {
+        state.undoStack.shift();
+      }
+    }
+    state.redoStack = [];
+    state.activeCoalesceKey = coalesceKey;
+    state.revision += 1;
+  }
+
+  function render() {
+    const xLabel = root.querySelector("[data-role='pin-x-label']");
+    if (xLabel) {
+      xLabel.textContent = state.pinX.toFixed(1);
+    }
+    const slider = root.querySelector("[data-param='pinX']");
+    if (slider) {
+      slider.value = state.pinX;
+    }
+
+    const listEl = root.querySelector("[data-role='undo-stack-list']");
+    if (listEl) {
+      if (state.undoStack.length === 0 && state.redoStack.length === 0) {
+        listEl.innerHTML = `<div style="color:#8b949e;">undo_stack is empty (drag slider or click +Pin)</div>`;
+      } else {
+        const undoHtml = state.undoStack
+          .map(
+            (e, i) =>
+              `<div style="padding:0.28rem 0.45rem; margin-bottom:0.25rem; background:#141a21; border-left:3px solid #3dd68c;">Undo[${i}]: <strong>${e.label}</strong> (x=${e.doc.pinX.toFixed(1)}, pins=${e.doc.pinCount})</div>`
+          )
+          .join("");
+        const redoHtml = state.redoStack
+          .map(
+            (e, i) =>
+              `<div style="padding:0.28rem 0.45rem; margin-bottom:0.25rem; background:#141a21; border-left:3px solid #3b8eea;">Redo[${i}]: <strong>${e.label}</strong> (x=${e.doc.pinX.toFixed(1)}, pins=${e.doc.pinCount})</div>`
+          )
+          .join("");
+        listEl.innerHTML = undoHtml + redoHtml;
+      }
+    }
+
+    const stateEl = root.querySelector("[data-role='undo-state']");
+    if (stateEl) {
+      const keyStr = state.activeCoalesceKey ? `Some("${state.activeCoalesceKey}")` : "None";
+      stateEl.textContent = `current: { pin_1.x: ${state.pinX.toFixed(1)} mm, pins: ${state.pinCount} }
+active_coalesce_key: ${keyStr}
+undo_len(): ${state.undoStack.length} | redo_len(): ${state.redoStack.length}
+revision(): ${state.revision}`;
+      if (window.Prism && window.Prism.highlightElement) {
+        window.Prism.highlightElement(stateEl);
+      }
+    }
+  }
+
+  const slider = root.querySelector("[data-param='pinX']");
+  if (slider) {
+    slider.addEventListener("input", () => {
+      const before = { pinX: state.pinX, pinCount: state.pinCount };
+      state.pinX = parseFloat(slider.value);
+      recordEdit("Drag Pin #1 X", before, "drag_pin_1_x");
+      render();
+    });
+  }
+
+  root.querySelectorAll("[data-hist]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const act = btn.getAttribute("data-hist");
+      if (act === "commit") {
+        state.activeCoalesceKey = null;
+      } else if (act === "discrete") {
+        const before = { pinX: state.pinX, pinCount: state.pinCount };
+        state.pinCount += 1;
+        recordEdit("Place Review Pin", before, null);
+      } else if (act === "undo" && state.undoStack.length > 0) {
+        const entry = state.undoStack.pop();
+        state.activeCoalesceKey = null;
+        state.redoStack.push({
+          label: entry.label,
+          doc: { pinX: state.pinX, pinCount: state.pinCount },
+        });
+        state.pinX = entry.doc.pinX;
+        state.pinCount = entry.doc.pinCount;
+        state.revision += 1;
+      } else if (act === "redo" && state.redoStack.length > 0) {
+        const entry = state.redoStack.pop();
+        state.activeCoalesceKey = null;
+        state.undoStack.push({
+          label: entry.label,
+          doc: { pinX: state.pinX, pinCount: state.pinCount },
+        });
+        state.pinX = entry.doc.pinX;
+        state.pinCount = entry.doc.pinCount;
+        state.revision += 1;
+      }
+      render();
+    });
+  });
+
+  render();
+}
+
+

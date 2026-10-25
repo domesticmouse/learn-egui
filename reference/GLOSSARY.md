@@ -110,6 +110,22 @@ _Avoid_: creating multiple windows or grids with identical titles and no disambi
 A generic lifetime annotation `<'a>` on a builder struct (such as `LayerSwatch<'a>`) proving that the struct cannot outlive the `&'a mut` state fields it borrows while `impl<'a> egui::Widget for LayerSwatch<'a>` consumes `self` inside `ui.add(...)` ([Rust Book §10.3](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html)).
 _Avoid_: thinking lifetimes change runtime performance (`'a` is purely a compile-time borrow check erased before code generation).
 
+**Engine-First Crate Layering (`L0`–`L7`)**:
+A multi-crate Cargo `[workspace]` architecture that isolates pure domain state (`crates/pcb-doc` at `L1`, depending only on `L0` `emath`) from UI rendering (`pcb-reviewer` at `L6`/`L7`), enforced by Tier 1 manifest gates (`validate_l1_manifest_no_ui_deps`) so domain tests and `cargo-mutants` run in milliseconds without linking `eframe` ([Cargo Book §3.3](https://doc.rust-lang.org/cargo/reference/workspaces.html)).
+_Avoid_: importing `egui::Color32` or `eframe` inside `L1` domain crates (expose UI-agnostic RGB tuples or geometry primitives in `L1` and bridge them in `L6`).
+
+**Versioned Envelope Serialization (`serde`, `thiserror`)**:
+Wrapping a serialized domain model in an explicit envelope struct (`ReviewSessionEnvelope { schema_version, board_id, board }`) and returning typed `Result<T, SessionIoError>` values derived via `thiserror::Error` so malformed JSON or incompatible schema versions surface as non-destructive UI banners rather than panics ([serde.rs](https://serde.rs/)).
+_Avoid_: calling `.unwrap()` on `serde_json::from_str` or using `..` when destructuring persisted envelopes.
+
+**Copy-on-Write (`Arc::make_mut`, `Arc::ptr_eq`)**:
+Wrapping document collections in `std::sync::Arc<...>` so cloning a `BoardModel` snapshot copies only four 8-byte pointers (`O(1)`), while mutating a collection via `Arc::make_mut` clones the inner buffer only when `strong_count > 1` and leaves untouched buffers pointer-shared (`Arc::ptr_eq == true`) ([std::sync::Arc](https://doc.rust-lang.org/std/sync/struct.Arc.html#method.make_mut)).
+_Avoid_: deep-cloning `Vec<TraceSegment>` or `HashMap<PinId, ReviewNote>` on every edit or snapshot.
+
+**Undo/Redo Ring Buffer & Drag Coalescing (`VecDeque`, `coalesce_key`)**:
+A bounded history stack (`VecDeque<HistoryEntry>`) that evicts oldest snapshots via `pop_front()`, swaps snapshots in `O(1)` via `std::mem::replace`, and merges consecutive 60-FPS `egui::Slider` drag frames sharing `Some(coalesce_key)` into a single undo entry until `Response::drag_stopped()` calls `commit_coalesce()` ([std::collections::VecDeque](https://doc.rust-lang.org/std/collections/struct.VecDeque.html)).
+_Avoid_: pushing a new undo entry on every `slider_resp.changed()` frame without a `coalesce_key`.
+
 ---
 
 ## Quick Lookup: Key `eframe` & `egui` APIs by Lesson
@@ -130,3 +146,7 @@ _Avoid_: thinking lifetimes change runtime performance (`'a` is purely a compile
 | `ui.selectable_value` & `ReviewStatus` | Enforces `Open` → `Resolved` → `Verified` sign-off transitions and filters pins by severity. | [Lesson 0011](../lessons/0011-review-status-workflow-and-popups.html) |
 | `Iterator::reduce(Rect::union)` & `f32::clamp` | Detects copper pad-to-pad DRC clearance violations and clamps minimap camera bounds. | [Lesson 0012](../lessons/0012-drc-violation-overlay-and-minimap.html) |
 | `impl<'a> egui::Widget` & `Harness::new_ui_state` | Packages a colour swatch, visibility toggle, and opacity slider into a custom widget tested in isolation. | [Lesson 0013](../lessons/0013-custom-layer-swatch-widget-and-design-tokens.html) |
+| `[workspace]` & `validate_l1_manifest_no_ui_deps` | Splits pure `L1` domain state (`crates/pcb-doc`) from the `L6`/`L7` `eframe` UI crate and enforces zero upward UI dependencies. | [Lesson 0014](../lessons/0014-multi-crate-workspace-doc-vs-ui-egui.html) |
+| `ReviewSessionEnvelope` & `SessionIoError` | Serializes and validates versioned JSON review sessions with `serde_json` and `thiserror`, surfacing errors in `SidePanel::right`. | [Lesson 0015](../lessons/0015-loading-board-and-review-files-serde.html) |
+| `Arc::make_mut` & `Arc::ptr_eq` | Turns `BoardModel::clone()` into `O(1)` pointer sharing and clones only touched collections on mutation, verified with `proptest`. | [Lesson 0016](../lessons/0016-copy-on-write-arc-document-snapshots.html) |
+| `BoardHistory`, `coalesce_key` & `drag_stopped()` | Maintains a bounded `VecDeque` undo/redo stack and coalesces continuous 60-FPS slider drags into a single undo step. | [Lesson 0017](../lessons/0017-undo-redo-history-and-slider-coalescing.html) |
