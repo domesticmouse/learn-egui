@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Lesson 0010: Keyboard Shortcuts, Data-Carrying Enums &amp; Point-to-Point CAD Ruler</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
+    <div>
+      <a href="../index.html">Index</a>
+      <a href="./0001-project-setup-and-eframe-boot.html">0001</a>
+      <a href="./0002-the-immediate-mode-loop.html">0002</a>
+      <a href="./0003-custom-2d-canvas-and-painter.html">0003</a>
+      <a href="./0004-world-to-screen-transforms-pan-and-zoom.html">0004</a>
+      <a href="./0005-modeling-layers-traces-and-footprints.html">0005</a>
+      <a href="./0006-hit-testing-and-net-cross-probing.html">0006</a>
+      <a href="./0007-schematic-symbols-and-text-rendering.html">0007</a>
+      <a href="./0008-split-viewports-and-egui-scene.html">0008</a>
+      <a href="./0009-searchable-netlist-and-bom-inspector.html">0009</a>
+      <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html" class="active">0010</a>
+      <a href="./0011-review-pins-and-sticky-note-callouts.html">0011</a>
+      <a href="./0012-review-status-workflow-and-popups.html">0012</a>
+      <a href="./0013-drc-violation-overlay-and-minimap.html">0013</a>
+      <a href="./0014-custom-layer-swatch-widget-and-design-tokens.html">0014</a>
+      <a href="./0015-multi-crate-workspace-doc-vs-ui-egui.html">0015</a>
+      <a href="./0016-loading-board-and-review-files-serde.html">0016</a>
+      <a href="./0017-copy-on-write-arc-document-snapshots.html">0017</a>
+      <a href="./0018-undo-redo-history-and-slider-coalescing.html">0018</a>
+      <a href="./0019-the-command-pattern-and-command-palette.html">0019</a>
+      <a href="./0020-viewport-culling-and-cached-tessellation.html">0020</a>
+      <a href="./0021-non-blocking-file-import-and-progress-ui.html">0021</a>
+      <a href="./0022-headless-snapshot-testing-and-wasm-build.html">0022</a>
+      <a href="./0023-sexpr-tokenizer-and-ast-with-nom.html">0023</a>
+      <a href="./0024-parsing-kicad-pcb-and-sch-into-domain-model.html">0024</a>
+      <a href="./0025-embedded-sql-review-store-with-turso.html">0025</a>
+      <a href="./0026-local-first-review-sync-and-audit-trail.html">0026</a>
+      <a href="./0027-llm-native-spatial-and-electrical-queries.html">0027</a>
+      <a href="./0028-headless-mcp-server-rmcp-and-mock-client.html">0028</a>
+      <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html">0029</a>
+      <a href="./0030-egui-mcp-inspector-workbench-and-agent-playbooks.html">0030</a>
+      <a href="../reference/glossary.html">Glossary</a>
+      <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Act II Finale: Schematic Views, Layout &amp; egui_kittest</span>
+  </nav>
+  </header>
+
+  <main>
+    <article class="tufte-article">
+<div class="prose-col">
+<h1>Lesson 0010: Keyboard Shortcuts, Data-Carrying Enums &amp; Point-to-Point CAD Ruler</h1>
+<p class="subtitle">Binding CAD hotkeys (<code>F</code>, <code>M</code>, <code>Esc</code>) via <code>ctx.input_mut</code> + <code>consume_key</code>, modelling tool state machines with data-carrying Rust enums, and simulating key presses in <code>egui_kittest</code></p>
+
+<p>Watch anyone who spends all day in KiCad or Altium: their left hand never leaves the keyboard. Reaching for a toolbar button every time you want to measure a pad pitch or reset the camera is slow; tapping <code>M</code>, <code>F</code>, or <code>Esc</code> is instant.</p>
+<p>In <a href="./0009-searchable-netlist-and-bom-inspector.html">Lesson 0009</a>, we built a searchable, virtualised BOM table. Now, we wrap up <strong>Act II</strong> by adding two essential CAD ergonomics features: single-key shortcuts (<code>F</code> to fit/reset the board camera, <code>M</code> to activate the point-to-point measurement ruler, and <code>Esc</code> to cancel/clear) and a live <strong>Euclidean distance ruler overlay</strong> reporting $\Delta x$, $\Delta y$, and $\text{distance} = \sqrt{\Delta x^2 + \Delta y^2}$ in physical millimetres.</p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
+stateDiagram-v2
+    [*] --&gt; Select: Default
+    Select --&gt; Measure: Key::M (activate_measure_tool)
+    Measure --&gt; Measure: set_measure_points(start_mm, end_mm)
+    Measure --&gt; Select: Key::Escape (cancel_tool_and_selection)
+    Select --&gt; Select: Key::F (fit_board_in_viewport)
+  </pre>
+</figure>
+<p><em>Figure 10.1: Tool state machine modelled with a data-carrying Rust <code>enum ActiveTool</code> so ruler coordinates only exist while in <code>Measure</code> mode.</em></p>
+<h2 id="1-just-in-time-rust-state-machines-with-data-carrying-enums">1. Just-in-Time Rust: State Machines with Data-Carrying Enums</h2>
+<p>Unlike C or Java enums that are glorified integer constants, each variant of a Rust <code>enum</code> can carry its own typed payload (<a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html">Rust Book §6.1</a>).</p>
+<p>So, by modelling our CAD tool as <code>ActiveTool</code>, it becomes impossible for stale ruler coordinates to hang around when the user switches back to <code>Select</code> mode:<span class="sidenote-number"></span><span class="sidenote">Making illegal states unrepresentable is one of Rust's best party tricks: instead of juggling separate <code>is_measuring: bool</code> and <code>ruler_start: Option&lt;Pos2&gt;</code> fields that inevitably get out of sync, the <code>ActiveTool::Measure</code> variant owns its endpoints directly.</span></p>
+<pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ActiveTool {
+    Select,
+    Measure {
+        start_mm: Option&lt;Pos2&gt;,
+        end_mm: Option&lt;Pos2&gt;,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RulerMeasurement {
+    pub dx_mm: f32,
+    pub dy_mm: f32,
+    pub distance_mm: f32,
+}
+
+impl RulerMeasurement {
+    pub fn between(start_mm: Pos2, end_mm: Pos2) -&gt; Self {
+        let dx_mm = end_mm.x - start_mm.x;
+        let dy_mm = end_mm.y - start_mm.y;
+        let distance_mm = dx_mm.hypot(dy_mm);
+        Self {
+            dx_mm,
+            dy_mm,
+            distance_mm,
+        }
+    }
+}</code></pre>
+<h2 id="2-consuming-keyboard-shortcuts-with-ctx-input-mut-amp-consume-key">2. Consuming Keyboard Shortcuts with <code>ctx.input_mut</code> &amp; <code>consume_key</code></h2>
+<p>Now, what happens if the user is typing <code>&quot;m&quot;</code> into the BOM search box from Lesson 0009? You definitely don't want that keystroke switching tools mid-search!</p>
+<p>So, we first check <code>!ctx.wants_keyboard_input()</code> to make sure no text box has keyboard focus, and then match our CAD hotkeys using <a href="https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key"><code>InputState::consume_key</code></a>. Calling <code>consume_key</code> both returns <code>true</code> when the key was pressed and removes the key event from the frame's queue so no other widget reacts to it twice:</p>
+<pre><code class="language-rust">pub fn handle_hotkeys(&amp;mut self, ctx: &amp;egui::Context) {
+    if ctx.wants_keyboard_input() {
+        return;
+    }
+    let pressed_f = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F));
+    let pressed_m = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::M));
+    let pressed_esc = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+
+    if pressed_f {
+        self.view.fit_board_in_viewport();
+    }
+    if pressed_m {
+        self.view.activate_measure_tool();
+    }
+    if pressed_esc {
+        self.view.cancel_tool_and_selection();
+    }
+}</code></pre>
+</div>
+
+<section class="full-width-panel" id="hotkey-ruler-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: CAD Hotkeys (<code>F</code> / <code>M</code> / <code>Esc</code>) &amp; Euclidean Ruler</span>
+    <span class="panel-badge">consume_key • ActiveTool::Measure • hypot()</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Click the simulated hotkey buttons (<code>Key::M</code>, <code>Key::Escape</code>, <code>Key::F</code>) or select different measurement target pads below to inspect how <code>ActiveTool</code> and <code>RulerMeasurement::between</code> compute Δx, Δy, and Euclidean distance in millimetres:
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Simulated Hotkeys &amp; Targets</h4>
+      <div style="display:flex; gap:0.45rem; flex-wrap:wrap; margin-bottom:0.75rem;">
+        <button type="button" class="egui-btn" data-key="M">Press <code>M</code> (Measure)</button>
+        <button type="button" class="egui-btn" data-key="Escape">Press <code>Esc</code> (Select)</button>
+        <button type="button" class="egui-btn" data-key="F">Press <code>F</code> (Fit Board)</button>
+      </div>
+      <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.4rem;">
+        Snap Ruler Endpoint (from <code>(20.0, 22.0) mm</code>):
+      </p>
+      <div style="display:flex; flex-direction:column; gap:0.35rem;">
+        <button type="button" class="egui-btn" data-ruler-preset="68,58">To J1 Corner (68, 58) → 3-4-5 Triangle (60 mm)</button>
+        <button type="button" class="egui-btn" data-ruler-preset="52,22">To R12 Pad (52, 22) → Horizontal (32 mm)</button>
+        <button type="button" class="egui-btn" data-ruler-preset="20,48">To B.Cu Pad (20, 48) → Vertical (26 mm)</button>
+      </div>
+    </div>
+
+    <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px;">
+      <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="Point-to-Point CAD Ruler Canvas">
+        <rect x="18" y="14" width="284" height="182" rx="6" fill="#10281e" stroke="#2f6f52" stroke-width="2"/>
+        <path d="M 76 71 L 165.6 71 L 210.4 103.5" fill="none" stroke="#e05243" stroke-width="4" stroke-linecap="round"/>
+        <rect x="66" y="65" width="20" height="12" rx="2" fill="#e05243"/>
+        <rect x="155" y="65" width="20" height="12" rx="2" fill="#e05243"/>
+        <rect x="66" y="130" width="20" height="12" rx="2" fill="#3b8eea"/>
+        <rect x="200" y="155" width="20" height="12" rx="2" fill="#3b8eea"/>
+
+        <g data-svg="ruler-overlay">
+          <line data-svg="ruler-dx" x1="76" y1="71" x2="210.4" y2="71" stroke="#6cb6ff" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <line data-svg="ruler-dy" x1="210.4" y1="71" x2="210.4" y2="161" stroke="#6cb6ff" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <line data-svg="ruler-hyp" x1="76" y1="71" x2="210.4" y2="161" stroke="#ffe664" stroke-width="2.5"/>
+          <circle cx="76" cy="71" r="4.5" fill="#3dd68c" stroke="#0c0e11" stroke-width="1.5"/>
+          <circle data-svg="ruler-end-dot" cx="210.4" cy="161" r="4.5" fill="#ffe664" stroke="#0c0e11" stroke-width="1.5"/>
+          <text data-svg="ruler-label" x="143" y="108" fill="#ffe664" font-family="monospace" font-size="10.5" font-weight="bold" text-anchor="middle">Δx=48.0 Δy=36.0 d=60.0mm</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. Live <code>ActiveTool</code> State</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.75rem; padding:0.75rem;"><code class="language-rust" data-role="ruler-state"></code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 2: Complete the Euclidean Ruler &amp; Hotkey Consumer</span>
+    <span class="panel-badge">hypot() • consume_key • harness.key_press</span>
+  </div>
+  <p>Fill in the three blanks below to (1) compute the Euclidean hypotenuse $\sqrt{\Delta x^2 + \Delta y^2}$ in <code>RulerMeasurement::between</code>, (2) consume <code>Key::M</code> from <code>InputState</code>, and (3) simulate pressing <code>Key::M</code> in our headless <code>egui_kittest</code> test:</p>
+<pre class="keep-markup"><code class="language-rust">impl RulerMeasurement {
+    pub fn between(start_mm: Pos2, end_mm: Pos2) -&gt; Self {
+        let dx_mm = end_mm.x - start_mm.x;
+        let dy_mm = end_mm.y - start_mm.y;
+        let distance_mm = dx_mm.<input id="ex-blank-1" class="code-challenge-input" style="width:125px;" placeholder="/* 1: hypot */" autocomplete="off">;
+        Self { dx_mm, dy_mm, distance_mm }
+    }
+}
+
+// Inside handle_hotkeys():
+let pressed_m = ctx.input_mut(|i| i.<input id="ex-blank-2" class="code-challenge-input" style="width:135px;" placeholder="/* 2: consume */" autocomplete="off">(egui::Modifiers::NONE, egui::Key::M));
+if pressed_m {
+    self.view.activate_measure_tool();
+}
+
+// Inside #[test] fn headless_hotkeys_switch_tools_and_fit_viewport():
+harness.<input id="ex-blank-3" class="code-challenge-input" style="width:120px;" placeholder="/* 3: press */" autocomplete="off">(egui::Key::M);
+harness.run();</code></pre>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn-primary" id="btn-check-ex">Check Rust Code</button>
+    <button type="button" class="btn-secondary" id="btn-hint-ex">Show Hint</button>
+  </div>
+  <div id="ex-feedback" class="feedback-box"></div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 3: Simulating Hotkeys with <code>harness.key_press</code> Under <code>cargo mutants</code></span>
+    <span class="panel-badge">cargo test + cargo mutants</span>
+  </div>
+  <p>In <code>apps/0010-keyboard-shortcuts-and-point-to-point-ruler</code>, our test suite uses <code>harness.key_press(egui::Key::M)</code>, <code>harness.key_press(egui::Key::Escape)</code>, and <code>harness.key_press(egui::Key::F)</code> to drive <code>handle_hotkeys</code> headlessly, while asserting non-zero asymmetric 3-4-5 right-triangle coordinates (<code>start = (20.0, 22.0)</code>, <code>end = (68.0, 58.0)</code> → <code>dx = 48.0</code>, <code>dy = 36.0</code>, <code>distance = 60.0</code>) so every arithmetic and hotkey mutant is caught!</p>
+<pre><code class="language-rust">#[test]
+fn headless_hotkeys_switch_tools_and_fit_viewport() {
+    let mut harness = Harness::new_eframe(|_cc| PcbReviewerApp::default());
+
+    // 1. Press 'M' -&gt; switches to ActiveTool::Measure and updates status label
+    harness.key_press(egui::Key::M);
+    harness.run();
+    assert_eq!(
+        harness.state().view.active_tool,
+        ActiveTool::Measure { start_mm: None, end_mm: None }
+    );
+    assert!(harness.query_by_label("Active Tool: Measure (M)").is_some());
+
+    // 2. Press 'Esc' -&gt; returns to ActiveTool::Select and clears selection
+    harness.state_mut().view.selected_net = Some(NetId(1));
+    harness.key_press(egui::Key::Escape);
+    harness.run();
+    assert_eq!(harness.state().view.active_tool, ActiveTool::Select);
+    assert_eq!(harness.state().view.selected_net, None);
+
+    // 3. Pan away, then press 'F' -&gt; restores default viewport transform
+    harness.state_mut().view.viewport.pan_by(vec2(45.0, -30.0));
+    harness.key_press(egui::Key::F);
+    harness.run();
+    assert_eq!(harness.state().view.viewport, BoardViewport::default());
+}</code></pre>
+  <div class="mutation-scoreboard">
+    <div class="mutation-stat tier">
+      <div class="stat-label">Verification Tier</div>
+      <div class="stat-value">Tier 2 + 6: Hotkeys &amp; CAD Ruler</div>
+    </div>
+    <div class="mutation-stat caught">
+      <div class="stat-label">Target Caught Mutants</div>
+      <div class="stat-value">59 Caught (14 Unviable)</div>
+    </div>
+    <div class="mutation-stat missed">
+      <div class="stat-label">Target Missed Mutants</div>
+      <div class="stat-value">0 Missed</div>
+    </div>
+  </div>
+      <ul class="step-checklist">
+        <li>
+          <input type="checkbox" id="verify-1">
+          <label for="verify-1">
+            <strong>1. Run <code>cargo test</code> in <code>apps/0010-keyboard-shortcuts-and-point-to-point-ruler</code>:</strong> Confirm all 19 unit + headless <code>egui_kittest</code> tests pass.
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-2">
+          <label for="verify-2">
+            <strong>2. Run <code>cargo mutants --in-place</code>:</strong> Verify that all 59 viable mutants across Act I &amp; Act II (<code>0001</code>–<code>0010</code>) are <strong>Caught</strong> with <strong>0 Missed</strong>.
+          </label>
+        </li>
+      </ul>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Retrieval Practice: Data-Carrying Enums, <code>consume_key</code> &amp; <code>key_press</code></span>
+    <span class="panel-badge">3 Questions • Equal-Length Options</span>
+  </div>
+  <div id="quiz-container"></div>
+</section>
+
+<div class="prose-col">
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
+<div class="callout">
+  <strong>Read (5 mins):</strong> <a href="https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key"><code>egui::InputState::consume_key</code> Official API Docs</a> and <a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html">The Rust Programming Language — §6.1 &quot;Defining an Enum&quot;</a>.
+</div>
+<div class="teacher-prompt-box">
+  <strong>Act II Complete!</strong> You have expanded the PCB Design Reviewer with schematic component symbols, <code>Painter::text</code> reference designators, split-viewport cross-probing with <code>egui::Scene</code>, virtualised BOM search tables, CAD keyboard shortcuts, and a point-to-point measurement ruler—all verified headlessly with <code>egui_kittest::Harness</code> and 100% caught mutants. Ask any questions about Act II in chat, or let me know when you are ready for <strong>Act III (<code>0011</code>–<code>0014</code>): Design Review Workflows, Sticky-Note Callout Pins, DRC Overlays &amp; Custom <code>egui::Widget</code> Layer Swatches</strong>!
+</div>
+</div>
+    </article>
+  </main>
+
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
+
+  <script src="../assets/course.js"></script>
+  <script>
+    initCodeExercise({
+      checkBtnId: "btn-check-ex",
+      hintBtnId: "btn-hint-ex",
+      feedbackId: "ex-feedback",
+      blanks: [
+        {
+          inputId: "ex-blank-1",
+          accepted: ["hypot(dy_mm)"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Call <code>hypot(dy_mm)</code> on <code>dx_mm</code> to compute the Euclidean distance.",
+        },
+        {
+          inputId: "ex-blank-2",
+          accepted: ["consume_key"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Use the <code>InputState</code> method that matches and consumes a key press (<code>consume_key</code>).",
+        },
+        {
+          inputId: "ex-blank-3",
+          accepted: ["key_press"],
+          getErrorHint: (val) =>
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Call <code>key_press</code> on <code>harness</code> to queue a key-down and key-up event.",
+        }
+      ],
+      hintMessage: "<strong>Hints:</strong> (1) <code>hypot(dy_mm)</code>. (2) <code>consume_key</code>. (3) <code>key_press</code>.",
+      successMessage: "<strong>Bravo!</strong> Your CAD ruler computes $\\sqrt{\\Delta x^2 + \\Delta y^2}$ with <code>dx_mm.hypot(dy_mm)</code>, consumes hotkeys via <code>i.consume_key(...)</code>, and tests them headlessly with <code>harness.key_press(...)</code>.",
+    });
+
+    initQuiz("quiz-container", [
+      {
+            "question": "Why is `enum ActiveTool { Select, Measure { ... } }` safer than keeping separate boolean and coordinate fields?",
+            "options": [
+                  "Booleans allocate heap memory during frames",
+                  "Enums disable borrow checking inside update",
+                  "Structs forbid storing Pos2 fields directly",
+                  "Ruler points exist exclusively when enabled"
+            ],
+            "correctIndex": 3,
+            "explanation": "Storing `start_mm` and `end_mm` inside `ActiveTool::Measure` makes illegal states unrepresentable: ruler endpoints only exist when the Measure tool is active.",
+            "wrongHint": "Think about what happens to `start_mm` and `end_mm` when `active_tool` switches back to `ActiveTool::Select`."
+      },
+      {
+            "question": "What is the advantage of calling `ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::M))`?",
+            "options": [
+                  "Blocking pointer clicks during next frames",
+                  "Preventing other widgets from handling key",
+                  "Resetting transform matrices on every step",
+                  "Spawning background threads for hotkey run"
+            ],
+            "correctIndex": 1,
+            "explanation": "`consume_key` checks if the key shortcut was pressed and removes that key event from `InputState` so no other widget processes the same key press.",
+            "wrongHint": "Consider why `consume_key` requires `input_mut` instead of read-only `input`."
+      },
+      {
+            "question": "How does `harness.key_press(egui::Key::M)` test our hotkey handler inside `egui_kittest`?",
+            "options": [
+                  "Opening native windows to capture hardware",
+                  "Bypassing update loops to overwrite fields",
+                  "Queueing synthetic key events before steps",
+                  "Compiling shader binaries during key press"
+            ],
+            "correctIndex": 2,
+            "explanation": "`harness.key_press` queues synthetic `Event::Key` press and release events that are fed into `egui::Context` on the next `harness.run()` step.",
+            "wrongHint": "Think about how `egui_kittest::Harness` simulates keyboard input without an OS window."
+      }
+]);
+
+    initHotkeyRulerSimulator("hotkey-ruler-sim");
+  </script>
+</body>
+</html>

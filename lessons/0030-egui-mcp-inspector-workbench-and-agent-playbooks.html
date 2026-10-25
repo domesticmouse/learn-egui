@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Lesson 0030: Embedded egui MCP Inspector Workbench, Agent Playbooks &amp; Act VII Scorecard — Learn Rust &amp; egui</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header>
+  <nav class="course-nav" aria-label="Course navigation">
+    <div>
+      <a href="../index.html">Index</a>
+      <a href="./0001-project-setup-and-eframe-boot.html">0001</a>
+      <a href="./0002-the-immediate-mode-loop.html">0002</a>
+      <a href="./0003-custom-2d-canvas-and-painter.html">0003</a>
+      <a href="./0004-world-to-screen-transforms-pan-and-zoom.html">0004</a>
+      <a href="./0005-modeling-layers-traces-and-footprints.html">0005</a>
+      <a href="./0006-hit-testing-and-net-cross-probing.html">0006</a>
+      <a href="./0007-schematic-symbols-and-text-rendering.html">0007</a>
+      <a href="./0008-split-viewports-and-egui-scene.html">0008</a>
+      <a href="./0009-searchable-netlist-and-bom-inspector.html">0009</a>
+      <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html">0010</a>
+      <a href="./0011-review-pins-and-sticky-note-callouts.html">0011</a>
+      <a href="./0012-review-status-workflow-and-popups.html">0012</a>
+      <a href="./0013-drc-violation-overlay-and-minimap.html">0013</a>
+      <a href="./0014-custom-layer-swatch-widget-and-design-tokens.html">0014</a>
+      <a href="./0015-multi-crate-workspace-doc-vs-ui-egui.html">0015</a>
+      <a href="./0016-loading-board-and-review-files-serde.html">0016</a>
+      <a href="./0017-copy-on-write-arc-document-snapshots.html">0017</a>
+      <a href="./0018-undo-redo-history-and-slider-coalescing.html">0018</a>
+      <a href="./0019-the-command-pattern-and-command-palette.html">0019</a>
+      <a href="./0020-viewport-culling-and-cached-tessellation.html">0020</a>
+      <a href="./0021-non-blocking-file-import-and-progress-ui.html">0021</a>
+      <a href="./0022-headless-snapshot-testing-and-wasm-build.html">0022</a>
+      <a href="./0023-sexpr-tokenizer-and-ast-with-nom.html">0023</a>
+      <a href="./0024-parsing-kicad-pcb-and-sch-into-domain-model.html">0024</a>
+      <a href="./0025-embedded-sql-review-store-with-turso.html">0025</a>
+      <a href="./0026-local-first-review-sync-and-audit-trail.html">0026</a>
+      <a href="./0027-llm-native-spatial-and-electrical-queries.html">0027</a>
+      <a href="./0028-headless-mcp-server-rmcp-and-mock-client.html">0028</a>
+      <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html">0029</a>
+      <a href="./0030-egui-mcp-inspector-workbench-and-agent-playbooks.html" class="active">0030</a>
+      <a href="../reference/glossary.html">Glossary</a>
+      <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
+      <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+    </div>
+    <span class="mission-badge">Act VII • Agentic Hardware Review &amp; MCP (rmcp)</span>
+  </nav>
+  </header>
+
+  <main>
+    <article class="tufte-article">
+<div class="prose-col">
+<h1>0030. Embedded <code>egui</code> MCP Inspector Workbench, Agent Playbooks &amp; Act VII Scorecard</h1>
+<p class="subtitle">Embedding an offline MCP Inspector Workbench (<code>McpInspectorWorkbench</code>) inside the <code>egui</code> desktop app to switch between <code>HeadlessDuplex</code> and <code>BridgedLoopback</code> transports, log JSON-RPC 2.0 frames (<code>RpcFrameRecord</code>), execute 4-step Agent Review Playbooks, and seal the 30-lesson course scorecard.</p>
+
+<h2 id="why-every-ai-controllable-desktop-app-needs-an-embedded-mcp-workbench">Why Every AI-Controllable Desktop App Needs an Embedded MCP Workbench</h2>
+<p>Debugging an MCP server through an external cloud LLM chat window is slow, expensive, and non-deterministic. By embedding an <strong>MCP Inspector Workbench</strong> (<code>McpInspectorWorkbench</code>) directly inside our <code>egui</code> desktop reviewer, hardware engineers and CI pipelines can toggle between <strong><code>McpTransportMode::HeadlessDuplex</code></strong> and <strong><code>McpTransportMode::BridgedLoopback</code></strong>, inspect every JSON-RPC 2.0 request/response frame (<code>RpcFrameRecord</code>), and execute deterministic multi-step <strong>Agent Review Playbooks</strong> (<code>run_power_integrity_playbook</code>) completely offline.<span class="sidenote-number"></span><span class="sidenote"><strong>Deterministic Agent Playbooks (<code>Tier 6</code> Acceptance):</strong> Our 4-step Power Integrity Playbook chains <code>resources/read</code> (<code>kicad://board/summary</code>), <code>pcb_query_net</code> (<code>VCC_3V3</code>), <code>pcb_run_custom_drc</code> (<code>U1</code> clearance), and <code>pcb_add_review_pin</code> (+ cropped PNG capture when running in <code>BridgedLoopback</code> mode) into an auditable <code>AgentPlaybookReport</code>.</span></p>
+<figure class="mermaid-figure">
+  <pre class="mermaid">
+flowchart LR
+    Mode["McpTransportMode&lt;br/&gt;HeadlessDuplex ⇄ BridgedLoopback"] --&gt; Playbook["run_power_integrity_playbook()&lt;br/&gt;4-Step Deterministic Audit"]
+    Playbook --&gt; S1["1. resources/read&lt;br/&gt;kicad://board/summary"]
+    S1 --&gt; S2["2. tools/call&lt;br/&gt;pcb_query_net (VCC_3V3)"]
+    S2 --&gt; S3["3. tools/call&lt;br/&gt;pcb_run_custom_drc"]
+    S3 --&gt; S4["4. tools/call + Bridge&lt;br/&gt;Pin + 64×64 Cropped PNG"]
+    style Playbook fill:#14231c,stroke:#3dd68c,color:#e6edf3
+    style S4 fill:#141a21,stroke:#3b8eea,color:#e6edf3
+  </pre>
+</figure>
+<h2 id="dual-transport-workbench-amp-4-step-power-integrity-playbook">Dual-Transport Workbench &amp; 4-Step Power Integrity Playbook</h2>
+<figure>
+  <figcaption>McpTransportMode, RpcFrameRecord, and McpInspectorWorkbench in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum McpTransportMode {
+    HeadlessDuplex,
+    BridgedLoopback,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct AgentPlaybookReport {
+    pub transport: McpTransportMode,
+    pub frames_logged: usize,
+    pub vcc_pad_count: usize,
+    pub drc_violations: usize,
+    pub pin_count: usize,
+    pub snapshot_captured: bool,
+    pub snapshot_bytes_len: usize,
+}</code></pre>
+</figure>
+</div>
+
+<section class="full-width-panel" id="mcp-workbench-sim">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 1: Mock MCP Client &amp; Inspector Workbench + Agent Playbooks</span>
+    <span class="panel-badge">Headless vs Bridged • JSON-RPC Frame Log • 4-Step Agent Playbook</span>
+  </div>
+  <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
+    Switch between <strong>Headless</strong> and <strong>Bridged Live-GUI</strong> transports and run the automated 4-step <strong>Power Integrity Agent Playbook</strong> end-to-end.
+  </p>
+
+  <div class="sim-grid">
+    <div class="sim-box">
+      <h4>1. Workbench Controls</h4>
+      <div style="display:flex; flex-direction:column; gap:0.4rem;">
+        <button type="button" class="egui-btn" data-wb-act="run-playbook">▶ Run 4-Step Power Integrity Playbook</button>
+        <button type="button" class="egui-btn" data-wb-act="toggle-mode">⇄ Toggle Transport (Headless / Bridged)</button>
+        <button type="button" class="egui-btn" data-wb-act="scorecard">✔ Generate Final Course Scorecard</button>
+      </div>
+    </div>
+
+    <div class="sim-box">
+      <h4>2. JSON-RPC Frame Log &amp; Playbook Steps</h4>
+      <div data-role="wb-log" style="font-family:var(--font-mono); font-size:0.74rem; line-height:1.55;"></div>
+    </div>
+
+    <div class="sim-box">
+      <h4>3. Workbench &amp; Scorecard State</h4>
+      <pre class="language-rust" style="margin:0; font-size:0.74rem; padding:0.75rem;"><code class="language-rust" data-role="wb-state"></code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Interactive Lab 2: Toggle MCP Transports &amp; Execute the 4-Step Agent Playbook</span>
+    <span class="panel-badge">Skill Practice • MCP Workbench &amp; Playbooks</span>
+  </div>
+  <p>Complete <code>McpTransportMode::toggle</code> and step 4 of <code>McpInspectorWorkbench::run_power_integrity_playbook</code> in <code>crates/pcb-doc/src/lib.rs</code>.</p>
+<pre class="keep-markup"><code class="language-rust">impl McpTransportMode {
+    pub fn toggle(self) -&gt; Self {
+        match self {
+            Self::HeadlessDuplex =&gt; <input id="ex0030-blank-1" class="code-challenge-input" style="width:185px;" placeholder="Self::BridgedLoopback" autocomplete="off">,
+            Self::BridgedLoopback =&gt; Self::HeadlessDuplex,
+        }
+    }
+}
+
+// Inside McpInspectorWorkbench::run_power_integrity_playbook:
+let (snapshot_captured, snapshot_bytes_len) = match self.transport {
+    McpTransportMode::HeadlessDuplex =&gt; (false, 0),
+    McpTransportMode::BridgedLoopback =&gt; {
+        let snap = capture_cropped_region_png(board, 10, 10, 60, 50, <input id="ex0030-blank-2" class="code-challenge-input" style="width:110px;" placeholder="64, 64" autocomplete="off">)
+            .map_err(|e| e.to_string())?;
+        (true, snap.png_bytes.len())
+    }
+};</code></pre>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn-primary" id="btn-check-ex0030">Check Rust Code</button>
+    <button type="button" class="btn-secondary" id="btn-hint-ex0030">Show Hint</button>
+  </div>
+  <div id="ex0030-feedback" class="feedback-box"></div>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Lab 3: Embedded MCP Inspector Workbench, Agent Playbooks &amp; Final Act VII Scorecard (<code>0030</code>)</span>
+    <span class="panel-badge">cargo test --workspace + egui_kittest + cargo mutants</span>
+  </div>
+  <p>Run the complete workspace test suite (including <code>mcp_inspector_workbench_and_power_integrity_playbook_preserve_invariants</code>) and mutate the transport switcher, playbook runner, and UI workbench methods:</p>
+<figure>
+  <figcaption>Run final Act VII MCP Inspector Workbench and Agent Playbook mutation gate on 0030</figcaption>
+  <pre><code class="language-bash">cargo test --manifest-path ./apps/0030-egui-mcp-inspector-workbench-and-agent-playbooks/Cargo.toml --workspace
+cargo mutants --manifest-path ./apps/0030-egui-mcp-inspector-workbench-and-agent-playbooks/Cargo.toml --workspace --in-place -F "McpTransportMode::toggle|McpTransportMode::label|McpInspectorWorkbench::run_power_integrity_playbook|toggle_mcp_transport|run_agent_playbook"</code></pre>
+</figure>
+  <div class="mutation-scoreboard">
+    <div class="mutation-stat tier">
+      <div class="stat-label">Verification Tier</div>
+      <div class="stat-value">Tier 1–7 (Full Course Release Gate)</div>
+    </div>
+    <div class="mutation-stat caught">
+      <div class="stat-label">Target Caught Mutants</div>
+      <div class="stat-value">539 / 539 (100%)</div>
+    </div>
+    <div class="mutation-stat missed">
+      <div class="stat-label">Target Missed Mutants</div>
+      <div class="stat-value">0 Missed</div>
+    </div>
+  </div>
+      <ul class="step-checklist">
+        <li>
+          <input type="checkbox" id="verify-0030-1">
+          <label for="verify-0030-1">
+            <code>cargo test --manifest-path ./apps/0030-egui-mcp-inspector-workbench-and-agent-playbooks/Cargo.toml --workspace</code> passes all <strong>31 tests</strong> (<strong>3</strong> in <code>kicad-sexpr</code>, <strong>22</strong> in <code>pcb-doc</code>, and <strong>6</strong> in <code>pcb-reviewer</code>).
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0030-2">
+          <label for="verify-0030-2">
+            <code>mcp_inspector_workbench_and_power_integrity_playbook_preserve_invariants</code> verifies <code>McpTransportMode::toggle</code>, 4-frame <code>RpcFrameRecord</code> sequencing across both <code>HeadlessDuplex</code> and <code>BridgedLoopback</code> transports, and $64 \times 64$ cropped PNG capture.
+          </label>
+        </li>
+        <li>
+          <input type="checkbox" id="verify-0030-3">
+          <label for="verify-0030-3">
+            <code>cargo mutants</code> catches <strong>100% of viable workbench and playbook mutants</strong> (<code>0 missed</code>), sealing the entire 30-lesson curriculum (<code>0001</code>–<code>0030</code>) with <strong>zero warnings</strong> and <strong>zero missed mutants</strong>!
+          </label>
+        </li>
+      </ul>
+</section>
+
+<section class="full-width-panel">
+  <div class="panel-header">
+    <span class="panel-title">Retrieval Practice</span>
+    <span class="panel-badge">3 Questions • Equal-Length Options</span>
+  </div>
+  <div id="quiz-0030"></div>
+</section>
+
+<div class="prose-col">
+<h2 id="recommended-primary-source">Recommended Primary Source</h2>
+<div class="callout">
+  <strong>Read (5 mins):</strong> <a href="https://modelcontextprotocol.io/docs/tools/inspector">Model Context Protocol — Inspector &amp; Debugging Guide</a> and <a href="https://docs.rs/egui_kittest/latest/egui_kittest/"><code>egui_kittest</code> Documentation</a>.
+</div>
+<div class="teacher-prompt-box">
+  <strong>Act VII &amp; Full 30-Lesson Curriculum (<code>0001</code>–<code>0030</code>) Complete!</strong> You have built a complete, multi-crate <strong>Rust &amp; <code>egui</code> Schematic and PCB Design Review System</strong> from immediate-mode fundamentals (<code>0001</code>) through custom 2D CAD viewports, headless <code>egui_kittest</code> verification, DRC overlays, Copy-on-Write <code>Arc</code> undo/redo, <code>CommandSpec</code> fuzzing, <code>nom</code> KiCad S-expression parsing, embedded Turso SQL transactions, and an official <code>rmcp</code> Model Context Protocol server + Inspector Workbench—all verified with <strong>0 missed mutants</strong>.
+</div>
+</div>
+    </article>
+  </main>
+
+  <footer style="margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle); font-family: var(--font-sans); font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+    <span>Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License, Version 2.0</a>.</span>
+    <span>This is not an official Google product.</span>
+  </footer>
+
+  <script src="../assets/course.js"></script>
+  <script>
+    initCodeExercise({
+      checkBtnId: "btn-check-ex0030",
+      hintBtnId: "btn-hint-ex0030",
+      feedbackId: "ex0030-feedback",
+      blanks: [
+        {
+          inputId: "ex0030-blank-1",
+          accepted: ["Self::BridgedLoopback"],
+          getErrorHint: (val) =>
+            `<strong>Blank 1:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Switch from HeadlessDuplex to BridgedLoopback",
+        },
+        {
+          inputId: "ex0030-blank-2",
+          accepted: ["64, 64"],
+          getErrorHint: (val) =>
+            `<strong>Blank 2:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Capture a 64x64 pixel cropped PNG region snapshot",
+        }
+      ],
+      hintMessage: "Switch <code>Self::HeadlessDuplex</code> to <code>Self::BridgedLoopback</code>, and pass <code>64, 64</code> for the cropped PNG dimensions in <code>BridgedLoopback</code> mode.",
+      successMessage: "Congratulations! You have completed all 30 lessons (<code>0001</code>\u2013<code>0030</code>) of the Rust &amp; <code>egui</code> Schematic and PCB Design Review System course!",
+    });
+
+    initQuiz("quiz-0030", [
+      {
+            "question": "What is the primary advantage of embedding `McpInspectorWorkbench` directly inside the `egui` desktop reviewer?",
+            "options": [
+                  "It replaces the Rust compiler with an interpreted JavaScript runtime",
+                  "Engineers can deterministically test and audit MCP tools completely offline",
+                  "It automatically uploads proprietary KiCad layouts to public training servers",
+                  "It disables bearer token verification on local loopback network sockets"
+            ],
+            "correctIndex": 1,
+            "explanation": "An embedded MCP workbench lets hardware engineers and CI pipelines exercise every MCP resource, tool, prompt, and GUI bridge command deterministically and completely offline.",
+            "wrongHint": "Review how `McpInspectorWorkbench` executes `run_power_integrity_playbook` without external API keys."
+      },
+      {
+            "question": "How does `run_power_integrity_playbook` behave differently when switched from `HeadlessDuplex` to `BridgedLoopback`?",
+            "options": [
+                  "It skips the net topology and custom DRC steps to save cycles",
+                  "It returns an empty `RpcFrameRecord` log without inspecting the active board layout",
+                  "It authenticates through `LoopbackControlBridge`, focuses the viewport, and captures a cropped PNG",
+                  "It deletes all existing review pins from the local Turso audit database"
+            ],
+            "correctIndex": 2,
+            "explanation": "In `BridgedLoopback` mode, the playbook drives the live GUI bridge in addition to querying the engine, producing a verified $64 \\times 64$ cropped PNG snapshot (`snapshot_captured == true`).",
+            "wrongHint": "Compare the `McpTransportMode::HeadlessDuplex` and `McpTransportMode::BridgedLoopback` arms in `run_power_integrity_playbook`."
+      },
+      {
+            "question": "Across the full 30-lesson course (`0001`\u2013`0030`), what invariant is enforced on every companion crate before a lesson is marked complete?",
+            "options": [
+                  "Every workspace passes `cargo test` with zero warnings and zero missed mutants under `cargo-mutants`",
+                  "Every crate must depend on an active external internet connection to run unit tests",
+                  "Only GUI code is tested while pure domain logic is excluded from mutation testing",
+                  "Warnings and panics are permitted as long as the binary compiles in release mode"
+            ],
+            "correctIndex": 0,
+            "explanation": "Every single companion workspace from `0001` through `0030` enforces `#![forbid(unsafe_code)]`, `#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]`, zero compiler warnings, and 100% caught mutants (`0 missed`).",
+            "wrongHint": "Check the `:::verify` block and `.cargo/mutants.toml` in each companion workspace."
+      }
+]);
+
+    initMcpWorkbenchSimulator("mcp-workbench-sim");
+  </script>
+</body>
+</html>

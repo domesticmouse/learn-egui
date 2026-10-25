@@ -52,24 +52,24 @@ In a desktop application, `fn main()` opens a blocking OS window via `eframe::ru
 copy_target = true
 
 # Explicitly exclude the OS window launcher and raw panel draw loop in Act I;
-# we remove "update" from this list in Lesson 0006 when we add egui_kittest!
+# we remove "update" from this list in Lesson 0007 when we add egui_kittest!
 exclude_re = [
     "replace main",
     "<impl eframe::App for PcbReviewerApp>::update",
 ]
 ```
 
-## 4. Act IV Multi-Crate Workspace & `proptest` Patterns (`0014`–`0017`)
+## 4. Act IV Multi-Crate Workspace & `proptest` Patterns (`0015`–`0018`)
 
 Once domain state lives in `crates/pcb-doc` (`L1`, depending only on `emath`), you can run `cargo test` and `cargo mutants` on the domain crate in milliseconds without compiling or linking `eframe`:
 
 ```bash
 # Run only L1 domain tests or mutations (zero egui/eframe linking overhead)
-cargo test --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml -p pcb-doc
-cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml -p pcb-doc --in-place
+cargo test --manifest-path ./apps/0018-undo-redo-history-and-slider-coalescing/Cargo.toml -p pcb-doc
+cargo mutants --manifest-path ./apps/0018-undo-redo-history-and-slider-coalescing/Cargo.toml -p pcb-doc --in-place
 
 # Filter cargo-mutants to specific functions across the workspace
-cargo mutants --manifest-path ./apps/0017-undo-redo-history-and-slider-coalescing/Cargo.toml --workspace --in-place -F "BoardHistory|record_edit|undo|redo"
+cargo mutants --manifest-path ./apps/0018-undo-redo-history-and-slider-coalescing/Cargo.toml --workspace --in-place -F "BoardHistory|record_edit|undo|redo"
 ```
 
 Combine `proptest!` with `Arc::ptr_eq` to assert both value equivalence and copy-on-write pointer sharing across randomized drag sequences:
@@ -100,38 +100,38 @@ proptest! {
 }
 ```
 
-## 5. Act V `panic_hunt`, `gpu_lock()` Snapshot Digests & Scorecards (`0018`–`0021`)
+## 5. Act V `panic_hunt`, `gpu_lock()` Snapshot Digests & Scorecards (`0019`–`0022`)
 
 In Act V, we harden the multi-crate workspace with three production gates:
 
-1. **Tier 5 `panic_hunt` Adversarial Command Fuzzing (`0018`)**: Iterates over every registered `CommandSpec` in `COMMAND_SPECS` (asserting `COMMAND_SPECS.len() >= COMMAND_PARITY_FLOOR`) and feeds malformed/out-of-bounds JSON payloads into `BoardModel::execute_command`, asserting `Err(EngineError::BadParams)` and zero panics.
-2. **Tier 2 + Tier 7 Spatial Culling Equivalence & Budgets (`0019`)**: Uses `proptest!` to prove `culled_pads_in_rect` and `culled_traces_in_rect` match reference filtering across arbitrary camera viewports while `check_cull_budget` enforces microsecond budgets.
-3. **Tier 3/6 `gpu_lock()` & `FrameSnapshotDigest` (`0021`)**: Acquires `let _gpu = gpu_lock();` (`OnceLock<Mutex<()>>` with `PoisonError::into_inner`) on the first line of snapshot tests, computes a deterministic 64-bit FNV-1a digest over visible layer bitmasks and culled geometry counts, and verifies release readiness via `QualityScorecard::is_release_ready()`.
+1. **Tier 5 `panic_hunt` Adversarial Command Fuzzing (`0019`)**: Iterates over every registered `CommandSpec` in `COMMAND_SPECS` (asserting `COMMAND_SPECS.len() >= COMMAND_PARITY_FLOOR`) and feeds malformed/out-of-bounds JSON payloads into `BoardModel::execute_command`, asserting `Err(EngineError::BadParams)` and zero panics.
+2. **Tier 2 + Tier 7 Spatial Culling Equivalence & Budgets (`0020`)**: Uses `proptest!` to prove `culled_pads_in_rect` and `culled_traces_in_rect` match reference filtering across arbitrary camera viewports while `check_cull_budget` enforces microsecond budgets.
+3. **Tier 3/6 `gpu_lock()` & `FrameSnapshotDigest` (`0022`)**: Acquires `let _gpu = gpu_lock();` (`OnceLock<Mutex<()>>` with `PoisonError::into_inner`) on the first line of snapshot tests, computes a deterministic 64-bit FNV-1a digest over visible layer bitmasks and culled geometry counts, and verifies release readiness via `QualityScorecard::is_release_ready()`.
 
-## 6. Act VI Real-File KiCad Corpus Oracles & Async Turso SQL Harnesses (`0022`–`0025`)
+## 6. Act VI Real-File KiCad Corpus Oracles & Async Turso SQL Harnesses (`0023`–`0026`)
 
 In Act VI, we expand the workspace to 3 crates (`crates/kicad-sexpr` at `L0` Standalone, `crates/pcb-doc` at `L1`/`L4`, and `pcb-reviewer` at `L6`/`L7`) and add three new verification gates:
 
-1. **Tier 1 + Tier 2 `L0` Standalone Parser & `proptest` Round-Tripping (`0022`)**: Enforces `validate_l0_standalone_manifest` on `crates/kicad-sexpr/Cargo.toml` and uses `proptest!` (`prop_sexpr_parser_roundtrips_arbitrary_footprints`) to verify `parse_sexpr_str` across arbitrary KiCad S-expression trees in ~15 seconds for all 38 `L0` mutants.
-2. **Tier 4 Pinned `.kicad_pcb` Corpus Oracles & Ratchet Floors (`0023`)**: Runs `run_pinned_kicad_corpus()` across `PINNED_KICAD_CORPUS`, asserting `passed_files >= CORPUS_PASS_FLOOR`, `roundtrip_files >= CORPUS_ROUNDTRIP_FLOOR`, and `reloaded == board` (`from_kicad_pcb_sexpr` ↔ `to_kicad_pcb_sexpr`).
-3. **Tier 2 Async `#[tokio::test]` SQL AST, Atomic Rollback & Audit Hash-Chain Gates (`0024`–`0025`)**: Validates SQL DDL/DML/transaction statements via `turso_parser::parser::Parser`, verifies foreign-key rejection on unregistered `board_id`s, tests atomic rollback on invalid status transitions inside `execute_atomic_signoff_batch`, and verifies tamper detection in `verify_audit_chain()`.
+1. **Tier 1 + Tier 2 `L0` Standalone Parser & `proptest` Round-Tripping (`0023`)**: Enforces `validate_l0_standalone_manifest` on `crates/kicad-sexpr/Cargo.toml` and uses `proptest!` (`prop_sexpr_parser_roundtrips_arbitrary_footprints`) to verify `parse_sexpr_str` across arbitrary KiCad S-expression trees in ~15 seconds for all 38 `L0` mutants.
+2. **Tier 4 Pinned `.kicad_pcb` Corpus Oracles & Ratchet Floors (`0024`)**: Runs `run_pinned_kicad_corpus()` across `PINNED_KICAD_CORPUS`, asserting `passed_files >= CORPUS_PASS_FLOOR`, `roundtrip_files >= CORPUS_ROUNDTRIP_FLOOR`, and `reloaded == board` (`from_kicad_pcb_sexpr` ↔ `to_kicad_pcb_sexpr`).
+3. **Tier 2 Async `#[tokio::test]` SQL AST, Atomic Rollback & Audit Hash-Chain Gates (`0025`–`0026`)**: Validates SQL DDL/DML/transaction statements via `turso_parser::parser::Parser`, verifies foreign-key rejection on unregistered `board_id`s, tests atomic rollback on invalid status transitions inside `execute_atomic_signoff_batch`, and verifies tamper detection in `verify_audit_chain()`.
 
-## 7. Act VII Agentic MCP Duplex Round-Trips, Constant-Time Auth & Cropped PNG Oracles (`0026`–`0029`)
+## 7. Act VII Agentic MCP Duplex Round-Trips, Constant-Time Auth & Cropped PNG Oracles (`0027`–`0030`)
 
 In Act VII, we verify every layer of our Model Context Protocol (`rmcp`) stack without external network calls or cloud LLM dependencies:
 
-1. **Tier 2 `schemars` JSON Schema & Bounded Query Invariants (`0026`)**: Asserts that `spatial_query_json_schema()` emits mandatory tool parameter definitions and that `query_spatial_neighborhood`, `query_net_topology`, and `run_custom_drc` enforce Euclidean radius bounds, `max_items` truncation flags, and pad-clearance distance thresholds.
-2. **Tier 6 In-Memory `tokio::io::duplex` MCP Client-Server Acceptance (`0027`)**: Spawns `PcbMcpServer` and `MockMcpClient` over `tokio::io::duplex(4096)` inside `#[tokio::test]`, asserting full JSON-RPC 2.0 tool discovery (`list_all_tools`), typed `call_tool` execution, `kicad://` resource reads, and prompt templates.
-3. **Tier 6 Constant-Time Bearer Auth, Cropped PNG Magic & Agent Playbook Gates (`0028`–`0029`)**: Verifies that `verify_bearer_token` rejects empty or mismatched tokens via constant-time XOR accumulation, `capture_cropped_region_png` enforces pixel budgets (`width_px * height_px <= 16_384`) and `PNG_MAGIC_HEADER` (`\x89PNG\r\n\x1a\n`), and `McpInspectorWorkbench::run_power_integrity_playbook` logs all 4 JSON-RPC frames across both `HeadlessDuplex` and `BridgedLoopback` modes.
+1. **Tier 2 `schemars` JSON Schema & Bounded Query Invariants (`0027`)**: Asserts that `spatial_query_json_schema()` emits mandatory tool parameter definitions and that `query_spatial_neighborhood`, `query_net_topology`, and `run_custom_drc` enforce Euclidean radius bounds, `max_items` truncation flags, and pad-clearance distance thresholds.
+2. **Tier 6 In-Memory `tokio::io::duplex` MCP Client-Server Acceptance (`0028`)**: Spawns `PcbMcpServer` and `MockMcpClient` over `tokio::io::duplex(4096)` inside `#[tokio::test]`, asserting full JSON-RPC 2.0 tool discovery (`list_all_tools`), typed `call_tool` execution, `kicad://` resource reads, and prompt templates.
+3. **Tier 6 Constant-Time Bearer Auth, Cropped PNG Magic & Agent Playbook Gates (`0029`–`0030`)**: Verifies that `verify_bearer_token` rejects empty or mismatched tokens via constant-time XOR accumulation, `capture_cropped_region_png` enforces pixel budgets (`width_px * height_px <= 16_384`) and `PNG_MAGIC_HEADER` (`\x89PNG\r\n\x1a\n`), and `McpInspectorWorkbench::run_power_integrity_playbook` logs all 4 JSON-RPC frames across both `HeadlessDuplex` and `BridgedLoopback` modes.
 
 ## 8. Progression of Testing Across the Seven Acts
 
 | Curriculum Stage | Testing Mechanism Introduced | What `cargo test` + `cargo mutants` Verifies |
 | --- | --- | --- |
-| **Lessons 0000–0001 & Act I (0002–0005)** | `#[cfg(test)]`, `#[test]`, `assert_eq!`, pure domain/maths methods | Default layer visibility flags, preset state transitions, `Rect` bounds, `TSTransform` pan/zoom round-trips, layer Z-ordering, and net hit-testing. |
-| **Act II (0006–0009)** | `egui_kittest::Harness` (headless UI queries & simulated key presses) | Un-skips `eframe::App::update`! Verifies rendered schematic labels, dual-viewport cross-probing, BOM filtering, and `F` / `M` / `Esc` hotkeys. |
-| **Act III (0010–0013)** | Workflow state-machine tests & `Harness::new_ui` widget mounts | Review pin CRUD in `HashMap`, `Open` → `Resolved` → `Verified` triage rules, DRC clearance bounds, and custom `egui::Widget` layer swatches. |
-| **Act IV (0014–0017)** | Workspace layer gates, panic-free lints & `proptest!` | `#![deny(clippy::unwrap_used)]`, sub-second `cargo mutants -p pcb-doc`, corrupt JSON rejection, and `Arc::make_mut` undo/redo snapshot invariants. |
-| **Act V (0018–0021)** | `panic_hunt` command fuzzer, perf budgets & `gpu_lock()` snapshots | Adversarial JSON fuzzing of every `CommandSpec`, spatial culling equivalence, background worker cancellation, and offscreen `wgpu` PNG visual parity. |
-| **Act VI (0022–0025)** | Real-file KiCad corpus oracles & `#[tokio::test]` SQL harnesses | `nom` S-expression parser edge cases, pinned `.kicad_pcb` oracle pass/round-trip ratchets, Turso (`libsql`) transactions, and `docs/scorecard.md`. |
-| **Act VII (0026–0029)** | `schemars` schema gates, `tokio::io::duplex` MCP client & PNG magic | Bounded spatial/electrical LLM queries, `rmcp` tool/resource/prompt round-trips, constant-time bearer auth, cropped PNG headers, and agent playbooks. |
+| **Lessons 0001–0002 & Act I (0003–0006)** | `#[cfg(test)]`, `#[test]`, `assert_eq!`, pure domain/maths methods | Default layer visibility flags, preset state transitions, `Rect` bounds, `TSTransform` pan/zoom round-trips, layer Z-ordering, and net hit-testing. |
+| **Act II (0007–0010)** | `egui_kittest::Harness` (headless UI queries & simulated key presses) | Un-skips `eframe::App::update`! Verifies rendered schematic labels, dual-viewport cross-probing, BOM filtering, and `F` / `M` / `Esc` hotkeys. |
+| **Act III (0011–0014)** | Workflow state-machine tests & `Harness::new_ui` widget mounts | Review pin CRUD in `HashMap`, `Open` → `Resolved` → `Verified` triage rules, DRC clearance bounds, and custom `egui::Widget` layer swatches. |
+| **Act IV (0015–0018)** | Workspace layer gates, panic-free lints & `proptest!` | `#![deny(clippy::unwrap_used)]`, sub-second `cargo mutants -p pcb-doc`, corrupt JSON rejection, and `Arc::make_mut` undo/redo snapshot invariants. |
+| **Act V (0019–0022)** | `panic_hunt` command fuzzer, perf budgets & `gpu_lock()` snapshots | Adversarial JSON fuzzing of every `CommandSpec`, spatial culling equivalence, background worker cancellation, and offscreen `wgpu` PNG visual parity. |
+| **Act VI (0023–0026)** | Real-file KiCad corpus oracles & `#[tokio::test]` SQL harnesses | `nom` S-expression parser edge cases, pinned `.kicad_pcb` oracle pass/round-trip ratchets, Turso (`libsql`) transactions, and `docs/scorecard.md`. |
+| **Act VII (0027–0030)** | `schemars` schema gates, `tokio::io::duplex` MCP client & PNG magic | Bounded spatial/electrical LLM queries, `rmcp` tool/resource/prompt round-trips, constant-time bearer auth, cropped PNG headers, and agent playbooks. |

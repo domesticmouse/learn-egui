@@ -415,7 +415,7 @@ function initQuiz(containerId, questions) {
 }
 
 /**
- * 4. Lesson 0002 Simulator: 2D Painter Primitives & Rect Geometry
+ * 4. Lesson 0003 Simulator: 2D Painter Primitives & Rect Geometry
  */
 function initPainterCanvasSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -530,7 +530,7 @@ let pad = smd_pad_rect(
 }
 
 /**
- * 5. Lesson 0003 Simulator: World-to-Screen TSTransform (Pan & Cursor Zoom)
+ * 5. Lesson 0004 Simulator: World-to-Screen TSTransform (Pan & Cursor Zoom)
  */
 function initViewportTransformSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -671,7 +671,7 @@ function initViewportTransformSimulator(containerId) {
 }
 
 /**
- * 6. Lesson 0004 Simulator: PcbLayer Z-Rank Sorting & Visibility Filtering
+ * 6. Lesson 0005 Simulator: PcbLayer Z-Rank Sorting & Visibility Filtering
  */
 function initLayerZOrderSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -756,7 +756,7 @@ ${orderStr || "    // (all layers hidden)"}
 }
 
 /**
- * 7. Lesson 0005 Simulator: Hit-Testing & NetId Cross-Probing
+ * 7. Lesson 0006 Simulator: Hit-Testing & NetId Cross-Probing
  */
 function initHitTestCrossProbeSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -837,7 +837,7 @@ active_net(): ${fmtOpt(active)},`;
 }
 
 /**
- * 8. Lesson 0006 Simulator: Painter::text, Align2 & egui_kittest Accessibility Tree
+ * 8. Lesson 0007 Simulator: Painter::text, Align2 & egui_kittest Accessibility Tree
  */
 function initSchematicTextSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -951,7 +951,7 @@ ${silkNodes}${netNode}`;
 }
 
 /**
- * 9. Lesson 0007 Simulator: Dual-Pane Schematic + PCB egui::Scene Cross-Probing
+ * 9. Lesson 0008 Simulator: Dual-Pane Schematic + PCB egui::Scene Cross-Probing
  */
 function initDualSceneCrossProbeSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -1042,7 +1042,7 @@ ViewState {
 }
 
 /**
- * 10. Lesson 0008 Simulator: Searchable BOM & Virtualized ScrollArea::show_rows
+ * 10. Lesson 0009 Simulator: Searchable BOM & Virtualized ScrollArea::show_rows
  */
 function initBomVirtualScrollSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -1133,7 +1133,7 @@ selected_component: Some("${state.selectedRef}"),`;
 }
 
 /**
- * 11. Lesson 0009 Simulator: Keyboard Shortcuts (F / M / Esc) & Point-to-Point CAD Ruler
+ * 11. Lesson 0010 Simulator: Keyboard Shortcuts (F / M / Esc) & Point-to-Point CAD Ruler
  */
 function initHotkeyRulerSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -1252,7 +1252,7 @@ active_tool: ${toolStr},
 }
 
 /**
- * 12. Lesson 0010 Simulator: Review Pins, HashMap::entry & Floating Callout Window
+ * 12. Lesson 0011 Simulator: Review Pins, HashMap::entry & Floating Callout Window
  */
 function initReviewPinsSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -1362,7 +1362,7 @@ selected_pin: ${selStr},
 }
 
 /**
- * 13. Lesson 0011 Simulator: Review Status Triage State Machine & Multi-Criteria Filtering
+ * 13. Lesson 0012 Simulator: Review Status Triage State Machine & Multi-Criteria Filtering
  */
 function initReviewTriageSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -1452,7 +1452,7 @@ visible_pins: ${filtered.length} / 3,`;
 }
 
 /**
- * 14. Lesson 0012 Simulator: DRC Clearance Halos & Clamped Bird's-Eye Minimap
+ * 14. Lesson 0013 Simulator: DRC Clearance Halos & Clamped Bird's-Eye Minimap
  */
 function initDrcMinimapSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -1519,7 +1519,7 @@ minimap_rect: (${clampedMinX.toFixed(0)}, ${clampedMinY.toFixed(0)})..(${clamped
 }
 
 /**
- * 15. Lesson 0013 Simulator: Custom LayerSwatch<'a> Widget & Per-Layer Alpha Blending
+ * 15. Lesson 0014 Simulator: Custom LayerSwatch<'a> Widget & Per-Layer Alpha Blending
  */
 function initLayerSwatchSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -1597,7 +1597,7 @@ Color32::from_rgba_unmultiplied(224, 82, 67, ${alphaTop})`;
 }
 
 /**
- * 16. Lesson 0014 Simulator: Multi-Crate L1-L6 Workspace Layering & Manifest Gate
+ * 16. Lesson 0015 Simulator: Multi-Crate L1-L6 Workspace Layering & Manifest Gate
  */
 function initWorkspaceLayersSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -1661,7 +1661,7 @@ ${tomlSnippet}
 }
 
 /**
- * 17. Lesson 0015 Simulator: Serde Session Envelope & Typed Error Recovery
+ * 17. Lesson 0016 Simulator: Serde Session Envelope & Typed Error Recovery
  */
 function initSerdeSessionSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -1747,7 +1747,7 @@ last_io_error: Some("malformed session JSON: ...")`,
 }
 
 /**
- * 18. Lesson 0016 Simulator: Copy-on-Write Arc::make_mut & Arc::ptr_eq Visualizer
+ * 18. Lesson 0017 Simulator: Copy-on-Write Arc::make_mut & Arc::ptr_eq Visualizer
  */
 function initCowArcSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -1833,7 +1833,7 @@ working.shared_arc_buffers(&baseline): ${sharedCount} / 4`;
 }
 
 /**
- * 19. Lesson 0017 Simulator: BoardHistory Undo/Redo & Slider Drag Coalescing
+ * 19. Lesson 0018 Simulator: BoardHistory Undo/Redo & Slider Drag Coalescing
  */
 function initUndoCoalesceSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -1959,7 +1959,7 @@ revision(): ${state.revision}`;
 
 
 /**
- * 20. Lesson 0018 Simulator: Unified CommandSpec Registry & panic_hunt Fuzzer
+ * 20. Lesson 0019 Simulator: Unified CommandSpec Registry & panic_hunt Fuzzer
  */
 function initCommandPaletteSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -2112,7 +2112,7 @@ ${state.lastResult}`;
 }
 
 /**
- * 21. Lesson 0019 Simulator: Spatial Viewport Culling & PerfBudget
+ * 21. Lesson 0020 Simulator: Spatial Viewport Culling & PerfBudget
  */
 function initViewportCullSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -2193,7 +2193,7 @@ check_cull_budget(${estUs} us, max=500 us): Ok(${estUs})`;
 }
 
 /**
- * 22. Lesson 0020 Simulator: Background mpsc File Import & ProgressBar
+ * 22. Lesson 0021 Simulator: Background mpsc File Import & ProgressBar
  */
 function initAsyncImportSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -2311,7 +2311,7 @@ ctx.request_repaint(): ${state.repaintRequested}`;
 }
 
 /**
- * 23. Lesson 0021 Simulator: Offscreen Snapshot Digest (gpu_lock) & wasm32 Gate
+ * 23. Lesson 0022 Simulator: Offscreen Snapshot Digest (gpu_lock) & wasm32 Gate
  */
 function initSnapshotWasmSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -2404,7 +2404,7 @@ FrameSnapshotDigest {
 }
 
 /**
- * 24. Lesson 0022 Simulator: KiCad S-Expression AST Inspector (nom)
+ * 24. Lesson 0023 Simulator: KiCad S-Expression AST Inspector (nom)
  */
 function initSexprAstSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -2472,7 +2472,7 @@ ast_status_badge(): "AST Error: unclosed or malformed S-expression"`,
 }
 
 /**
- * 25. Lesson 0023 Simulator: KiCad AST Lowering & Tier 4 Corpus Oracle
+ * 25. Lesson 0024 Simulator: KiCad AST Lowering & Tier 4 Corpus Oracle
  */
 function initKicadCorpusSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -2538,7 +2538,7 @@ meets_ratchet_floors(): true`,
 }
 
 /**
- * 26. Lesson 0024 Simulator: Embedded SQL Review Store (turso_parser)
+ * 26. Lesson 0025 Simulator: Embedded SQL Review Store (turso_parser)
  */
 function initTursoSqlSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -2595,7 +2595,7 @@ summary_badge(): "Turso SQL: 2 rows (Schema v1)"`,
 }
 
 /**
- * 27. Lesson 0025 Simulator: Atomic SQL Transactions, Audit Hash Chain & Replica Sync
+ * 27. Lesson 0026 Simulator: Atomic SQL Transactions, Audit Hash Chain & Replica Sync
  */
 function initReplicaSyncSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -2658,7 +2658,7 @@ replica_status_badge(): "Replica: TAMPERED (chain FAIL)"`,
 }
 
 /**
- * 28. Lesson 0026 Simulator: LLM-Native Spatial & Electrical Queries + schemars
+ * 28. Lesson 0027 Simulator: LLM-Native Spatial & Electrical Queries + schemars
  */
 function initSpatialQuerySimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -2739,7 +2739,7 @@ let value = serde_json::to_value(&schema)?;
 }
 
 /**
- * 29. Lesson 0027 Simulator: Headless PcbMcpServer (rmcp) over tokio::io::duplex
+ * 29. Lesson 0028 Simulator: Headless PcbMcpServer (rmcp) over tokio::io::duplex
  */
 function initHeadlessMcpSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -2811,7 +2811,7 @@ assert_eq!(res.is_error, Some(false));`,
 }
 
 /**
- * 30. Lesson 0028 Simulator: Authenticated Loopback Control Bridge & Cropped PNG Snapshots
+ * 30. Lesson 0029 Simulator: Authenticated Loopback Control Bridge & Cropped PNG Snapshots
  */
 function initBridgedMcpSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -2872,7 +2872,7 @@ assert!(snap.png_bytes.starts_with(b"\\x89PNG\\r\\n\\x1a\\n"));`,
 }
 
 /**
- * 31. Lesson 0029 Simulator: Mock MCP Client & Inspector Workbench + Agent Playbooks
+ * 31. Lesson 0030 Simulator: Mock MCP Client & Inspector Workbench + Agent Playbooks
  */
 function initMcpWorkbenchSimulator(containerId) {
   const root = document.getElementById(containerId);
@@ -2902,7 +2902,7 @@ PlaybookReport {
       }
     } else if (mode === "scorecard") {
       if (lEl) {
-        lEl.innerHTML = `<pre style="margin:0; white-space:pre-wrap; color:#3dd68c;">✔ Foundation + Acts I–VII Complete (Lessons 0000–0029)
+        lEl.innerHTML = `<pre style="margin:0; white-space:pre-wrap; color:#3dd68c;">✔ Foundation + Acts I–VII Complete (Lessons 0001–0030)
 ✔ All workspace crates: kicad-sexpr (L0), pcb-doc (L1/L4), pcb-reviewer (L6/L7)
 ✔ Mutation Score: 100% Caught (0 Missed)</pre>`;
       }

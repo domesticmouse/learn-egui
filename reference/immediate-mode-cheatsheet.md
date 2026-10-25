@@ -1,6 +1,6 @@
 ---
 title: "Reference: The `eframe::App` Immediate-Mode Loop"
-subtitle: One-page syntax and mental-model reference for Lessons 0000 & 0001. Keep open or print while writing `egui` panels.
+subtitle: One-page syntax and mental-model reference for Lessons 0001 & 0002. Keep open or print while writing `egui` panels.
 page_type: reference
 ---
 

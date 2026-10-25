@@ -27,7 +27,7 @@ Treat the repository root (`.`) as the teaching workspace. All course paths belo
 - `apps/<NNNN-lesson-slug>/`: A series of runnable Rust / Cargo crate directories where each directory represents the exact state of the Schematic & PCB Design Reviewer application after completing the corresponding lesson (`lessons/<NNNN-lesson-slug>.md`).
 - `assets/*`: Reusable **components** shared across lessons (`style.css`, `course.js`, quiz/exercise widgets, interactive 2D CAD & immediate-mode simulators). See [Assets](#assets).
 - `README.md`: Repository overview linking to the live GitHub Pages site, published lessons, reference sheets, `./LICENSE.txt`, and the disclaimer `This is not an official Google product.`
-- `NOTES.md`: A scratchpad for recording user preferences, the 6-act curriculum roadmap (`0000`–`0025`), and working notes.
+- `NOTES.md`: A scratchpad for recording user preferences, the 6-act curriculum roadmap (`0001`–`0026`), and working notes.
 
 ## Philosophy
 
@@ -54,9 +54,9 @@ Fluency can give an illusory sense of mastery, whereas storage strength is the r
 
 ## Lessons & Markdown-to-HTML Pipeline (`build.py`)
 
-A lesson is the primary artifact you produce: the unit in which knowledge and skills reach the user. Each lesson is authored as a clean Markdown file saved to `lessons/` and titled `0001-<dash-case-name>.md` (starting at `0000-<dash-case-name>.md` for project bootstrap), then compiled to HTML (`lessons/<NNNN-slug>.html`) by running `.venv/bin/python build.py --check`.
+A lesson is the primary artifact you produce: the unit in which knowledge and skills reach the user. Each lesson is authored as a clean Markdown file saved to `lessons/` and titled `0001-<dash-case-name>.md` (starting at `0001-<dash-case-name>.md` for project bootstrap), then compiled to HTML (`lessons/<NNNN-slug>.html`) by running `.venv/bin/python build.py --check`.
 
-When teaching a programming language, framework, or tool where Lesson `0001` needs a configured project manifest and entry point, start with a `0000-<dash-case-name>.md` bootstrap lesson covering Cargo package creation (`Cargo.toml` with `eframe = "0.33"` and `[profile.dev.package."*"] opt-level = 2`), `eframe::run_native`, `#[cfg(test)]`, and `.cargo/mutants.toml` setup so subsequent lessons have a concrete, runnable foundation.
+When teaching a programming language, framework, or tool where Lesson `0002` needs a configured project manifest and entry point, start with a `0001-<dash-case-name>.md` bootstrap lesson covering Cargo package creation (`Cargo.toml` with `eframe = "0.33"` and `[profile.dev.package."*"] opt-level = 2`), `eframe::run_native`, `#[cfg(test)]`, and `.cargo/mutants.toml` setup so subsequent lessons have a concrete, runnable foundation.
 
 ### Markdown Directives & Frontmatter (`build.py`)
 
@@ -77,7 +77,7 @@ Back every lesson with a real, runnable Cargo crate under `./apps/<NNNN-lesson-s
 
 1. **Tooling Stack (`cargo` + `cargo-mutants` + `egui_kittest` + `uv` for `build.py`):**
    - Use `.venv/bin/python build.py --check` (created via `uv venv --clear --python 3.14 .venv` and `uv pip install markdown-it-py pyyaml`) to compile and validate all Markdown lessons and reference sheets.
-   - Start at `./apps/0000-project-setup-and-eframe-boot/` and progressively grow the Schematic & PCB Design Reviewer across lessons (`0000`–`0025`).
+   - Start at `./apps/0001-project-setup-and-eframe-boot/` and progressively grow the Schematic & PCB Design Reviewer across lessons (`0001`–`0026`).
 2. **Sandboxed Offline Cargo Setup (`CARGO_HOME` & `TMPDIR` in Brain Scratch):**
    - On macOS, `/tmp` is a symlink to `/private/tmp` and `~/.cargo` lies outside the workspace, so `std::fs::canonicalize` inside `cargo` and `cargo-mutants` fails with `Operation not permitted` in Standard Sandbox Mode (`BypassSandbox: false`).
    - Seed the Cargo registry once into `<appDataDir>/brain/<conversation-id>/scratch/cargo-home/registry` (`cp -cR ~/.cargo/registry <scratch>/cargo-home/registry`) and pass `CARGO_HOME=<scratch>/cargo-home TMPDIR=<scratch>/tmp` on every `cargo test` and `cargo mutants` command so all builds and mutation runs execute 100% inside Standard Sandbox Mode (`BypassSandbox: false`).
