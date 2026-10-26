@@ -171,4 +171,8 @@
   - **Cargo Verification & Mutation Coverage**: 31 workspace tests (`3` in `kicad-sexpr`, `22` in `pcb-doc`, `6` in `pcb-reviewer`); `cargo mutants` catches `6 / 6` viable workbench and playbook mutants (`539 / 539 viable workspace mutants caught, 0 missed`).
 
 ### Future Acts Under Exploration (`Act VIII+`, `0031`+)
-- *The course remains open-ended beyond `0030`—future acts can explore Gerber/Excellon manufacturing output & visual copper XOR revision diffing (`Rev A` vs. `Rev B`), custom WGSL GPU shaders (`egui_wgpu::CallbackTrait`) for sub-pixel copper pour & thermal relief rendering, interactive length-tuning/impedance calculators, or multi-board panelization.*
+- *The course remains open-ended beyond `0030`—future acts can explore:*
+  - **Parallel Tessellation via `egui`'s `rayon` Feature (`epaint/rayon`) & Layer Shape Batching**: Once board displays grow dense enough (tens of thousands of visible copper traces, pads, and polygon pours), enable `egui = { version = "0.37", features = ["rayon"] }` (scoped to `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]` to preserve single-threaded WASM compatibility) and refactor `paint_board` to batch primitives per layer into `Shape::Vec(layer_shapes)` or `Shape::Path` (`> 32` points) so `epaint::Tessellator::parallel_tessellation_of_large_shapes` (`should_parallelize`) dispatches layer/zone tessellation across the Rayon thread pool.
+  - **Gerber/Excellon Manufacturing Output & Visual Copper XOR Revision Diffing (`Rev A` vs. `Rev B`)**.
+  - **Custom WGSL GPU Shaders (`egui_wgpu::CallbackTrait`)** for sub-pixel copper pour & thermal relief rendering.
+  - **Interactive Length-Tuning / Impedance Calculators & Multi-Board Panelization**.
