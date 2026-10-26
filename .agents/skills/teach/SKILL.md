@@ -114,13 +114,18 @@ A lesson should be **beautiful**, with clean, readable typography and layout (th
 
 ### Course Index, Navigation & GitHub Pages Hosting
 
-Keep the course navigable both locally and on GitHub Pages:
+Keep the course navigable both locally and on GitHub Pages without cluttering the header bar:
 
-1. **Synchronize Navigation & Index via `build.py --check` on Every New Lesson:** Whenever you add a lesson (`lessons/<NNNN-slug>.md`) or reference sheet (`reference/*.md`):
-   - Populate its YAML frontmatter (`title`, `page_title`, `nav_id`, `badge`, `subtitle`, `card`) and add the live link to `README.md`.
-   - Run `.venv/bin/python build.py --check` so `build.py` automatically regenerates `<nav class="course-nav">` across every page, updates the `.lesson-card` grid in `index.html`, compiles all `.md` files to `.html`, and validates equal-word-count quiz rules and internal `.md` links (rewritten to `.html`).
+1. **Minimal Tufte Breadcrumb Header & Bottom Pager (`build_nav_html` & `build_lesson_pager_html` in `build.py`):**
+   - Never dump all individual lesson numbers (`0001`–`0030`) into `<nav class="course-nav">`. Keep the top bar high-signal and single-line using two flex groups:
+     - **Left (`.nav-breadcrumbs`)**: Contextual breadcrumb trail (`Index › <Act> › Lesson NNNN` on lessons where `<Act>` links to `../index.html#<act-anchor>` via `lesson_act_info()`, `Index › <Sheet Name>` on reference pages, and `Index` on the landing page) with `aria-current="page"` on the active item.
+     - **Right (`.nav-controls`)**: On lesson pages, a compact `← Prev · Next →` pill group (`.nav-pager-group`) with full lesson title `title="..."` tooltips, separated by `|` from the reference sheet links (`Glossary`, `IMGUI Cheat Sheet`, `Mutation Cheat Sheet`) and `.mission-badge`.
+   - **Bottom-of-Lesson Pagination Cards (`.lesson-pager`)**: `build_lesson_pager_html()` automatically appends a two-column `<nav class="lesson-pager" aria-label="Lesson pagination">` footer at the end of every lesson article with `← Previous • Lesson NNNN` and `Next • Lesson NNNN →` cards showing full lesson titles (and hidden in `@media print`).
+2. **Synchronize Navigation & Index via `build.py --check` on Every New Lesson:** Whenever you add a lesson (`lessons/<NNNN-slug>.md`) or reference sheet (`reference/*.md`):
+   - Populate its YAML frontmatter (`title`, `page_title`, `nav_id`, `badge`, `subtitle`, `card`), ensure `lesson_act_info()` and `filter_lessons()` in `build.py` map its `nav_id` to the appropriate Act anchor on `index.md`, and add the live link to `README.md`.
+   - Run `.venv/bin/python build.py --check` so `build.py` automatically regenerates `<nav class="course-nav">` and `<nav class="lesson-pager">` across every page, updates the `.lesson-card` grid in `index.html`, compiles all `.md` files to `.html`, and validates equal-word-count quiz rules and internal `.md` links (rewritten to `.html`).
    - Preserve the license link (`[Apache License, Version 2.0](./LICENSE.txt)`) and the `This is not an official Google product.` disclaimer in `README.md`.
-2. **GitHub Pages Deployment (`.github/workflows/pages.yml` & `.nojekyll`):**
+3. **GitHub Pages Deployment (`.github/workflows/pages.yml` & `.nojekyll`):**
    - `.github/workflows/pages.yml` runs `python build.py --out-dir _site --check` to compile the Markdown sources directly into `_site/` (`index.html`, `.nojekyll`, `assets/`, `lessons/*.html`, `reference/*.html`) so companion Rust crates (`apps/`) and internal markdown files (`MISSION.md`, `RESOURCES.md`, `NOTES.md`, `learning-records/`) are excluded from the published web artifact.
    - Pass `env: NODE_OPTIONS: --no-deprecation` on the `actions/deploy-pages@v4` step to suppress the benign Node.js `[DEP0040] DeprecationWarning: The punycode module is deprecated` warning.
 

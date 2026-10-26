@@ -10,43 +10,21 @@
 <body>
   <header>
   <nav class="course-nav" aria-label="Course navigation">
-    <div>
+    <div class="nav-breadcrumbs">
       <a href="../index.html">Index</a>
-      <a href="./0001-project-setup-and-eframe-boot.html">0001</a>
-      <a href="./0002-the-immediate-mode-loop.html">0002</a>
-      <a href="./0003-custom-2d-canvas-and-painter.html">0003</a>
-      <a href="./0004-world-to-screen-transforms-pan-and-zoom.html">0004</a>
-      <a href="./0005-modeling-layers-traces-and-footprints.html">0005</a>
-      <a href="./0006-hit-testing-and-net-cross-probing.html">0006</a>
-      <a href="./0007-schematic-symbols-and-text-rendering.html">0007</a>
-      <a href="./0008-split-viewports-and-egui-scene.html">0008</a>
-      <a href="./0009-searchable-netlist-and-bom-inspector.html">0009</a>
-      <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html">0010</a>
-      <a href="./0011-review-pins-and-sticky-note-callouts.html">0011</a>
-      <a href="./0012-review-status-workflow-and-popups.html">0012</a>
-      <a href="./0013-drc-violation-overlay-and-minimap.html">0013</a>
-      <a href="./0014-custom-layer-swatch-widget-and-design-tokens.html">0014</a>
-      <a href="./0015-multi-crate-workspace-doc-vs-ui-egui.html">0015</a>
-      <a href="./0016-loading-board-and-review-files-serde.html">0016</a>
-      <a href="./0017-copy-on-write-arc-document-snapshots.html">0017</a>
-      <a href="./0018-undo-redo-history-and-slider-coalescing.html">0018</a>
-      <a href="./0019-the-command-pattern-and-command-palette.html">0019</a>
-      <a href="./0020-viewport-culling-and-cached-tessellation.html">0020</a>
-      <a href="./0021-non-blocking-file-import-and-progress-ui.html">0021</a>
-      <a href="./0022-headless-snapshot-testing-and-wasm-build.html">0022</a>
-      <a href="./0023-sexpr-tokenizer-and-ast-with-nom.html">0023</a>
-      <a href="./0024-parsing-kicad-pcb-and-sch-into-domain-model.html">0024</a>
-      <a href="./0025-embedded-sql-review-store-with-turso.html">0025</a>
-      <a href="./0026-local-first-review-sync-and-audit-trail.html">0026</a>
-      <a href="./0027-llm-native-spatial-and-electrical-queries.html">0027</a>
-      <a href="./0028-headless-mcp-server-rmcp-and-mock-client.html" class="active">0028</a>
-      <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html">0029</a>
-      <a href="./0030-egui-mcp-inspector-workbench-and-agent-playbooks.html">0030</a>
+      <span class="nav-sep" aria-hidden="true">›</span>
+      <a href="../index.html#act-7">Act VII</a>
+      <span class="nav-sep" aria-hidden="true">›</span>
+      <span class="nav-current" aria-current="page">Lesson 0028</span>
+    </div>
+    <div class="nav-controls">
+      <span class="nav-pager-group"><a href="./0027-llm-native-spatial-and-electrical-queries.html" class="nav-pager" title="Lesson 0027: LLM-Native Spatial &amp; Electrical Queries (schemars)">← 0027</a> <span class="nav-dot" aria-hidden="true">·</span> <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html" class="nav-pager" title="Lesson 0029: Bridged MCP Control Channel &amp; Live GUI Snapshots">0029 →</a></span>
+      <span class="nav-divider" aria-hidden="true">|</span>
       <a href="../reference/glossary.html">Glossary</a>
       <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+      <span class="mission-badge">Act VII • Agentic Hardware Review &amp; MCP (rmcp)</span>
     </div>
-    <span class="mission-badge">Act VII • Agentic Hardware Review &amp; MCP (rmcp)</span>
   </nav>
   </header>
 
@@ -776,6 +754,17 @@ cargo mutants --manifest-path ./apps/0028-headless-mcp-server-rmcp-and-mock-clie
   Next up in <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html"><strong>Lesson 0029: Bridged MCP Control Channel (<code>127.0.0.1</code> + Bearer Token) &amp; Cropped Live-GUI Snapshots</strong></a>, we will add an authenticated loopback control bridge so an MCP agent can pan/zoom the live <code>egui</code> 2D CAD camera (<code>ui.focus_region</code>), drop review pins in real time, and capture cropped PNG region snapshots returned as multimodal <code>ContentBlock::image</code> payloads!
 </div>
 </div>
+
+<nav class="lesson-pager" aria-label="Lesson pagination">
+    <a href="./0027-llm-native-spatial-and-electrical-queries.html" class="lesson-pager-card prev">
+      <span class="pager-direction">← Previous • Lesson 0027</span>
+      <span class="pager-title">LLM-Native Spatial &amp; Electrical Queries (<code>schemars</code>)</span>
+    </a>
+    <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html" class="lesson-pager-card next">
+      <span class="pager-direction">Next • Lesson 0029 →</span>
+      <span class="pager-title">Bridged MCP Control Channel &amp; Live GUI Snapshots</span>
+    </a>
+</nav>
     </article>
   </main>
 

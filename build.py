@@ -2225,6 +2225,29 @@ def compile_markdown_body(
     return "\n\n".join(out_chunks)
 
 
+def lesson_act_info(nav_id: str) -> tuple[str, str]:
+    """Return `(act_label, index_anchor)` for a 4-digit lesson `nav_id`."""
+    try:
+        n = int(nav_id)
+    except ValueError:
+        return ("Curriculum", "foundation")
+    if n <= 2:
+        return ("Foundation", "foundation")
+    if n <= 6:
+        return ("Act I", "act-1")
+    if n <= 10:
+        return ("Act II", "act-2")
+    if n <= 14:
+        return ("Act III", "act-3")
+    if n <= 18:
+        return ("Act IV", "act-4")
+    if n <= 22:
+        return ("Act V", "act-5")
+    if n <= 26:
+        return ("Act VI", "act-6")
+    return ("Act VII", "act-7")
+
+
 def build_nav_html(
     *,
     active_id: str,
@@ -2233,42 +2256,153 @@ def build_nav_html(
     lessons: list[dict[str, Any]],
     references: list[dict[str, Any]],
 ) -> str:
-    """Build `<nav class="course-nav">` for any page in the course."""
-    links: list[str] = []
-    idx_active = ' class="active"' if active_id == "index" else ""
+    """Build `<nav class="course-nav">` with a minimal Tufte breadcrumb trail and pager."""
     idx_href = "./index.html" if rel_root == "" else f"{rel_root}index.html"
-    links.append(f'      <a href="{idx_href}"{idx_active}>Index</a>')
+    crumbs: list[str] = []
 
-    for les in lessons:
-        lid = les["nav_id"]
-        act = ' class="active"' if active_id == lid else ""
-        if rel_root == "":
-            href = f"./lessons/{les['html_name']}"
-        elif active_id.isdigit():
-            href = f"./{les['html_name']}"
-        else:
-            href = f"../lessons/{les['html_name']}"
-        links.append(f'      <a href="{href}"{act}>{html.escape(lid)}</a>')
+    if active_id == "index":
+        crumbs.append(f'      <a href="{idx_href}" class="active" aria-current="page">Index</a>')
+    elif active_id.isdigit():
+        act_label, act_anchor = lesson_act_info(active_id)
+        crumbs.append(f'      <a href="{idx_href}">Index</a>')
+        crumbs.append('      <span class="nav-sep" aria-hidden="true">›</span>')
+        crumbs.append(f'      <a href="{idx_href}#{act_anchor}">{html.escape(act_label)}</a>')
+        crumbs.append('      <span class="nav-sep" aria-hidden="true">›</span>')
+        crumbs.append(
+            f'      <span class="nav-current" aria-current="page">Lesson {html.escape(active_id)}</span>'
+        )
+    else:
+        active_ref_label = next(
+            (r["nav_label"] for r in references if r["nav_id"] == active_id),
+            active_id,
+        )
+        crumbs.append(f'      <a href="{idx_href}">Index</a>')
+        crumbs.append('      <span class="nav-sep" aria-hidden="true">›</span>')
+        crumbs.append(
+            f'      <span class="nav-current" aria-current="page">{html.escape(str(active_ref_label))}</span>'
+        )
+
+    controls: list[str] = []
+
+    if active_id.isdigit():
+        cur_idx = next(
+            (i for i, les in enumerate(lessons) if les["nav_id"] == active_id),
+            None,
+        )
+        if cur_idx is not None:
+            pager_links: list[str] = []
+            if cur_idx > 0:
+                prev_les = lessons[cur_idx - 1]
+                prev_id = html.escape(prev_les["nav_id"])
+                prev_title = html.escape(
+                    str(prev_les["meta"].get("card", {}).get("title", prev_les["meta"].get("title", ""))).replace("`", ""),
+                    quote=True,
+                )
+                pager_links.append(
+                    f'<a href="./{prev_les["html_name"]}" class="nav-pager" title="Lesson {prev_id}: {prev_title}">← {prev_id}</a>'
+                )
+            if cur_idx + 1 < len(lessons):
+                next_les = lessons[cur_idx + 1]
+                next_id = html.escape(next_les["nav_id"])
+                next_title = html.escape(
+                    str(next_les["meta"].get("card", {}).get("title", next_les["meta"].get("title", ""))).replace("`", ""),
+                    quote=True,
+                )
+                pager_links.append(
+                    f'<a href="./{next_les["html_name"]}" class="nav-pager" title="Lesson {next_id}: {next_title}">{next_id} →</a>'
+                )
+            if pager_links:
+                joined_pager = ' <span class="nav-dot" aria-hidden="true">·</span> '.join(pager_links)
+                controls.append(f'      <span class="nav-pager-group">{joined_pager}</span>')
+                controls.append('      <span class="nav-divider" aria-hidden="true">|</span>')
 
     for ref in references:
         rid = ref["nav_id"]
-        act = ' class="active"' if active_id == rid else ""
+        act = ' class="active" aria-current="page"' if active_id == rid else ""
         if rel_root == "":
             href = f"./reference/{ref['html_name']}"
         elif not active_id.isdigit() and active_id != "index":
             href = f"./{ref['html_name']}"
         else:
             href = f"../reference/{ref['html_name']}"
-        links.append(f'      <a href="{href}"{act}>{html.escape(ref["nav_label"])}</a>')
+        controls.append(f'      <a href="{href}"{act}>{html.escape(ref["nav_label"])}</a>')
 
-    links_joined = "\n".join(links)
+    controls.append(f'      <span class="mission-badge">{html.escape(badge_text)}</span>')
+
+    crumbs_joined = "\n".join(crumbs)
+    controls_joined = "\n".join(controls)
     return (
         f'  <nav class="course-nav" aria-label="Course navigation">\n'
-        f"    <div>\n"
-        f"{links_joined}\n"
+        f'    <div class="nav-breadcrumbs">\n'
+        f"{crumbs_joined}\n"
         f"    </div>\n"
-        f'    <span class="mission-badge">{html.escape(badge_text)}</span>\n'
+        f'    <div class="nav-controls">\n'
+        f"{controls_joined}\n"
+        f"    </div>\n"
         f"  </nav>"
+    )
+
+
+def build_lesson_pager_html(
+    *,
+    active_id: str,
+    lessons: list[dict[str, Any]],
+) -> str:
+    """Build a bottom-of-article Prev / Next lesson card bar for lesson pages."""
+    if not active_id.isdigit():
+        return ""
+    cur_idx = next(
+        (i for i, les in enumerate(lessons) if les["nav_id"] == active_id),
+        None,
+    )
+    if cur_idx is None:
+        return ""
+
+    if cur_idx > 0:
+        prev_les = lessons[cur_idx - 1]
+        prev_id = html.escape(prev_les["nav_id"])
+        prev_title = render_inline_md(
+            prev_les["meta"].get("card", {}).get("title", prev_les["meta"].get("title", ""))
+        )
+        prev_card = (
+            f'    <a href="./{prev_les["html_name"]}" class="lesson-pager-card prev">\n'
+            f'      <span class="pager-direction">← Previous • Lesson {prev_id}</span>\n'
+            f'      <span class="pager-title">{prev_title}</span>\n'
+            f"    </a>"
+        )
+    else:
+        prev_card = (
+            '    <a href="../index.html" class="lesson-pager-card prev">\n'
+            '      <span class="pager-direction">← Course Index</span>\n'
+            '      <span class="pager-title">Curriculum Table of Contents</span>\n'
+            "    </a>"
+        )
+
+    if cur_idx + 1 < len(lessons):
+        next_les = lessons[cur_idx + 1]
+        next_id = html.escape(next_les["nav_id"])
+        next_title = render_inline_md(
+            next_les["meta"].get("card", {}).get("title", next_les["meta"].get("title", ""))
+        )
+        next_card = (
+            f'    <a href="./{next_les["html_name"]}" class="lesson-pager-card next">\n'
+            f'      <span class="pager-direction">Next • Lesson {next_id} →</span>\n'
+            f'      <span class="pager-title">{next_title}</span>\n'
+            f"    </a>"
+        )
+    else:
+        next_card = (
+            '    <a href="../index.html" class="lesson-pager-card next">\n'
+            '      <span class="pager-direction">Course Complete →</span>\n'
+            '      <span class="pager-title">Return to Curriculum Index &amp; Reference Sheets</span>\n'
+            "    </a>"
+        )
+
+    return (
+        '\n\n<nav class="lesson-pager" aria-label="Lesson pagination">\n'
+        f"{prev_card}\n"
+        f"{next_card}\n"
+        "</nav>"
     )
 
 
@@ -2321,6 +2455,11 @@ def render_full_page(
             )
     else:
         body_combined = f"{heading_block}\n\n{body_html}"
+
+    body_combined += build_lesson_pager_html(
+        active_id=active_id,
+        lessons=lessons,
+    )
 
     css_href = "./assets/style.css" if rel_root == "" else f"{rel_root}assets/style.css"
     js_src = "./assets/course.js" if rel_root == "" else f"{rel_root}assets/course.js"

@@ -10,43 +10,21 @@
 <body>
   <header>
   <nav class="course-nav" aria-label="Course navigation">
-    <div>
+    <div class="nav-breadcrumbs">
       <a href="../index.html">Index</a>
-      <a href="./0001-project-setup-and-eframe-boot.html">0001</a>
-      <a href="./0002-the-immediate-mode-loop.html">0002</a>
-      <a href="./0003-custom-2d-canvas-and-painter.html">0003</a>
-      <a href="./0004-world-to-screen-transforms-pan-and-zoom.html">0004</a>
-      <a href="./0005-modeling-layers-traces-and-footprints.html">0005</a>
-      <a href="./0006-hit-testing-and-net-cross-probing.html">0006</a>
-      <a href="./0007-schematic-symbols-and-text-rendering.html">0007</a>
-      <a href="./0008-split-viewports-and-egui-scene.html">0008</a>
-      <a href="./0009-searchable-netlist-and-bom-inspector.html">0009</a>
-      <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html">0010</a>
-      <a href="./0011-review-pins-and-sticky-note-callouts.html" class="active">0011</a>
-      <a href="./0012-review-status-workflow-and-popups.html">0012</a>
-      <a href="./0013-drc-violation-overlay-and-minimap.html">0013</a>
-      <a href="./0014-custom-layer-swatch-widget-and-design-tokens.html">0014</a>
-      <a href="./0015-multi-crate-workspace-doc-vs-ui-egui.html">0015</a>
-      <a href="./0016-loading-board-and-review-files-serde.html">0016</a>
-      <a href="./0017-copy-on-write-arc-document-snapshots.html">0017</a>
-      <a href="./0018-undo-redo-history-and-slider-coalescing.html">0018</a>
-      <a href="./0019-the-command-pattern-and-command-palette.html">0019</a>
-      <a href="./0020-viewport-culling-and-cached-tessellation.html">0020</a>
-      <a href="./0021-non-blocking-file-import-and-progress-ui.html">0021</a>
-      <a href="./0022-headless-snapshot-testing-and-wasm-build.html">0022</a>
-      <a href="./0023-sexpr-tokenizer-and-ast-with-nom.html">0023</a>
-      <a href="./0024-parsing-kicad-pcb-and-sch-into-domain-model.html">0024</a>
-      <a href="./0025-embedded-sql-review-store-with-turso.html">0025</a>
-      <a href="./0026-local-first-review-sync-and-audit-trail.html">0026</a>
-      <a href="./0027-llm-native-spatial-and-electrical-queries.html">0027</a>
-      <a href="./0028-headless-mcp-server-rmcp-and-mock-client.html">0028</a>
-      <a href="./0029-bridged-mcp-control-channel-and-live-gui-snapshots.html">0029</a>
-      <a href="./0030-egui-mcp-inspector-workbench-and-agent-playbooks.html">0030</a>
+      <span class="nav-sep" aria-hidden="true">›</span>
+      <a href="../index.html#act-3">Act III</a>
+      <span class="nav-sep" aria-hidden="true">›</span>
+      <span class="nav-current" aria-current="page">Lesson 0011</span>
+    </div>
+    <div class="nav-controls">
+      <span class="nav-pager-group"><a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html" class="nav-pager" title="Lesson 0010: Keyboard Shortcuts (F, M, Esc) &amp; Point-to-Point CAD Ruler">← 0010</a> <span class="nav-dot" aria-hidden="true">·</span> <a href="./0012-review-status-workflow-and-popups.html" class="nav-pager" title="Lesson 0012: Review Status Triage &amp; Severity Filtering">0012 →</a></span>
+      <span class="nav-divider" aria-hidden="true">|</span>
       <a href="../reference/glossary.html">Glossary</a>
       <a href="../reference/immediate-mode-cheatsheet.html">IMGUI Cheat Sheet</a>
       <a href="../reference/testing-and-mutation-cheatsheet.html">Mutation Cheat Sheet</a>
+      <span class="mission-badge">Act III: Design Review Workflows</span>
     </div>
-    <span class="mission-badge">Act III: Design Review Workflows</span>
   </nav>
   </header>
 
@@ -851,6 +829,17 @@ fn review_pin_entry_api_prevents_overwrites_and_sorts_deterministically() {
   <strong>Next Up (<a href="./0012-review-status-workflow-and-popups.html">Lesson 0012: Review Status Triage, Severity Filtering &amp; Sign-Off Rules</a>):</strong> Now that engineers can anchor review pins to the board, how do we track whether each issue is <code>Open</code>, <code>Resolved</code>, or <code>Verified</code>—and filter by severity (<code>Info</code>, <code>Warning</code>, <code>Critical</code>)? Ask any questions about <code>HashMap</code> or <code>egui::Window</code>, or head to Lesson 0012!
 </div>
 </div>
+
+<nav class="lesson-pager" aria-label="Lesson pagination">
+    <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html" class="lesson-pager-card prev">
+      <span class="pager-direction">← Previous • Lesson 0010</span>
+      <span class="pager-title">Keyboard Shortcuts (<code>F</code>, <code>M</code>, <code>Esc</code>) &amp; Point-to-Point CAD Ruler</span>
+    </a>
+    <a href="./0012-review-status-workflow-and-popups.html" class="lesson-pager-card next">
+      <span class="pager-direction">Next • Lesson 0012 →</span>
+      <span class="pager-title">Review Status Triage &amp; Severity Filtering</span>
+    </a>
+</nav>
     </article>
   </main>
 
