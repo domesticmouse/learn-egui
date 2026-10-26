@@ -142,9 +142,9 @@ impl PcbReviewerApp {
 
 ```rust
 impl eframe::App for PcbReviewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Lesson 0002's SidePanel and CentralPanel code lives right here!
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Lesson 0002's Panel and CentralPanel code lives right here!
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("PCB Viewport Ready");
         });
     }
@@ -152,11 +152,11 @@ impl eframe::App for PcbReviewerApp {
 ```
 
 - **`impl eframe::App for PcbReviewerApp`**: In Rust, **traits** work like interfaces. Implementing `eframe::App` is the contract that connects our `PcbReviewerApp` struct to `eframe`'s event and render loop.
-- **`fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame)`**: `eframe` calls this method on every repaint:
+- **`fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame)`**: `eframe` calls this method on every repaint:
   - `&mut self`: Gives us mutable access to our `PcbReviewerApp` state so checkboxes and buttons can modify fields in place.
-  - `ctx: &egui::Context`: The handle to `egui`'s central context for the current frame, which tracks input events, styling, fonts, and panel layout across the window.
+  - `ui: &mut egui::Ui`: The root UI region handle for the current frame, which tracks layout, input events, styling, and fonts across the window.
   - `_frame: &mut eframe::Frame`: Provides integration hooks into the surrounding `eframe` shell. Prefixing the parameter name with an underscore (`_frame`) tells the Rust compiler we intentionally aren't using it yet, keeping our build free of unused-variable warnings.
-- **`egui::CentralPanel::default().show(ctx, |ui| { ... })`**: Claims the main canvas area of the window and invokes our closure `|ui| { ... }`, passing in a `&mut egui::Ui` region builder where `ui.heading("PCB Viewport Ready")` emits our startup heading.
+- **`egui::CentralPanel::default().show(ui, |ui| { ... })`**: Claims the main canvas area of the window and invokes our closure `|ui| { ... }`, passing in a scoped `&mut egui::Ui` region builder where `ui.heading("PCB Viewport Ready")` emits our startup heading.
 
 ### Block 5: Inline Unit Tests (`#[cfg(test)] mod tests`)
 
@@ -230,7 +230,7 @@ impl PcbReviewerApp {
 
 impl eframe::App for PcbReviewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // Lesson 0002's Panel::left and CentralPanel code lives right here!
+        // Lesson 0002's Panel and CentralPanel code lives right here!
         egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("PCB Viewport Ready");
         });

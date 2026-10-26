@@ -163,23 +163,23 @@ impl PcbReviewerApp {
 </ul>
 <h3 id="block-4-implementing-the-frame-loop-impl-eframe-app">Block 4: Implementing the Frame Loop (<code>impl eframe::App</code>)</h3>
 <pre><code class="language-rust">impl eframe::App for PcbReviewerApp {
-    fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame) {
-        // Lesson 0002's SidePanel and CentralPanel code lives right here!
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame) {
+        // Lesson 0002's Panel and CentralPanel code lives right here!
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("PCB Viewport Ready");
         });
     }
 }</code></pre>
 <ul>
 <li><strong><code>impl eframe::App for PcbReviewerApp</code></strong>: In Rust, <strong>traits</strong> work like interfaces. Implementing <code>eframe::App</code> is the contract that connects our <code>PcbReviewerApp</code> struct to <code>eframe</code>'s event and render loop.</li>
-<li><strong><code>fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame)</code></strong>: <code>eframe</code> calls this method on every repaint:
+<li><strong><code>fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame)</code></strong>: <code>eframe</code> calls this method on every repaint:
 <ul>
 <li><code>&amp;mut self</code>: Gives us mutable access to our <code>PcbReviewerApp</code> state so checkboxes and buttons can modify fields in place.</li>
-<li><code>ctx: &amp;egui::Context</code>: The handle to <code>egui</code>'s central context for the current frame, which tracks input events, styling, fonts, and panel layout across the window.</li>
+<li><code>ui: &amp;mut egui::Ui</code>: The root UI region handle for the current frame, which tracks layout, input events, styling, and fonts across the window.</li>
 <li><code>_frame: &amp;mut eframe::Frame</code>: Provides integration hooks into the surrounding <code>eframe</code> shell. Prefixing the parameter name with an underscore (<code>_frame</code>) tells the Rust compiler we intentionally aren't using it yet, keeping our build free of unused-variable warnings.</li>
 </ul>
 </li>
-<li><strong><code>egui::CentralPanel::default().show(ctx, |ui| { ... })</code></strong>: Claims the main canvas area of the window and invokes our closure <code>|ui| { ... }</code>, passing in a <code>&amp;mut egui::Ui</code> region builder where <code>ui.heading(&quot;PCB Viewport Ready&quot;)</code> emits our startup heading.</li>
+<li><strong><code>egui::CentralPanel::default().show(ui, |ui| { ... })</code></strong>: Claims the main canvas area of the window and invokes our closure <code>|ui| { ... }</code>, passing in a scoped <code>&amp;mut egui::Ui</code> region builder where <code>ui.heading(&quot;PCB Viewport Ready&quot;)</code> emits our startup heading.</li>
 </ul>
 <h3 id="block-5-inline-unit-tests-cfg-test-mod-tests">Block 5: Inline Unit Tests (<code>#[cfg(test)] mod tests</code>)</h3>
 <pre><code class="language-rust">#[cfg(test)]
@@ -247,7 +247,7 @@ impl PcbReviewerApp {
 
 impl eframe::App for PcbReviewerApp {
     fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame) {
-        // Lesson 0002's Panel::left and CentralPanel code lives right here!
+        // Lesson 0002's Panel and CentralPanel code lives right here!
         egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("PCB Viewport Ready");
         });
