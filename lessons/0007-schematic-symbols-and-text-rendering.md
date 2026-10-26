@@ -69,7 +69,33 @@ painter.text(
 
 So, how do you test a GUI without opening a real OS window and hijacking your mouse cursor?
 
-Turns out, `egui_kittest` solves this cleanly by tapping into AccessKit's semantic accessibility node tree. By adding `egui_kittest = { version = "0.33", features = ["eframe"] }` under `[dev-dependencies]`, we can spin up our entire `eframe::App` headlessly in milliseconds, query widgets by their label, and click buttons directly from `cargo test`:
+Turns out, `egui_kittest` solves this cleanly by tapping into AccessKit's semantic accessibility node tree. Add `egui_kittest` as a development dependency with its `eframe` feature enabled:
+
+```console
+cargo add --dev egui_kittest --features eframe
+```
+
+Here is the resulting `Cargo.toml`:
+
+```toml
+[package]
+name = "pcb-reviewer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.33"
+
+[dev-dependencies]
+egui_kittest = { version = "0.33", features = ["eframe"] }
+
+# Optimise dependencies (like egui/eframe) even in debug builds so our
+# 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
+[profile.dev.package."*"]
+opt-level = 2
+```
+
+With `egui_kittest` under `[dev-dependencies]`, we can spin up our entire `eframe::App` headlessly in milliseconds, query widgets by their label, and click buttons directly from `cargo test`:
 
 ```rust
 use egui_kittest::{Harness, kittest::Queryable};

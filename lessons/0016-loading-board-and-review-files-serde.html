@@ -60,10 +60,31 @@
 <p>A hardware design review tool is only useful if engineers can save their review pins (<code>ReviewNote</code> status, severity, author, and millimetre coordinates) to a file, share it in a pull request, and reload it without losing state.<span class="sidenote-number"></span><span class="sidenote"><strong>Why Wrap <code>BoardModel</code> in <code>ReviewSessionEnvelope</code>?</strong> Serializing a raw <code>BoardModel</code> directly leaves no metadata to detect format changes later. Wrapping it in <code>ReviewSessionEnvelope { schema_version: 1, board_id, board }</code> lets <code>from_session_json</code> reject incompatible schema versions with a clear, typed error before touching application state.</span></p>
 <p>Because <code>pcb-doc</code> (<code>L1</code>) owns all domain types, adding persistence requires zero changes to our <code>egui</code> rendering code:</p>
 <ol>
-<li><strong>Enable <code>emath</code>'s <code>&quot;serde&quot;</code> feature</strong>: In <code>crates/pcb-doc/Cargo.toml</code>, <code>emath = { version = &quot;0.33&quot;, features = [&quot;serde&quot;] }</code> enables <code>Serialize</code> and <code>Deserialize</code> on <code>Pos2</code>, <code>Vec2</code>, and <code>Rect</code>.</li>
+<li><strong>Enable <code>emath</code>'s <code>&quot;serde&quot;</code> feature</strong>: Running <code>cargo add --package pcb-doc emath --features serde</code> updates <code>crates/pcb-doc/Cargo.toml</code> so <code>emath = { version = &quot;0.33&quot;, features = [&quot;serde&quot;] }</code> enables <code>Serialize</code> and <code>Deserialize</code> on <code>Pos2</code>, <code>Vec2</code>, and <code>Rect</code>.</li>
 <li><strong>Define a typed <code>SessionIoError</code> with <code>thiserror</code></strong>: Instead of returning opaque strings or panicking on corrupt files, <code>SessionIoError</code> models three explicit failure modes: <code>EmptyBoardId</code>, <code>UnsupportedSchemaVersion { found, expected }</code>, and <code>MalformedJson(String)</code>.</li>
 <li><strong>Destructure <code>ReviewSessionEnvelope</code> exhaustively</strong>: In <code>BoardModel::from_session_json</code>, we unpack <code>let ReviewSessionEnvelope { schema_version, board_id, board } = ...</code> <em>without</em> <code>..</code> so adding any new envelope field in the future triggers a compiler error until validation is wired.</li>
 </ol>
+<p>Add the persistence and error-handling dependencies to <code>pcb-doc</code> with <code>cargo add</code>:</p>
+<pre><code class="language-console">cargo add --package pcb-doc emath --features serde
+cargo add --package pcb-doc serde --features derive
+cargo add --package pcb-doc serde_json thiserror</code></pre>
+<p>Here is the resulting <code>crates/pcb-doc/Cargo.toml</code>:</p>
+<figure>
+  <figcaption>crates/pcb-doc/Cargo.toml</figcaption>
+  <pre><code class="language-toml">[package]
+name = "pcb-doc"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+emath = { version = "0.33", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"</code></pre>
+</figure>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 flowchart LR

@@ -76,8 +76,11 @@ flowchart LR
 </figure>
 <p><em>Figure 1.1: How Cargo and <code>eframe::run_native</code> initialise your state once, then drive the Lesson 0002 <code>update()</code> loop every frame.</em></p>
 <h2 id="2-creating-the-project-amp-configuring-cargo-toml">2. Creating the Project &amp; Configuring <code>Cargo.toml</code></h2>
-<p>In Rust, <a href="https://doc.rust-lang.org/cargo/guide/creating-a-new-project.html"><code>cargo new pcb-reviewer</code></a> generates a binary package with two key files: <code>Cargo.toml</code> (the manifest) and <code>src/main.rs</code> (the entry point).</p>
-<p>Here is the complete <code>Cargo.toml</code> for our Schematic &amp; PCB Reviewer:<span class="sidenote-number"></span><span class="sidenote"><strong>Tip: Single Dependency Import.</strong> Because <code>eframe</code> re-exports <code>egui</code> as <code>eframe::egui</code>, we only list <code>eframe</code> under <code>[dependencies]</code>. This guarantees your <code>egui</code> types never suffer a version mismatch with <code>eframe</code>.</span></p>
+<p>In Rust, <a href="https://doc.rust-lang.org/cargo/guide/creating-a-new-project.html"><code>cargo new pcb-reviewer</code></a> generates a binary package (<code>--bin</code> is the default) with two key files: <code>Cargo.toml</code> (the manifest) and <code>src/main.rs</code> (the entry point). We then step into the directory and use <a href="https://doc.rust-lang.org/cargo/commands/cargo-add.html"><code>cargo add</code></a> to pull in <code>eframe</code>:<span class="sidenote-number"></span><span class="sidenote"><strong>Tip: Single Dependency Import.</strong> Because <code>eframe</code> re-exports <code>egui</code> as <code>eframe::egui</code>, we only add <code>eframe</code> under <code>[dependencies]</code>. This guarantees your <code>egui</code> types never suffer a version mismatch with <code>eframe</code>.</span></p>
+<pre><code class="language-console">cargo new pcb-reviewer
+cd pcb-reviewer
+cargo add eframe</code></pre>
+<p>After running <code>cargo add eframe</code> and appending a <code>[profile.dev.package.&quot;*&quot;]</code> optimisation block, here is the resulting <code>Cargo.toml</code> for our Schematic &amp; PCB Reviewer:</p>
 <pre><code class="language-toml">[package]
 name = "pcb-reviewer"
 version = "0.1.0"
@@ -212,7 +215,7 @@ exclude_re = [
         <li>
           <input type="checkbox" id="verify-1">
           <label for="verify-1">
-            <strong>1. Scaffold the binary crate:</strong> Run <code>cargo new pcb-reviewer &amp;&amp; cd pcb-reviewer</code> and add <code>eframe = &quot;0.33&quot;</code> + <code>[profile.dev.package.&quot;*&quot;] opt-level = 2</code> to <code>Cargo.toml</code>.
+            <strong>1. Scaffold the binary crate:</strong> Run <code>cargo new pcb-reviewer</code>, <code>cd pcb-reviewer</code>, and <code>cargo add eframe</code>, then add <code>[profile.dev.package.&quot;*&quot;] opt-level = 2</code> to <code>Cargo.toml</code>.
           </label>
         </li>
         <li>
