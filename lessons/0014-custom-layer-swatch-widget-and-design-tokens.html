@@ -70,8 +70,38 @@ flowchart LR
 <p><em>Figure 14.1: <code>LayerSwatch&lt;'a&gt;</code> temporarily borrows <code>visible: &amp;'a mut bool</code> and <code>opacity: &amp;'a mut f32</code> for the duration of the <code>ui.add(...)</code> call, consumes itself in <code>Widget::ui(self, ui)</code>, and returns the combined <code>egui::Response</code>.</em></p>
 <h2 id="1-just-in-time-rust-struct-lifetimes-a-amp-implementing-egui-widget">1. Just-in-Time Rust: Struct Lifetimes (<code>'a</code>) &amp; Implementing <code>egui::Widget</code></h2>
 <p>Look at how <code>egui</code>'s built-in widgets work when you write <code>ui.add(egui::Slider::new(&amp;mut self.opacity, 0.1..=1.0))</code>: <code>Slider::new</code> constructs a lightweight builder struct that holds a mutable reference <code>&amp;'a mut f32</code> into your state, and <code>ui.add(...)</code> immediately consumes that struct by calling <code>egui::Widget::ui(self, ui)</code>.</p>
-<p>Whenever a Rust <code>struct</code> stores references (<code>&amp;'a mut bool</code>, <code>&amp;'a mut f32</code>, <code>&amp;'a str</code>), its declaration must name a generic <strong>lifetime parameter</strong> <code>&lt;'a&gt;</code> (<a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html">Rust Book §10.3</a>). That <code>'a</code> tells the compiler a simple safety rule: a <code>LayerSwatch&lt;'a&gt;</code> instance can never outlive the <code>ViewState</code> fields it borrows:<span class="sidenote-number"></span><span class="sidenote">Because <code>LayerSwatch&lt;'a&gt;</code> is created inline inside <code>ui.add(LayerSwatch::new(...))</code> and consumed before the statement even ends, the borrow <code>'a</code> lasts for just a few microseconds during the current frame!</span></p>
-<pre><code class="language-rust">pub struct LayerSwatch&lt;'a&gt; {
+<p>Whenever a Rust <code>struct</code> stores references (<code>&amp;'a mut bool</code>, <code>&amp;'a mut f32</code>, <code>&amp;'a str</code>), its declaration must name a generic <strong>lifetime parameter</strong> <code>&lt;'a&gt;</code> (<a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html">Rust Book §10.3</a>). That <code>'a</code> tells the compiler a simple safety rule: a <code>LayerSwatch&lt;'a&gt;</code> instance can never outlive the <code>ViewState</code> fields it borrows.<span class="sidenote-number"></span><span class="sidenote">Because <code>LayerSwatch&lt;'a&gt;</code> is created inline inside <code>ui.add(LayerSwatch::new(...))</code> and consumed before the statement even ends, the borrow <code>'a</code> lasts for just a few microseconds during the current frame!</span></p>
+<h2 id="2-per-layer-alpha-blending-amp-standalone-widget-harnesses-harness-new-ui-state">2. Per-Layer Alpha Blending &amp; Standalone Widget Harnesses (<code>Harness::new_ui_state</code>)</h2>
+<p>To apply each layer's opacity slider to the 2D canvas, <code>PcbLayer::color_with_opacity(self, opacity: f32)</code> clamps <code>opacity</code> to <code>0.1..=1.0</code>, scales <code>255.0</code> to compute the 8-bit alpha channel, and constructs <code>Color32::from_rgba_unmultiplied(r, g, b, alpha)</code>.</p>
+<p>Even better, because <code>LayerSwatch&lt;'a&gt;</code> implements <code>egui::Widget</code>, we don't have to boot the entire <code>PcbReviewerApp</code> just to unit-test it! We can mount <code>LayerSwatch</code> directly inside <a href="https://docs.rs/egui_kittest/latest/egui_kittest/struct.Harness.html#method.new_ui_state"><code>egui_kittest::Harness::new_ui_state</code></a> against a tiny two-field test fixture.</p>
+<h2 id="3-code-walkthrough-block-by-block">3. Code Walkthrough: Block by Block</h2>
+<p>Let's examine the new <code>color_with_opacity</code> and <code>opacity_badge</code> helpers, the <code>LayerSwatch&lt;'a&gt;</code> struct and <code>egui::Widget</code> implementation, <code>ViewState</code> opacity fields, and <code>Harness::new_ui_state</code> widget tests in <code>apps/0014-custom-layer-swatch-widget-and-design-tokens/src/main.rs</code> block by block before seeing the complete listing in context.</p>
+<h3 id="block-1-pcblayer-color-with-opacity-amp-opacity-badge-design-token-helpers">Block 1: <code>PcbLayer::color_with_opacity</code> &amp; <code>opacity_badge</code> Design Token Helpers</h3>
+<pre><code class="language-rust">impl PcbLayer {
+    // ... z_rank(self) &amp; color(self) ...
+
+    /// Scales the layer's base RGB color by `opacity` (clamped to `0.1..=1.0`).
+    pub fn color_with_opacity(self, opacity: f32) -&gt; Color32 {
+        let base = self.color();
+        let alpha = (opacity.clamp(0.1, 1.0) * 255.0).round() as u8;
+        Color32::from_rgba_unmultiplied(base.r(), base.g(), base.b(), alpha)
+    }
+}
+
+/// Formats a normalized `0.1..=1.0` opacity factor as a percentage badge (e.g. `"75%"`).
+pub fn opacity_badge(opacity: f32) -&gt; String {
+    format!("{:.0}%", opacity.clamp(0.1, 1.0) * 100.0)
+}</code></pre>
+<ul>
+<li><strong><code>opacity.clamp(0.1, 1.0)</code></strong>: Prevents an enabled layer from becoming completely invisible (<code>0.0</code> alpha) when dimmed; completely hiding a layer is the job of its visibility checkbox.</li>
+<li><strong><code>(opacity.clamp(0.1, 1.0) * 255.0).round() as u8</code></strong>: Converts the normalized <code>0.1..=1.0</code> float into an 8-bit alpha channel (<code>26..=255</code>).</li>
+<li><strong><code>Color32::from_rgba_unmultiplied(base.r(), base.g(), base.b(), alpha)</code></strong>: Preserves the layer's RGB channels while applying the computed alpha byte for semi-transparent trace, pad, and silkscreen rendering.</li>
+<li><strong><code>opacity_badge(opacity: f32) -&gt; String</code></strong>: Formats the clamped opacity as an integer percentage badge (<code>&quot;10%&quot;</code> to <code>&quot;100%&quot;</code>) displayed next to the slider.</li>
+</ul>
+<h3 id="block-2-layerswatch-lt-a-gt-builder-amp-impl-lt-a-gt-egui-widget-for-layerswatch-lt-a-gt">Block 2: <code>LayerSwatch&lt;'a&gt;</code> Builder &amp; <code>impl&lt;'a&gt; egui::Widget for LayerSwatch&lt;'a&gt;</code></h3>
+<pre><code class="language-rust">/// Reusable custom `egui::Widget` combining a color swatch, a visibility checkbox,
+/// and a per-layer opacity slider borrowing state with lifetime `'a`.
+pub struct LayerSwatch&lt;'a&gt; {
     pub visible: &amp;'a mut bool,
     pub opacity: &amp;'a mut f32,
     pub label: &amp;'a str,
@@ -112,9 +142,419 @@ impl&lt;'a&gt; egui::Widget for LayerSwatch&lt;'a&gt; {
         .inner
     }
 }</code></pre>
-<h2 id="2-per-layer-alpha-blending-amp-standalone-widget-harnesses-harness-new-ui-state">2. Per-Layer Alpha Blending &amp; Standalone Widget Harnesses (<code>Harness::new_ui_state</code>)</h2>
-<p>To apply each layer's opacity slider to the 2D canvas, <code>PcbLayer::color_with_opacity(self, opacity: f32)</code> clamps <code>opacity</code> to <code>0.1..=1.0</code>, scales <code>255.0</code> to compute the 8-bit alpha channel, and constructs <code>Color32::from_rgba_unmultiplied(r, g, b, alpha)</code>.</p>
-<p>Even better, because <code>LayerSwatch&lt;'a&gt;</code> implements <code>egui::Widget</code>, we don't have to boot the entire <code>PcbReviewerApp</code> just to unit-test it! We can mount <code>LayerSwatch</code> directly inside <a href="https://docs.rs/egui_kittest/latest/egui_kittest/struct.Harness.html#method.new_ui_state"><code>egui_kittest::Harness::new_ui_state</code></a> against a tiny two-field test fixture.</p>
+<ul>
+<li><strong><code>pub struct LayerSwatch&lt;'a&gt;</code></strong>: Holds two mutable borrows (<code>visible: &amp;'a mut bool</code>, <code>opacity: &amp;'a mut f32</code>), one shared string slice (<code>label: &amp;'a str</code>), and a <code>Copy</code> <code>Color32</code> token.</li>
+<li><strong><code>fn ui(self, ui: &amp;mut egui::Ui) -&gt; egui::Response</code></strong>: Takes <code>self</code> <strong>by value</strong>, consuming the temporary <code>LayerSwatch&lt;'a&gt;</code> struct when passed to <code>ui.add(LayerSwatch::new(...))</code>.</li>
+<li><strong><code>ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover())</code></strong>: Reserves a <code>12×12</code> logical-point square in the horizontal layout and paints the rounded <code>2.0_f32</code> colour swatch chip with <code>ui.painter().rect_filled(...)</code>.</li>
+<li><strong><code>check_resp.union(slider_resp)</code> and <code>.inner</code></strong>: Merges the <code>egui::Response</code> of the checkbox and the slider (so callers of <code>ui.add(...)</code> can check <code>.changed()</code> or <code>.hovered()</code> on the composite widget) and unwraps <code>.inner</code> from <code>ui.horizontal(...)</code>'s <code>InnerResponse&lt;Response&gt;</code>.</li>
+</ul>
+<h3 id="block-3-viewstate-layer-opacities-effective-layer-color-amp-ui-add-layerswatch-new">Block 3: <code>ViewState</code> Layer Opacities, <code>effective_layer_color</code> &amp; <code>ui.add(LayerSwatch::new(...))</code></h3>
+<pre><code class="language-rust">pub struct ViewState {
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
+    pub top_copper_opacity: f32,
+    pub bottom_copper_opacity: f32,
+    pub silkscreen_opacity: f32,
+    pub ratsnest_opacity: f32,
+    // ... viewport, selection, triage, DRC fields ...
+}
+
+impl ViewState {
+    pub fn reset_layers(&amp;mut self) {
+        self.show_top_copper = true;
+        self.show_bottom_copper = true;
+        self.show_silkscreen = true;
+        self.show_ratsnest = false;
+        self.top_copper_opacity = 1.0;
+        self.bottom_copper_opacity = 1.0;
+        self.silkscreen_opacity = 1.0;
+        self.ratsnest_opacity = 1.0;
+    }
+
+    pub fn layer_opacity(&amp;self, layer: PcbLayer) -&gt; f32 {
+        match layer {
+            PcbLayer::BottomCopper =&gt; self.bottom_copper_opacity,
+            PcbLayer::TopCopper =&gt; self.top_copper_opacity,
+            PcbLayer::Silkscreen =&gt; self.silkscreen_opacity,
+            PcbLayer::Ratsnest =&gt; self.ratsnest_opacity,
+        }
+    }
+
+    pub fn effective_layer_color(&amp;self, layer: PcbLayer) -&gt; Color32 {
+        layer.color_with_opacity(self.layer_opacity(layer))
+    }
+}
+
+// Inside PcbReviewerApp::render_side_panel():
+        ui.heading("PCB Layers");
+        ui.add(LayerSwatch::new(
+            &amp;mut self.view.show_top_copper,
+            &amp;mut self.view.top_copper_opacity,
+            "Top Copper (F.Cu)",
+            PcbLayer::TopCopper.color(),
+        ));
+        ui.add(LayerSwatch::new(
+            &amp;mut self.view.show_bottom_copper,
+            &amp;mut self.view.bottom_copper_opacity,
+            "Bottom Copper (B.Cu)",
+            PcbLayer::BottomCopper.color(),
+        ));
+        ui.add(LayerSwatch::new(
+            &amp;mut self.view.show_silkscreen,
+            &amp;mut self.view.silkscreen_opacity,
+            "Silkscreen (F.SilkS)",
+            PcbLayer::Silkscreen.color(),
+        ));
+        ui.add(LayerSwatch::new(
+            &amp;mut self.view.show_ratsnest,
+            &amp;mut self.view.ratsnest_opacity,
+            "Ratsnest (Unrouted)",
+            PcbLayer::Ratsnest.color(),
+        ));</code></pre>
+<ul>
+<li><strong>Disjoint Field Splitting (<code>&amp;mut self.view.show_top_copper</code>, <code>&amp;mut self.view.top_copper_opacity</code>)</strong>: Rust's borrow checker tracks struct fields individually, so borrowing two distinct fields of <code>self.view</code> mutably at the same time inside <code>LayerSwatch::new(...)</code> is 100% legal!</li>
+<li><strong><code>self.view.effective_layer_color(layer)</code></strong>: Combines <code>self.layer_opacity(layer)</code> with <code>layer.color_with_opacity(...)</code> so <code>paint_board</code> renders traces, pads, and silkscreen text with their per-layer alpha.</li>
+</ul>
+<h3 id="block-4-standalone-widget-testing-with-harness-new-ui-state-cfg-test-mod-tests">Block 4: Standalone Widget Testing with <code>Harness::new_ui_state</code> (<code>#[cfg(test)] mod tests</code>)</h3>
+<pre><code class="language-rust">    #[test]
+    fn standalone_layer_swatch_widget_toggles_visibility_in_harness_new_ui() {
+        struct SwatchFixture {
+            visible: bool,
+            opacity: f32,
+        }
+
+        let mut harness = Harness::new_ui_state(
+            |ui, state: &amp;mut SwatchFixture| {
+                ui.add(LayerSwatch::new(
+                    &amp;mut state.visible,
+                    &amp;mut state.opacity,
+                    "Top Copper (F.Cu)",
+                    PcbLayer::TopCopper.color(),
+                ));
+            },
+            SwatchFixture {
+                visible: true,
+                opacity: 0.75,
+            },
+        );
+
+        assert!(harness.query_by_label("Top Copper (F.Cu)").is_some());
+        assert!(harness.query_by_label("75%").is_some());
+
+        harness.get_by_label("Top Copper (F.Cu)").click();
+        harness.run();
+        assert!(!harness.state().visible);
+    }</code></pre>
+<ul>
+<li><strong><code>Harness::new_ui_state(|ui, state: &amp;mut SwatchFixture| { ... }, initial_state)</code></strong>: Mounts a standalone <code>&amp;mut egui::Ui</code> closure and a minimal <code>SwatchFixture</code> state struct without needing <code>eframe::App</code>, <code>Panel</code>s, or <code>BoardModel</code>.</li>
+<li><strong>Verifying Both Child Widgets</strong>: Asserting <code>query_by_label(&quot;Top Copper (F.Cu)&quot;).is_some()</code> and <code>query_by_label(&quot;75%&quot;).is_some()</code> confirms that both the checkbox and the opacity slider badge render inside <code>LayerSwatch::ui</code>, and clicking the checkbox mutates <code>harness.state().visible</code> to <code>false</code>.</li>
+</ul>
+<h3 id="complete-lesson-0014-layerswatch-lt-a-gt-amp-alpha-blending-listing">Complete Lesson 0014 <code>LayerSwatch&lt;'a&gt;</code> &amp; Alpha-Blending Listing</h3>
+<p>Here is the complete assembled <code>PcbLayer::color_with_opacity</code>, <code>LayerSwatch&lt;'a&gt;</code> widget implementation, <code>ViewState</code> opacity wiring, <code>Panel::left</code> and <code>paint_board</code> updates, and tests in context from <code>apps/0014-custom-layer-swatch-widget-and-design-tokens/src/main.rs</code>:</p>
+<pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PcbLayer {
+    BottomCopper,
+    TopCopper,
+    Silkscreen,
+    Ratsnest,
+}
+
+impl PcbLayer {
+    pub fn z_rank(self) -&gt; u8 {
+        match self {
+            PcbLayer::BottomCopper =&gt; 0,
+            PcbLayer::TopCopper =&gt; 1,
+            PcbLayer::Silkscreen =&gt; 2,
+            PcbLayer::Ratsnest =&gt; 3,
+        }
+    }
+
+    pub fn color(self) -&gt; Color32 {
+        match self {
+            PcbLayer::BottomCopper =&gt; Color32::from_rgb(59, 142, 234),
+            PcbLayer::TopCopper =&gt; Color32::from_rgb(224, 82, 67),
+            PcbLayer::Silkscreen =&gt; Color32::from_rgb(240, 230, 140),
+            PcbLayer::Ratsnest =&gt; Color32::from_rgb(111, 247, 255),
+        }
+    }
+
+    /// Scales the layer's base RGB color by `opacity` (clamped to `0.1..=1.0`).
+    pub fn color_with_opacity(self, opacity: f32) -&gt; Color32 {
+        let base = self.color();
+        let alpha = (opacity.clamp(0.1, 1.0) * 255.0).round() as u8;
+        Color32::from_rgba_unmultiplied(base.r(), base.g(), base.b(), alpha)
+    }
+}
+
+/// Formats a normalized `0.1..=1.0` opacity factor as a percentage badge (e.g. `"75%"`).
+pub fn opacity_badge(opacity: f32) -&gt; String {
+    format!("{:.0}%", opacity.clamp(0.1, 1.0) * 100.0)
+}
+
+/// Reusable custom `egui::Widget` combining a color swatch, a visibility checkbox,
+/// and a per-layer opacity slider borrowing state with lifetime `'a`.
+pub struct LayerSwatch&lt;'a&gt; {
+    pub visible: &amp;'a mut bool,
+    pub opacity: &amp;'a mut f32,
+    pub label: &amp;'a str,
+    pub swatch_color: Color32,
+}
+
+impl&lt;'a&gt; LayerSwatch&lt;'a&gt; {
+    pub fn new(
+        visible: &amp;'a mut bool,
+        opacity: &amp;'a mut f32,
+        label: &amp;'a str,
+        swatch_color: Color32,
+    ) -&gt; Self {
+        Self {
+            visible,
+            opacity,
+            label,
+            swatch_color,
+        }
+    }
+}
+
+impl&lt;'a&gt; egui::Widget for LayerSwatch&lt;'a&gt; {
+    fn ui(self, ui: &amp;mut egui::Ui) -&gt; egui::Response {
+        let badge = opacity_badge(*self.opacity);
+        ui.horizontal(|ui| {
+            let (swatch_rect, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
+            ui.painter()
+                .rect_filled(swatch_rect, 2.0_f32, self.swatch_color);
+            let check_resp = ui.checkbox(self.visible, self.label);
+            let slider_resp = ui.add(
+                egui::Slider::new(self.opacity, 0.1..=1.0)
+                    .show_value(false)
+                    .text(badge),
+            );
+            check_resp.union(slider_resp)
+        })
+        .inner
+    }
+}
+
+pub struct ViewState {
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
+    pub top_copper_opacity: f32,
+    pub bottom_copper_opacity: f32,
+    pub silkscreen_opacity: f32,
+    pub ratsnest_opacity: f32,
+    // ... viewport, selection, triage, DRC fields ...
+}
+
+impl Default for ViewState {
+    fn default() -&gt; Self {
+        let mut view = Self {
+            show_top_copper: false,
+            show_bottom_copper: false,
+            show_silkscreen: false,
+            show_ratsnest: false,
+            top_copper_opacity: 0.0,
+            bottom_copper_opacity: 0.0,
+            silkscreen_opacity: 0.0,
+            ratsnest_opacity: 0.0,
+            viewport: BoardViewport::default(),
+            pcb_scene_rect: Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0)),
+            selected_component: None,
+            hovered_net: None,
+            selected_net: None,
+            bom_search_query: String::new(),
+            active_tool: ActiveTool::Select,
+            selected_pin: None,
+            min_pin_severity: PinSeverity::Info,
+            filter_only_open_pins: false,
+            min_clearance_mm: 8.0,
+            show_drc_overlay: true,
+        };
+        view.reset_layers();
+        view
+    }
+}
+
+impl ViewState {
+    pub fn reset_layers(&amp;mut self) {
+        self.show_top_copper = true;
+        self.show_bottom_copper = true;
+        self.show_silkscreen = true;
+        self.show_ratsnest = false;
+        self.top_copper_opacity = 1.0;
+        self.bottom_copper_opacity = 1.0;
+        self.silkscreen_opacity = 1.0;
+        self.ratsnest_opacity = 1.0;
+    }
+
+    pub fn layer_opacity(&amp;self, layer: PcbLayer) -&gt; f32 {
+        match layer {
+            PcbLayer::BottomCopper =&gt; self.bottom_copper_opacity,
+            PcbLayer::TopCopper =&gt; self.top_copper_opacity,
+            PcbLayer::Silkscreen =&gt; self.silkscreen_opacity,
+            PcbLayer::Ratsnest =&gt; self.ratsnest_opacity,
+        }
+    }
+
+    pub fn effective_layer_color(&amp;self, layer: PcbLayer) -&gt; Color32 {
+        layer.color_with_opacity(self.layer_opacity(layer))
+    }
+
+    // ... isolate_top_copper, show_all_layers, viewport, tool, pin &amp; DRC methods ...
+}
+
+impl PcbReviewerApp {
+    pub fn render_side_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        ui.heading("PCB Layers");
+        ui.add(LayerSwatch::new(
+            &amp;mut self.view.show_top_copper,
+            &amp;mut self.view.top_copper_opacity,
+            "Top Copper (F.Cu)",
+            PcbLayer::TopCopper.color(),
+        ));
+        ui.add(LayerSwatch::new(
+            &amp;mut self.view.show_bottom_copper,
+            &amp;mut self.view.bottom_copper_opacity,
+            "Bottom Copper (B.Cu)",
+            PcbLayer::BottomCopper.color(),
+        ));
+        ui.add(LayerSwatch::new(
+            &amp;mut self.view.show_silkscreen,
+            &amp;mut self.view.silkscreen_opacity,
+            "Silkscreen (F.SilkS)",
+            PcbLayer::Silkscreen.color(),
+        ));
+        ui.add(LayerSwatch::new(
+            &amp;mut self.view.show_ratsnest,
+            &amp;mut self.view.ratsnest_opacity,
+            "Ratsnest (Unrouted)",
+            PcbLayer::Ratsnest.color(),
+        ));
+
+        // ... Isolate/Show All, BOM Inspector, Review Pins &amp; Triage, DRC &amp; Minimap, Net Inspector ...
+    }
+
+    fn paint_board(&amp;self, painter: &amp;egui::Painter, canvas_rect: Rect) {
+        // ... board outline ...
+
+        for seg in &amp;self.visible_traces_in_z_order() {
+            let p0 = self.view.viewport.world_to_screen(seg.start);
+            let p1 = self.view.viewport.world_to_screen(seg.end);
+            let is_highlighted = active.is_some() &amp;&amp; seg.net == active;
+            let color = if is_highlighted {
+                Color32::from_rgb(255, 230, 100)
+            } else {
+                self.view.effective_layer_color(seg.layer)
+            };
+            let stroke_px = (seg.width_mm * scale).max(1.5) * if is_highlighted { 1.4 } else { 1.0 };
+            painter.line_segment([p0, p1], Stroke::new(stroke_px, color));
+        }
+
+        for pad in &amp;self.board.pads {
+            if !self.view.is_layer_visible(pad.layer) {
+                continue;
+            }
+            let bounds = pad.bounds_mm();
+            let screen_rect = Rect::from_min_max(
+                self.view.viewport.world_to_screen(bounds.min),
+                self.view.viewport.world_to_screen(bounds.max),
+            );
+            let is_highlighted = active == Some(pad.net);
+            let fill = if is_highlighted {
+                Color32::from_rgb(255, 230, 100)
+            } else {
+                self.view.effective_layer_color(pad.layer)
+            };
+            painter.rect_filled(screen_rect, 0.3 * scale, fill);
+        }
+
+        if self.view.show_silkscreen {
+            let silk_color = self.view.effective_layer_color(PcbLayer::Silkscreen);
+            // ... paint silkscreen component bodies &amp; RefDes labels ...
+        }
+
+        // ... DRC halos, review pins &amp; ruler overlay ...
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    #[test]
+    fn pcb_layer_ranks_colors_and_opacities_are_distinct() {
+        assert_eq!(PcbLayer::BottomCopper.z_rank(), 0);
+        assert_eq!(PcbLayer::TopCopper.z_rank(), 1);
+        assert_eq!(PcbLayer::Silkscreen.z_rank(), 2);
+        assert_eq!(PcbLayer::Ratsnest.z_rank(), 3);
+
+        assert_eq!(
+            PcbLayer::TopCopper.color_with_opacity(0.0),
+            Color32::from_rgba_unmultiplied(224, 82, 67, 26)
+        );
+        assert_eq!(
+            PcbLayer::TopCopper.color_with_opacity(0.5),
+            Color32::from_rgba_unmultiplied(224, 82, 67, 128)
+        );
+        assert_eq!(
+            PcbLayer::TopCopper.color_with_opacity(2.0),
+            Color32::from_rgba_unmultiplied(224, 82, 67, 255)
+        );
+
+        assert_eq!(opacity_badge(0.0), "10%");
+        assert_eq!(opacity_badge(0.75), "75%");
+        assert_eq!(opacity_badge(1.5), "100%");
+
+        let mut view = ViewState::default();
+        view.bottom_copper_opacity = 0.4;
+        view.top_copper_opacity = 0.5;
+        view.silkscreen_opacity = 0.6;
+        view.ratsnest_opacity = 0.8;
+
+        assert_eq!(view.layer_opacity(PcbLayer::BottomCopper), 0.4);
+        assert_eq!(view.layer_opacity(PcbLayer::TopCopper), 0.5);
+        assert_eq!(view.layer_opacity(PcbLayer::Silkscreen), 0.6);
+        assert_eq!(view.layer_opacity(PcbLayer::Ratsnest), 0.8);
+        assert_eq!(
+            view.effective_layer_color(PcbLayer::TopCopper),
+            Color32::from_rgba_unmultiplied(224, 82, 67, 128)
+        );
+    }
+
+    #[test]
+    fn standalone_layer_swatch_widget_toggles_visibility_in_harness_new_ui() {
+        struct SwatchFixture {
+            visible: bool,
+            opacity: f32,
+        }
+
+        let mut harness = Harness::new_ui_state(
+            |ui, state: &amp;mut SwatchFixture| {
+                ui.add(LayerSwatch::new(
+                    &amp;mut state.visible,
+                    &amp;mut state.opacity,
+                    "Top Copper (F.Cu)",
+                    PcbLayer::TopCopper.color(),
+                ));
+            },
+            SwatchFixture {
+                visible: true,
+                opacity: 0.75,
+            },
+        );
+
+        assert!(harness.query_by_label("Top Copper (F.Cu)").is_some());
+        assert!(harness.query_by_label("75%").is_some());
+
+        harness.get_by_label("Top Copper (F.Cu)").click();
+        harness.run();
+        assert!(!harness.state().visible);
+    }
+}</code></pre>
 </div>
 
 <section class="full-width-panel" id="layer-swatch-sim">

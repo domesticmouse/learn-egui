@@ -31,11 +31,39 @@ flowchart LR
 
 ## Dual-Transport Workbench & 4-Step Power Integrity Playbook
 
-```rust caption="McpTransportMode, RpcFrameRecord, and McpInspectorWorkbench in crates/pcb-doc/src/lib.rs"
+Let's walk through the dual-transport state machine, the 4-step Power Integrity Agent Playbook, and the `egui` Inspector Workbench controls block by block before viewing the complete assembled listings.
+
+### Block 1: `McpTransportMode`, `RpcFrameRecord` & `AgentPlaybookReport` (`crates/pcb-doc/src/lib.rs`)
+
+```rust
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum McpTransportMode {
     HeadlessDuplex,
     BridgedLoopback,
+}
+
+impl McpTransportMode {
+    pub fn toggle(self) -> Self {
+        match self {
+            Self::HeadlessDuplex => Self::BridgedLoopback,
+            Self::BridgedLoopback => Self::HeadlessDuplex,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::HeadlessDuplex => "HeadlessDuplex",
+            Self::BridgedLoopback => "BridgedLoopback",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RpcFrameRecord {
+    pub seq: usize,
+    pub method: String,
+    pub transport: McpTransportMode,
+    pub summary: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -47,6 +75,417 @@ pub struct AgentPlaybookReport {
     pub pin_count: usize,
     pub snapshot_captured: bool,
     pub snapshot_bytes_len: usize,
+}
+```
+
+- **`McpTransportMode::toggle(self)` & `label(self)`**: Switches deterministically between `HeadlessDuplex` (in-memory `tokio::io::duplex` mode) and `BridgedLoopback` (authenticated live-GUI bridge mode with cropped PNG snapshots).
+- **`RpcFrameRecord`**: Captures the 1-based sequence number (`seq`), JSON-RPC method name (`"resources/read"`, `"tools/call:..."`), active `McpTransportMode`, and response summary for every step in an agent playbook.
+- **`AgentPlaybookReport`**: Summarizes the completed 4-step audit (`frames_logged`, `vcc_pad_count`, `drc_violations`, `pin_count`, `snapshot_captured`, and `snapshot_bytes_len`) so UI badges and Tier 6 acceptance tests can assert exact outcomes.
+
+### Block 2: `McpInspectorWorkbench` & `run_power_integrity_playbook` (`crates/pcb-doc/src/lib.rs`)
+
+```rust
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct McpInspectorWorkbench {
+    pub transport: McpTransportMode,
+    pub frame_log: Vec<RpcFrameRecord>,
+}
+
+impl Default for McpInspectorWorkbench {
+    fn default() -> Self {
+        Self {
+            transport: McpTransportMode::HeadlessDuplex,
+            frame_log: Vec::new(),
+        }
+    }
+}
+
+impl McpInspectorWorkbench {
+    pub fn run_power_integrity_playbook(
+        &mut self,
+        board: &BoardModel,
+    ) -> Result<AgentPlaybookReport, String> {
+        self.frame_log.clear();
+        let server = PcbMcpServer::new("pwr-stage-rev-b", board.clone());
+        let summary = server
+            .read_kicad_resource("kicad://board/summary")
+            .map_err(|e| e.to_string())?;
+        self.frame_log.push(RpcFrameRecord {
+            seq: 1,
+            method: "resources/read".to_owned(),
+            transport: self.transport,
+            summary,
+        });
+
+        let vcc_topo = board.query_net_topology(NetId(1));
+        self.frame_log.push(RpcFrameRecord {
+            seq: 2,
+            method: "tools/call:pcb_query_net".to_owned(),
+            transport: self.transport,
+            summary: vcc_topo.summary_badge(),
+        });
+
+        let drc = board
+            .run_custom_drc(&CustomDrcParams {
+                min_clearance_mm: 8.0,
+                min_copper_width_mm: 0.5,
+            })
+            .map_err(|e| e.to_string())?;
+        self.frame_log.push(RpcFrameRecord {
+            seq: 3,
+            method: "tools/call:pcb_run_custom_drc".to_owned(),
+            transport: self.transport,
+            summary: drc.summary_badge(),
+        });
+
+        let (snapshot_captured, snapshot_bytes_len) = match self.transport {
+            McpTransportMode::HeadlessDuplex => (false, 0),
+            McpTransportMode::BridgedLoopback => {
+                let snap = capture_cropped_region_png(board, 10, 10, 60, 50, 64, 64)
+                    .map_err(|e| e.to_string())?;
+                (true, snap.png_bytes.len())
+            }
+        };
+        self.frame_log.push(RpcFrameRecord {
+            seq: 4,
+            method: "tools/call:pcb_add_review_pin".to_owned(),
+            transport: self.transport,
+            summary: format!("Pin+Snap: {snapshot_captured} ({snapshot_bytes_len}B)"),
+        });
+
+        Ok(AgentPlaybookReport {
+            transport: self.transport,
+            frames_logged: self.frame_log.len(),
+            vcc_pad_count: vcc_topo.pad_count,
+            drc_violations: drc.clearance_violations,
+            pin_count: board.review_pins.len(),
+            snapshot_captured,
+            snapshot_bytes_len,
+        })
+    }
+}
+```
+
+- **`McpInspectorWorkbench::default()`**: Boots in `McpTransportMode::HeadlessDuplex` with an empty `frame_log`.
+- **4-Step Deterministic Playbook (`run_power_integrity_playbook`)**: Clears `self.frame_log` and executes four ordered MCP steps:
+  1. `seq: 1` (`"resources/read"`): Reads `"kicad://board/summary"` via `PcbMcpServer`.
+  2. `seq: 2` (`"tools/call:pcb_query_net"`): Queries `NetId(1)` (`VCC_3V3`) topology.
+  3. `seq: 3` (`"tools/call:pcb_run_custom_drc"`): Runs custom DRC with `8.0 mm` clearance and `0.5 mm` copper width thresholds.
+  4. `seq: 4` (`"tools/call:pcb_add_review_pin"`): Records the review pin audit step and, when `self.transport` is `McpTransportMode::BridgedLoopback`, captures a `64 × 64` cropped PNG snapshot (`20` bytes).
+
+### Block 3: Embedded MCP Inspector Workbench Controls in `egui` (`src/main.rs`)
+
+```rust
+// In pub struct ViewState (and ViewState::default()):
+pub last_workbench_badge: String, // "Workbench [HeadlessDuplex]: 0 frames".to_owned()
+
+// In pub struct PcbReviewerApp (and PcbReviewerApp::default()):
+pub workbench: McpInspectorWorkbench, // McpInspectorWorkbench::default()
+
+// In impl PcbReviewerApp:
+pub fn toggle_mcp_transport(&mut self) -> String {
+    self.workbench.transport = self.workbench.transport.toggle();
+    let badge = format!(
+        "Workbench [{}]: {} frames",
+        self.workbench.transport.label(),
+        self.workbench.frame_log.len()
+    );
+    self.view.last_workbench_badge = badge.clone();
+    badge
+}
+
+pub fn run_agent_playbook(&mut self) -> String {
+    let report = self
+        .workbench
+        .run_power_integrity_playbook(&self.board)
+        .unwrap_or(AgentPlaybookReport {
+            transport: self.workbench.transport,
+            frames_logged: 0,
+            vcc_pad_count: 0,
+            drc_violations: 0,
+            pin_count: 0,
+            snapshot_captured: false,
+            snapshot_bytes_len: 0,
+        });
+    let badge = format!(
+        "Playbook [{}]: {} frames, {} DRC, snap={}",
+        report.transport.label(),
+        report.frames_logged,
+        report.drc_violations,
+        report.snapshot_captured
+    );
+    self.view.last_workbench_badge = badge.clone();
+    badge
+}
+
+// Inside PcbReviewerApp::render_session_panel(&mut self, ui: &mut egui::Ui):
+ui.label(&self.view.last_workbench_badge);
+ui.horizontal(|ui| {
+    if ui.button("Toggle MCP Transport").clicked() {
+        self.toggle_mcp_transport();
+    }
+    if ui.button("Run Agent Playbook").clicked() {
+        self.run_agent_playbook();
+    }
+});
+```
+
+- **`toggle_mcp_transport(&mut self)`**: Flips `self.workbench.transport` between `HeadlessDuplex` and `BridgedLoopback` and formats `"Workbench [<mode>]: <N> frames"` into `self.view.last_workbench_badge`.
+- **`run_agent_playbook(&mut self)`**: Executes `self.workbench.run_power_integrity_playbook(&self.board)` and formats `"Playbook [<mode>]: 4 frames, 1 DRC, snap=<bool>"` into `last_workbench_badge`.
+
+### Block 4: Dual-Transport Playbook & Headless `egui_kittest` Verification (`crates/pcb-doc/src/lib.rs` & `src/main.rs`)
+
+```rust
+// In crates/pcb-doc/src/lib.rs (#[cfg(test)] mod tests):
+#[test]
+fn mcp_inspector_workbench_and_power_integrity_playbook_preserve_invariants() {
+    assert_eq!(
+        McpTransportMode::HeadlessDuplex.toggle(),
+        McpTransportMode::BridgedLoopback
+    );
+    assert_eq!(
+        McpTransportMode::BridgedLoopback.toggle(),
+        McpTransportMode::HeadlessDuplex
+    );
+    assert_eq!(McpTransportMode::HeadlessDuplex.label(), "HeadlessDuplex");
+    assert_eq!(McpTransportMode::BridgedLoopback.label(), "BridgedLoopback");
+
+    let board = BoardModel::default();
+    let mut wb = McpInspectorWorkbench::default();
+    let headless_report = wb.run_power_integrity_playbook(&board).unwrap();
+    assert_eq!(
+        headless_report,
+        AgentPlaybookReport {
+            transport: McpTransportMode::HeadlessDuplex,
+            frames_logged: 4,
+            vcc_pad_count: 1,
+            drc_violations: 1,
+            pin_count: 2,
+            snapshot_captured: false,
+            snapshot_bytes_len: 0,
+        }
+    );
+    assert_eq!(wb.frame_log.len(), 4);
+    assert_eq!(wb.frame_log[0].seq, 1);
+    assert_eq!(wb.frame_log[3].seq, 4);
+
+    wb.transport = wb.transport.toggle();
+    let bridged_report = wb.run_power_integrity_playbook(&board).unwrap();
+    assert_eq!(
+        bridged_report,
+        AgentPlaybookReport {
+            transport: McpTransportMode::BridgedLoopback,
+            frames_logged: 4,
+            vcc_pad_count: 1,
+            drc_violations: 1,
+            pin_count: 2,
+            snapshot_captured: true,
+            snapshot_bytes_len: 20,
+        }
+    );
+}
+
+// In src/main.rs (standalone_layer_swatch_and_headless_ui_workflows_pass):
+assert!(
+    harness
+        .query_by_label("Workbench [HeadlessDuplex]: 0 frames")
+        .is_some()
+);
+harness.get_by_label("Run Agent Playbook").click();
+harness.run();
+assert!(
+    harness
+        .query_by_label("Playbook [HeadlessDuplex]: 4 frames, 1 DRC, snap=false")
+        .is_some()
+);
+
+harness.get_by_label("Toggle MCP Transport").click();
+harness.run();
+assert!(
+    harness
+        .query_by_label("Workbench [BridgedLoopback]: 4 frames")
+        .is_some()
+);
+
+harness.get_by_label("Run Agent Playbook").click();
+harness.run();
+assert!(
+    harness
+        .query_by_label("Playbook [BridgedLoopback]: 4 frames, 1 DRC, snap=true")
+        .is_some()
+);
+```
+
+- **Dual-Transport Invariant Verification**: Asserts that running the playbook in `HeadlessDuplex` logs 4 frames with `snapshot_captured: false` (`0` bytes), and toggling to `BridgedLoopback` logs 4 frames with `snapshot_captured: true` (`20` bytes).
+- **End-to-End `egui_kittest` Workbench Flow**: Clicks `"Run Agent Playbook"`, `"Toggle MCP Transport"`, and `"Run Agent Playbook"` inside `Harness::new_eframe` to verify the complete Act VII UI workflow.
+
+### Complete Lesson 0030 Additions Listing (`crates/pcb-doc/src/lib.rs` & `src/main.rs`)
+
+Here are the complete assembled Lesson `0030` additions in context across `crates/pcb-doc/src/lib.rs` and `src/main.rs`:
+
+```rust caption="Complete Lesson 0030 additions in crates/pcb-doc/src/lib.rs and src/main.rs"
+// ============================================================================
+// crates/pcb-doc/src/lib.rs — McpInspectorWorkbench & Agent Playbook Runner
+// ============================================================================
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum McpTransportMode {
+    HeadlessDuplex,
+    BridgedLoopback,
+}
+
+impl McpTransportMode {
+    pub fn toggle(self) -> Self {
+        match self {
+            Self::HeadlessDuplex => Self::BridgedLoopback,
+            Self::BridgedLoopback => Self::HeadlessDuplex,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::HeadlessDuplex => "HeadlessDuplex",
+            Self::BridgedLoopback => "BridgedLoopback",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RpcFrameRecord {
+    pub seq: usize,
+    pub method: String,
+    pub transport: McpTransportMode,
+    pub summary: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct AgentPlaybookReport {
+    pub transport: McpTransportMode,
+    pub frames_logged: usize,
+    pub vcc_pad_count: usize,
+    pub drc_violations: usize,
+    pub pin_count: usize,
+    pub snapshot_captured: bool,
+    pub snapshot_bytes_len: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct McpInspectorWorkbench {
+    pub transport: McpTransportMode,
+    pub frame_log: Vec<RpcFrameRecord>,
+}
+
+impl Default for McpInspectorWorkbench {
+    fn default() -> Self {
+        Self {
+            transport: McpTransportMode::HeadlessDuplex,
+            frame_log: Vec::new(),
+        }
+    }
+}
+
+impl McpInspectorWorkbench {
+    pub fn run_power_integrity_playbook(
+        &mut self,
+        board: &BoardModel,
+    ) -> Result<AgentPlaybookReport, String> {
+        self.frame_log.clear();
+        let server = PcbMcpServer::new("pwr-stage-rev-b", board.clone());
+        let summary = server
+            .read_kicad_resource("kicad://board/summary")
+            .map_err(|e| e.to_string())?;
+        self.frame_log.push(RpcFrameRecord {
+            seq: 1,
+            method: "resources/read".to_owned(),
+            transport: self.transport,
+            summary,
+        });
+
+        let vcc_topo = board.query_net_topology(NetId(1));
+        self.frame_log.push(RpcFrameRecord {
+            seq: 2,
+            method: "tools/call:pcb_query_net".to_owned(),
+            transport: self.transport,
+            summary: vcc_topo.summary_badge(),
+        });
+
+        let drc = board
+            .run_custom_drc(&CustomDrcParams {
+                min_clearance_mm: 8.0,
+                min_copper_width_mm: 0.5,
+            })
+            .map_err(|e| e.to_string())?;
+        self.frame_log.push(RpcFrameRecord {
+            seq: 3,
+            method: "tools/call:pcb_run_custom_drc".to_owned(),
+            transport: self.transport,
+            summary: drc.summary_badge(),
+        });
+
+        let (snapshot_captured, snapshot_bytes_len) = match self.transport {
+            McpTransportMode::HeadlessDuplex => (false, 0),
+            McpTransportMode::BridgedLoopback => {
+                let snap = capture_cropped_region_png(board, 10, 10, 60, 50, 64, 64)
+                    .map_err(|e| e.to_string())?;
+                (true, snap.png_bytes.len())
+            }
+        };
+        self.frame_log.push(RpcFrameRecord {
+            seq: 4,
+            method: "tools/call:pcb_add_review_pin".to_owned(),
+            transport: self.transport,
+            summary: format!("Pin+Snap: {snapshot_captured} ({snapshot_bytes_len}B)"),
+        });
+
+        Ok(AgentPlaybookReport {
+            transport: self.transport,
+            frames_logged: self.frame_log.len(),
+            vcc_pad_count: vcc_topo.pad_count,
+            drc_violations: drc.clearance_violations,
+            pin_count: board.review_pins.len(),
+            snapshot_captured,
+            snapshot_bytes_len,
+        })
+    }
+}
+
+// ============================================================================
+// src/main.rs — Embedded MCP Workbench Transport & Playbook Triggers
+// ============================================================================
+impl PcbReviewerApp {
+    pub fn toggle_mcp_transport(&mut self) -> String {
+        self.workbench.transport = self.workbench.transport.toggle();
+        let badge = format!(
+            "Workbench [{}]: {} frames",
+            self.workbench.transport.label(),
+            self.workbench.frame_log.len()
+        );
+        self.view.last_workbench_badge = badge.clone();
+        badge
+    }
+
+    pub fn run_agent_playbook(&mut self) -> String {
+        let report = self
+            .workbench
+            .run_power_integrity_playbook(&self.board)
+            .unwrap_or(AgentPlaybookReport {
+                transport: self.workbench.transport,
+                frames_logged: 0,
+                vcc_pad_count: 0,
+                drc_violations: 0,
+                pin_count: 0,
+                snapshot_captured: false,
+                snapshot_bytes_len: 0,
+            });
+        let badge = format!(
+            "Playbook [{}]: {} frames, {} DRC, snap={}",
+            report.transport.label(),
+            report.frames_logged,
+            report.drc_violations,
+            report.snapshot_captured
+        );
+        self.view.last_workbench_badge = badge.clone();
+        badge
+    }
 }
 ```
 

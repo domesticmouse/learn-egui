@@ -70,12 +70,20 @@ flowchart LR
 <p><em>Figure 11.1: <code>HashMap&lt;PinId, ReviewNote&gt;</code> provides $O(1)$ lookup by <code>PinId</code>, <code>HashMap::entry</code> prevents overwriting existing notes, <code>sorted_review_pins()</code> guarantees deterministic frame layout order, and <code>egui::Window</code> renders the floating callout.</em></p>
 <h2 id="1-just-in-time-rust-hashmap-lt-pinid-reviewnote-gt-hash-eq-amp-the-entry-api">1. Just-in-Time Rust: <code>HashMap&lt;PinId, ReviewNote&gt;</code>, <code>Hash</code> + <code>Eq</code> &amp; the <code>Entry</code> API</h2>
 <p>Why store review notes in <a href="https://doc.rust-lang.org/std/collections/struct.HashMap.html"><code>std::collections::HashMap&lt;PinId, ReviewNote&gt;</code></a> instead of a plain <code>Vec&lt;ReviewNote&gt;</code>? When <code>ViewState</code> holds <code>selected_pin: Option&lt;PinId&gt;</code>, we want direct lookup by <code>PinId</code> even if pins are later deleted, synced out of order, or imported from a database (<a href="https://doc.rust-lang.org/book/ch08-03-hash-maps.html">Rust Book §8.3</a>).</p>
-<p>To use our tuple struct <code>PinId(pub u32)</code> as a <code>HashMap</code> key, it derives <code>PartialEq</code>, <code>Eq</code>, and <code>Hash</code> (plus <code>PartialOrd</code> and <code>Ord</code> so we can sort pins by ID). And instead of calling <code>self.review_pins.insert(id, note)</code>—which would silently overwrite an existing note if a duplicate <code>PinId</code> arrived—we use <a href="https://doc.rust-lang.org/std/collections/struct.HashMap.html#method.entry"><code>HashMap::entry</code></a>:<span class="sidenote-number"></span><span class="sidenote">Why does <code>sorted_review_pins()</code> sort the <code>HashMap</code> values before we render buttons in <code>Panel::left</code>? Rust's <code>HashMap</code> uses a randomly seeded SipHash function per process to prevent hash-flooding attacks, so iterating over <code>review_pins.values()</code> directly would shuffle your UI buttons on every launch!</span></p>
+<p>To use our tuple struct <code>PinId(pub u32)</code> as a <code>HashMap</code> key, it derives <code>PartialEq</code>, <code>Eq</code>, and <code>Hash</code> (plus <code>PartialOrd</code> and <code>Ord</code> so we can sort pins by ID). And instead of calling <code>self.review_pins.insert(id, note)</code>—which would silently overwrite an existing note if a duplicate <code>PinId</code> arrived—we use <a href="https://doc.rust-lang.org/std/collections/struct.HashMap.html#method.entry"><code>HashMap::entry</code></a>.<span class="sidenote-number"></span><span class="sidenote">Why does <code>sorted_review_pins()</code> sort the <code>HashMap</code> values before we render buttons in <code>Panel::left</code>? Rust's <code>HashMap</code> uses a randomly seeded SipHash function per process to prevent hash-flooding attacks, so iterating over <code>review_pins.values()</code> directly would shuffle your UI buttons on every launch!</span></p>
+<h2 id="2-floating-callout-overlays-with-egui-window-and-egui-id-unique">2. Floating Callout Overlays with <code>egui::Window</code> and <code>egui::Id::unique</code></h2>
+<p>When the engineer clicks a review pin in <code>Panel::left</code> (or drops a new pin on the canvas in <code>PlacePin</code> mode via hotkey <code>P</code>), <code>self.view.select_review_pin(&amp;self.board, pin.id)</code> sets <code>self.view.selected_pin = Some(pin.id)</code> and centres the PCB viewport on <code>pin.position_mm</code>.</p>
+<p>To display the floating callout overlay on top of the canvas, we use <a href="https://docs.rs/egui/latest/egui/containers/struct.Window.html"><code>egui::Window</code></a> keyed by a deterministic <a href="https://docs.rs/egui/latest/egui/struct.Id.html#method.unique"><code>egui::Id::unique((&quot;review_pin_callout&quot;, pin.id.0))</code></a> and invoke <code>self.render_active_pin_callout(ui.ctx())</code> at the end of <code>eframe::App::ui</code> after <code>CentralPanel</code> has painted the board.</p>
+<h2 id="3-code-walkthrough-block-by-block">3. Code Walkthrough: Block by Block</h2>
+<p>Let's examine the new types, <code>HashMap</code> methods, UI callout window, and tests added to <code>apps/0011-review-pins-and-sticky-note-callouts/src/main.rs</code> block by block before assembling the full listing in context.</p>
+<h3 id="block-1-pinid-reviewnote-amp-extending-activetool">Block 1: <code>PinId</code>, <code>ReviewNote</code> &amp; Extending <code>ActiveTool</code></h3>
 <pre><code class="language-rust">use std::collections::{HashMap, hash_map::Entry};
 
+/// Unique identifier for an engineering review pin anchored to the board.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PinId(pub u32);
 
+/// Engineering review note anchored to a physical `(x, y)` coordinate in mm.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReviewNote {
     pub id: PinId,
@@ -84,7 +92,69 @@ pub struct ReviewNote {
     pub comment: String,
 }
 
+impl ReviewNote {
+    pub fn summary_line(&amp;self) -&gt; String {
+        format!("Pin #{}: {} (@{})", self.id.0, self.comment, self.author)
+    }
+
+    pub fn coordinates_label(&amp;self) -&gt; String {
+        format!(
+            "Anchor: ({:.1}, {:.1}) mm",
+            self.position_mm.x, self.position_mm.y
+        )
+    }
+}
+
+/// Data-carrying enum modeling the active CAD interaction tool.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ActiveTool {
+    Select,
+    Measure {
+        start_mm: Option&lt;Pos2&gt;,
+        end_mm: Option&lt;Pos2&gt;,
+    },
+    PlacePin,
+}</code></pre>
+<ul>
+<li><strong><code>use std::collections::{HashMap, hash_map::Entry};</code></strong>: Imports Rust's standard hash table along with its <code>Entry</code> enum (<code>Entry::Vacant</code> and <code>Entry::Occupied</code>) for in-place slot inspection.</li>
+<li><strong><code>#[derive(..., Eq, PartialOrd, Ord, Hash)] pub struct PinId(pub u32)</code></strong>: Wrapping <code>u32</code> in a newtype prevents mixing up <code>NetId</code> and <code>PinId</code>. Deriving <code>Hash</code> + <code>Eq</code> satisfies <code>HashMap</code>'s key trait bounds, while <code>PartialOrd</code> + <code>Ord</code> allows <code>.sort_by_key(|p| p.id)</code>.</li>
+<li><strong><code>ReviewNote::summary_line</code> and <code>coordinates_label</code></strong>: Pure formatting helpers that borrow <code>&amp;self</code> and return owned <code>String</code>s for both the left-panel pin list and the floating callout window.</li>
+<li><strong><code>ActiveTool::PlacePin</code></strong>: Adds a third tool variant activated by pressing <code>Key::P</code> so clicking the PCB canvas drops a new review pin at <code>world_mm</code>.</li>
+</ul>
+<h3 id="block-2-boardmodel-pin-storage-hashmap-entry-amp-deterministic-sorting">Block 2: <code>BoardModel</code> Pin Storage, <code>HashMap::entry</code> &amp; Deterministic Sorting</h3>
+<pre><code class="language-rust">fn sample_review_pins() -&gt; HashMap&lt;PinId, ReviewNote&gt; {
+    let mut pins = HashMap::new();
+    pins.insert(
+        PinId(1),
+        ReviewNote {
+            id: PinId(1),
+            position_mm: pos2(20.0, 27.0),
+            author: "alice".to_owned(),
+            comment: "Check U1 thermal relief".to_owned(),
+        },
+    );
+    pins.insert(
+        PinId(2),
+        ReviewNote {
+            id: PinId(2),
+            position_mm: pos2(68.0, 35.0),
+            author: "bob".to_owned(),
+            comment: "Verify J1 polarity mark".to_owned(),
+        },
+    );
+    pins
+}
+
+pub struct BoardModel {
+    pub traces: Vec&lt;TraceSegment&gt;,
+    pub pads: Vec&lt;SmdPad&gt;,
+    pub components: Vec&lt;ComponentSymbol&gt;,
+    pub review_pins: HashMap&lt;PinId, ReviewNote&gt;,
+    pub next_pin_id: u32,
+}
+
 impl BoardModel {
+    /// Inserts a review pin using `HashMap::entry` so an existing `PinId` is never overwritten.
     pub fn insert_review_pin(
         &amp;mut self,
         id: PinId,
@@ -106,34 +176,519 @@ impl BoardModel {
         }
     }
 
+    /// Allocates the next monotonic `PinId` and stores a new review note at `position_mm`.
+    pub fn add_review_pin_at(&amp;mut self, position_mm: Pos2, author: &amp;str, comment: &amp;str) -&gt; PinId {
+        let id = PinId(self.next_pin_id);
+        self.next_pin_id += 1;
+        self.insert_review_pin(id, position_mm, author, comment);
+        id
+    }
+
+    /// Returns all review pins sorted deterministically by `PinId` for stable UI layout.
     pub fn sorted_review_pins(&amp;self) -&gt; Vec&lt;ReviewNote&gt; {
         let mut list: Vec&lt;ReviewNote&gt; = self.review_pins.values().cloned().collect();
         list.sort_by_key(|p| p.id);
         list
     }
 }</code></pre>
-<h2 id="2-floating-callout-overlays-with-egui-window-and-egui-id-unique">2. Floating Callout Overlays with <code>egui::Window</code> and <code>egui::Id::unique</code></h2>
-<p>When the engineer clicks a review pin in <code>Panel::left</code> (or drops a new pin on the canvas in <code>PlacePin</code> mode via hotkey <code>P</code>), <code>self.view.select_review_pin(&amp;self.board, pin.id)</code> sets <code>self.view.selected_pin = Some(pin.id)</code> and centres the PCB viewport on <code>pin.position_mm</code>.</p>
-<p>To display the floating callout overlay on top of the canvas, we use <a href="https://docs.rs/egui/latest/egui/containers/struct.Window.html"><code>egui::Window</code></a> keyed by a deterministic <a href="https://docs.rs/egui/latest/egui/struct.Id.html#method.unique"><code>egui::Id::unique((&quot;review_pin_callout&quot;, pin.id.0))</code></a>:</p>
-<pre><code class="language-rust">pub fn render_active_pin_callout(&amp;mut self, ctx: &amp;egui::Context) {
-    let Some(pin_id) = self.view.selected_pin else {
-        return;
-    };
-    let Some(pin) = self.board.review_pins.get(&amp;pin_id).cloned() else {
-        return;
-    };
+<ul>
+<li><strong><code>review_pins: HashMap&lt;PinId, ReviewNote&gt;</code> and <code>next_pin_id: u32</code></strong>: Seeded with <code>PinId(1)</code> (<code>@alice</code>) and <code>PinId(2)</code> (<code>@bob</code>), starting <code>next_pin_id</code> at <code>3</code>.</li>
+<li><strong><code>match self.review_pins.entry(id)</code></strong>: Hashes <code>id</code> once and returns an <code>Entry</code> handle into the map's bucket. If the bucket is <code>Entry::Vacant(slot)</code>, <code>slot.insert(...)</code> writes the <code>ReviewNote</code> without hashing <code>id</code> a second time and returns <code>true</code>; if <code>Entry::Occupied(_)</code>, we leave the existing note untouched and return <code>false</code>.</li>
+<li><strong><code>add_review_pin_at(&amp;mut self, ...)</code></strong>: Claims <code>PinId(self.next_pin_id)</code>, increments the counter, delegates to <code>self.insert_review_pin(...)</code>, and returns the newly allocated <code>PinId</code>.</li>
+<li><strong><code>sorted_review_pins(&amp;self) -&gt; Vec&lt;ReviewNote&gt;</code></strong>: Collects cloned <code>ReviewNote</code> values from <code>self.review_pins.values()</code> and sorts them by <code>p.id</code> (<code>Ord</code>) so both <code>Panel::left</code> and <code>paint_board</code> iterate in a guaranteed ascending order every frame.</li>
+</ul>
+<h3 id="block-3-viewstate-pin-selection-key-p-amp-floating-egui-window-callout">Block 3: <code>ViewState</code> Pin Selection, <code>Key::P</code> &amp; Floating <code>egui::Window</code> Callout</h3>
+<pre><code class="language-rust">impl ViewState {
+    pub fn activate_pin_tool(&amp;mut self) {
+        self.active_tool = ActiveTool::PlacePin;
+    }
 
-    egui::Window::new("Review Callout")
-        .id(egui::Id::unique(("review_pin_callout", pin.id.0)))
-        .collapsible(false)
-        .resizable(false)
-        .show(ctx, |ui| {
-            ui.label(pin.summary_line());
-            ui.label(pin.coordinates_label());
-            if ui.button("Close Callout").clicked() {
-                self.view.selected_pin = None;
+    pub fn cancel_tool_and_selection(&amp;mut self) {
+        self.active_tool = ActiveTool::Select;
+        self.selected_net = None;
+        self.selected_component = None;
+        self.selected_pin = None;
+    }
+
+    pub fn select_review_pin(&amp;mut self, board: &amp;BoardModel, id: PinId) -&gt; bool {
+        if let Some(note) = board.review_pins.get(&amp;id) {
+            self.selected_pin = Some(id);
+            self.pcb_scene_rect = Rect::from_center_size(note.position_mm, vec2(40.0, 30.0));
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl PcbReviewerApp {
+    pub fn render_active_pin_callout(&amp;mut self, ctx: &amp;egui::Context) {
+        let Some(pin_id) = self.view.selected_pin else {
+            return;
+        };
+        let Some(pin) = self.board.review_pins.get(&amp;pin_id).cloned() else {
+            return;
+        };
+
+        egui::Window::new("Review Callout")
+            .id(egui::Id::unique(("review_pin_callout", pin.id.0)))
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.label(pin.summary_line());
+                ui.label(pin.coordinates_label());
+                if ui.button("Close Callout").clicked() {
+                    self.view.selected_pin = None;
+                }
+            });
+    }
+}</code></pre>
+<ul>
+<li><strong><code>select_review_pin(&amp;mut self, board: &amp;BoardModel, id: PinId) -&gt; bool</code></strong>: Performs an $O(1)$ lookup via <code>board.review_pins.get(&amp;id)</code>. When found, it sets <code>self.selected_pin = Some(id)</code>, centres <code>self.pcb_scene_rect</code> around <code>note.position_mm</code>, and returns <code>true</code>.</li>
+<li><strong><code>let Some(pin_id) = self.view.selected_pin else { return; };</code></strong>: Rust's <code>let ... else</code> statement unwraps <code>Option&lt;PinId&gt;</code> up front and returns early when no pin is selected, avoiding deeply nested <code>if let</code> blocks.</li>
+<li><strong><code>self.board.review_pins.get(&amp;pin_id).cloned()</code></strong>: Clones the active <code>ReviewNote</code> before entering the <code>egui::Window::show</code> closure so the closure can mutate <code>self.view.selected_pin = None</code> without holding an immutable borrow on <code>self.board</code>.</li>
+<li><strong><code>.id(egui::Id::unique((&quot;review_pin_callout&quot;, pin.id.0)))</code></strong>: Hashes the string literal <code>&quot;review_pin_callout&quot;</code> together with <code>pin.id.0</code> (<code>u32</code>) to give each pin's callout window a distinct, collision-free <code>egui::Id</code>.</li>
+</ul>
+<h3 id="block-4-unit-amp-headless-egui-kittest-tests-cfg-test-mod-tests">Block 4: Unit &amp; Headless <code>egui_kittest</code> Tests (<code>#[cfg(test)] mod tests</code>)</h3>
+<pre><code class="language-rust">    #[test]
+    fn review_pin_entry_api_prevents_overwrites_and_sorts_deterministically() {
+        let mut board = BoardModel::default();
+        assert_eq!(board.review_pins.len(), 2);
+
+        // Attempting to insert an existing PinId(1) must return false and preserve Alice's note
+        assert!(!board.insert_review_pin(
+            PinId(1),
+            pos2(99.0, 99.0),
+            "intruder",
+            "Overwritten comment"
+        ));
+        assert_eq!(board.review_pins[&amp;PinId(1)].author, "alice");
+
+        // Allocating new monotonic pins increments next_pin_id
+        let p3 = board.add_review_pin_at(pos2(52.0, 35.0), "carol", "Check R12 value");
+        let p4 = board.add_review_pin_at(pos2(40.0, 18.0), "dave", "Add test point");
+        assert_eq!(p3, PinId(3));
+        assert_eq!(p4, PinId(4));
+        assert_eq!(board.next_pin_id, 5);
+
+        let sorted_ids: Vec&lt;PinId&gt; = board.sorted_review_pins().iter().map(|n| n.id).collect();
+        assert_eq!(sorted_ids, vec![PinId(1), PinId(2), PinId(3), PinId(4)]);
+    }
+
+    #[test]
+    fn select_review_pin_focuses_camera_and_rejects_unknown_id() {
+        let board = BoardModel::default();
+        let mut view = ViewState::default();
+
+        assert!(view.select_review_pin(&amp;board, PinId(2)));
+        assert_eq!(view.selected_pin, Some(PinId(2)));
+        assert_eq!(
+            view.pcb_scene_rect,
+            Rect::from_center_size(pos2(68.0, 35.0), vec2(40.0, 30.0))
+        );
+
+        assert!(!view.select_review_pin(&amp;board, PinId(999)));
+    }</code></pre>
+<ul>
+<li><strong>Testing <code>Entry::Occupied</code> vs. <code>Entry::Vacant</code></strong>: Asserting <code>!board.insert_review_pin(PinId(1), ...)</code> and <code>board.review_pins[&amp;PinId(1)].author == &quot;alice&quot;</code> proves that <code>Entry::Occupied(_)</code> rejects duplicate IDs without clobbering existing data.</li>
+<li><strong>Testing <code>select_review_pin</code> and <code>egui::Window</code> Callouts</strong>: <code>select_review_pin_focuses_camera_and_rejects_unknown_id</code> verifies both <code>Some</code> and <code>None</code> branches of <code>board.review_pins.get(&amp;id)</code>, while <code>headless_hotkeys_and_pin_callout_window_lifecycle</code> (shown in the complete listing below) drives <code>Key::P</code>, clicks <code>&quot;Pin #1: Check U1 thermal relief (@alice)&quot;</code>, asserts the floating <code>&quot;Anchor: (20.0, 27.0) mm&quot;</code> label appears, and clicks <code>&quot;Close Callout&quot;</code>.</li>
+</ul>
+<h3 id="complete-lesson-0011-review-pin-amp-callout-listing">Complete Lesson 0011 Review Pin &amp; Callout Listing</h3>
+<p>Here is how all of Lesson 0011's additions—<code>PinId</code>, <code>ReviewNote</code>, <code>BoardModel</code> pin methods, <code>ViewState</code> selection, <code>PcbReviewerApp</code> UI/canvas/window methods, <code>eframe::App::ui</code>, and tests—fit together inside <code>apps/0011-review-pins-and-sticky-note-callouts/src/main.rs</code>:</p>
+<pre><code class="language-rust">use std::collections::{HashMap, hash_map::Entry};
+
+use eframe::egui::{
+    self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, emath::TSTransform,
+    pos2, vec2,
+};
+
+// ... NetId, PcbLayer, TraceSegment, SmdPad, ComponentSymbol ...
+
+/// Unique identifier for an engineering review pin anchored to the board.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PinId(pub u32);
+
+/// Engineering review note anchored to a physical `(x, y)` coordinate in mm.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReviewNote {
+    pub id: PinId,
+    pub position_mm: Pos2,
+    pub author: String,
+    pub comment: String,
+}
+
+impl ReviewNote {
+    pub fn summary_line(&amp;self) -&gt; String {
+        format!("Pin #{}: {} (@{})", self.id.0, self.comment, self.author)
+    }
+
+    pub fn coordinates_label(&amp;self) -&gt; String {
+        format!(
+            "Anchor: ({:.1}, {:.1}) mm",
+            self.position_mm.x, self.position_mm.y
+        )
+    }
+}
+
+/// Data-carrying enum modeling the active CAD interaction tool.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ActiveTool {
+    Select,
+    Measure {
+        start_mm: Option&lt;Pos2&gt;,
+        end_mm: Option&lt;Pos2&gt;,
+    },
+    PlacePin,
+}
+
+fn sample_review_pins() -&gt; HashMap&lt;PinId, ReviewNote&gt; {
+    let mut pins = HashMap::new();
+    pins.insert(
+        PinId(1),
+        ReviewNote {
+            id: PinId(1),
+            position_mm: pos2(20.0, 27.0),
+            author: "alice".to_owned(),
+            comment: "Check U1 thermal relief".to_owned(),
+        },
+    );
+    pins.insert(
+        PinId(2),
+        ReviewNote {
+            id: PinId(2),
+            position_mm: pos2(68.0, 35.0),
+            author: "bob".to_owned(),
+            comment: "Verify J1 polarity mark".to_owned(),
+        },
+    );
+    pins
+}
+
+pub struct BoardModel {
+    pub traces: Vec&lt;TraceSegment&gt;,
+    pub pads: Vec&lt;SmdPad&gt;,
+    pub components: Vec&lt;ComponentSymbol&gt;,
+    pub review_pins: HashMap&lt;PinId, ReviewNote&gt;,
+    pub next_pin_id: u32,
+}
+
+impl Default for BoardModel {
+    fn default() -&gt; Self {
+        Self {
+            traces: sample_traces(),
+            pads: sample_pads(),
+            components: sample_components(),
+            review_pins: sample_review_pins(),
+            next_pin_id: 3,
+        }
+    }
+}
+
+impl BoardModel {
+    // ... find_component(), filter_components() ...
+
+    /// Inserts a review pin using `HashMap::entry` so an existing `PinId` is never overwritten.
+    pub fn insert_review_pin(
+        &amp;mut self,
+        id: PinId,
+        position_mm: Pos2,
+        author: &amp;str,
+        comment: &amp;str,
+    ) -&gt; bool {
+        match self.review_pins.entry(id) {
+            Entry::Vacant(slot) =&gt; {
+                slot.insert(ReviewNote {
+                    id,
+                    position_mm,
+                    author: author.to_owned(),
+                    comment: comment.to_owned(),
+                });
+                true
             }
+            Entry::Occupied(_) =&gt; false,
+        }
+    }
+
+    /// Allocates the next monotonic `PinId` and stores a new review note at `position_mm`.
+    pub fn add_review_pin_at(&amp;mut self, position_mm: Pos2, author: &amp;str, comment: &amp;str) -&gt; PinId {
+        let id = PinId(self.next_pin_id);
+        self.next_pin_id += 1;
+        self.insert_review_pin(id, position_mm, author, comment);
+        id
+    }
+
+    /// Returns all review pins sorted deterministically by `PinId` for stable UI layout.
+    pub fn sorted_review_pins(&amp;self) -&gt; Vec&lt;ReviewNote&gt; {
+        let mut list: Vec&lt;ReviewNote&gt; = self.review_pins.values().cloned().collect();
+        list.sort_by_key(|p| p.id);
+        list
+    }
+}
+
+pub struct ViewState {
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
+    pub viewport: BoardViewport,
+    pub pcb_scene_rect: Rect,
+    pub selected_component: Option&lt;String&gt;,
+    pub hovered_net: Option&lt;NetId&gt;,
+    pub selected_net: Option&lt;NetId&gt;,
+    pub bom_search_query: String,
+    pub active_tool: ActiveTool,
+    pub selected_pin: Option&lt;PinId&gt;,
+}
+
+impl ViewState {
+    // ... reset_layers(), isolate_top_copper(), show_all_layers(), fit_board_in_viewport(), activate_measure_tool() ...
+
+    pub fn activate_pin_tool(&amp;mut self) {
+        self.active_tool = ActiveTool::PlacePin;
+    }
+
+    pub fn cancel_tool_and_selection(&amp;mut self) {
+        self.active_tool = ActiveTool::Select;
+        self.selected_net = None;
+        self.selected_component = None;
+        self.selected_pin = None;
+    }
+
+    pub fn select_review_pin(&amp;mut self, board: &amp;BoardModel, id: PinId) -&gt; bool {
+        if let Some(note) = board.review_pins.get(&amp;id) {
+            self.selected_pin = Some(id);
+            self.pcb_scene_rect = Rect::from_center_size(note.position_mm, vec2(40.0, 30.0));
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl PcbReviewerApp {
+    pub fn handle_hotkeys(&amp;mut self, ctx: &amp;egui::Context) {
+        let pressed_f = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F));
+        let pressed_m = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::M));
+        let pressed_p = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::P));
+        let pressed_esc =
+            ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+
+        if pressed_f {
+            self.view.fit_board_in_viewport();
+        }
+        if pressed_m {
+            self.view.activate_measure_tool();
+        }
+        if pressed_p {
+            self.view.activate_pin_tool();
+        }
+        if pressed_esc {
+            self.view.cancel_tool_and_selection();
+        }
+    }
+
+    pub fn render_side_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        // ... PCB Layers &amp; BOM Inspector ...
+
+        ui.separator();
+        ui.heading("Review Pins");
+        let pins = self.board.sorted_review_pins();
+        ui.label(format!("Review Pins: {}", pins.len()));
+        for pin in &amp;pins {
+            if ui.button(pin.summary_line()).clicked() {
+                self.view.select_review_pin(&amp;self.board, pin.id);
+            }
+        }
+
+        // ... Net Inspector ...
+    }
+
+    pub fn render_active_pin_callout(&amp;mut self, ctx: &amp;egui::Context) {
+        let Some(pin_id) = self.view.selected_pin else {
+            return;
+        };
+        let Some(pin) = self.board.review_pins.get(&amp;pin_id).cloned() else {
+            return;
+        };
+
+        egui::Window::new("Review Callout")
+            .id(egui::Id::unique(("review_pin_callout", pin.id.0)))
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.label(pin.summary_line());
+                ui.label(pin.coordinates_label());
+                if ui.button("Close Callout").clicked() {
+                    self.view.selected_pin = None;
+                }
+            });
+    }
+
+    fn render_canvas(&amp;mut self, ui: &amp;mut egui::Ui) {
+        let mut scene_rect = self.view.pcb_scene_rect;
+        egui::Scene::new()
+            .zoom_range(0.5..=8.0)
+            .show(ui, &amp;mut scene_rect, |ui| {
+                let (response, painter) =
+                    ui.allocate_painter(vec2(720.0, 520.0), Sense::click_and_drag());
+
+                if response.dragged() {
+                    self.view.viewport.pan_by(response.drag_delta());
+                }
+
+                if let Some(hover_pos) = response.hover_pos() {
+                    let world_mm = self.view.viewport.screen_to_world(hover_pos);
+                    self.view.hovered_net = self.hit_test_net_at_mm(world_mm);
+                    if response.clicked() {
+                        match &amp;mut self.view.active_tool {
+                            ActiveTool::Select =&gt; {
+                                self.view.selected_net = self.view.hovered_net;
+                            }
+                            ActiveTool::Measure { start_mm, end_mm } =&gt; {
+                                if start_mm.is_none() {
+                                    *start_mm = Some(world_mm);
+                                } else {
+                                    *end_mm = Some(world_mm);
+                                }
+                            }
+                            ActiveTool::PlacePin =&gt; {
+                                let new_id = self.board.add_review_pin_at(
+                                    world_mm,
+                                    "reviewer",
+                                    "Inspect clearance",
+                                );
+                                self.view.selected_pin = Some(new_id);
+                                self.view.active_tool = ActiveTool::Select;
+                            }
+                        }
+                    }
+                } else {
+                    self.view.hovered_net = None;
+                }
+
+                self.paint_board(&amp;painter, response.rect);
+            });
+        self.view.pcb_scene_rect = scene_rect;
+    }
+
+    fn paint_board(&amp;self, painter: &amp;egui::Painter, canvas_rect: Rect) {
+        // ... board outline, traces, pads, silkscreen ...
+
+        for pin in self.board.sorted_review_pins() {
+            let screen_pt = self.view.viewport.world_to_screen(pin.position_mm);
+            let is_selected = self.view.selected_pin == Some(pin.id);
+            let fill = if is_selected {
+                Color32::from_rgb(255, 230, 100)
+            } else {
+                Color32::from_rgb(255, 139, 107)
+            };
+            painter.circle_filled(screen_pt, 6.0_f32, fill);
+            painter.text(
+                screen_pt + vec2(8.0, -6.0),
+                Align2::LEFT_BOTTOM,
+                format!("#{}", pin.id.0),
+                FontId::monospace(11.0),
+                fill,
+            );
+        }
+
+        // ... ruler overlay ...
+    }
+}
+
+impl eframe::App for PcbReviewerApp {
+    fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame) {
+        self.handle_hotkeys(ui.ctx());
+
+        egui::Panel::top("schematic_cross_probe_bar").show(ui, |ui| {
+            self.render_schematic_bar(ui);
         });
+
+        egui::Panel::left("layer_panel").show(ui, |ui| {
+            self.render_side_panel(ui);
+        });
+
+        egui::CentralPanel::default().show(ui, |ui| {
+            self.render_canvas(ui);
+        });
+
+        self.render_active_pin_callout(ui.ctx());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    // ... Lesson 0001-0010 unit tests ...
+
+    #[test]
+    fn review_pin_entry_api_prevents_overwrites_and_sorts_deterministically() {
+        let mut board = BoardModel::default();
+        assert_eq!(board.review_pins.len(), 2);
+
+        // Attempting to insert an existing PinId(1) must return false and preserve Alice's note
+        assert!(!board.insert_review_pin(
+            PinId(1),
+            pos2(99.0, 99.0),
+            "intruder",
+            "Overwritten comment"
+        ));
+        assert_eq!(board.review_pins[&amp;PinId(1)].author, "alice");
+
+        // Allocating new monotonic pins increments next_pin_id
+        let p3 = board.add_review_pin_at(pos2(52.0, 35.0), "carol", "Check R12 value");
+        let p4 = board.add_review_pin_at(pos2(40.0, 18.0), "dave", "Add test point");
+        assert_eq!(p3, PinId(3));
+        assert_eq!(p4, PinId(4));
+        assert_eq!(board.next_pin_id, 5);
+
+        let sorted_ids: Vec&lt;PinId&gt; = board.sorted_review_pins().iter().map(|n| n.id).collect();
+        assert_eq!(sorted_ids, vec![PinId(1), PinId(2), PinId(3), PinId(4)]);
+    }
+
+    #[test]
+    fn select_review_pin_focuses_camera_and_rejects_unknown_id() {
+        let board = BoardModel::default();
+        let mut view = ViewState::default();
+
+        assert!(view.select_review_pin(&amp;board, PinId(2)));
+        assert_eq!(view.selected_pin, Some(PinId(2)));
+        assert_eq!(
+            view.pcb_scene_rect,
+            Rect::from_center_size(pos2(68.0, 35.0), vec2(40.0, 30.0))
+        );
+
+        assert!(!view.select_review_pin(&amp;board, PinId(999)));
+    }
+
+    #[test]
+    fn headless_hotkeys_and_pin_callout_window_lifecycle() {
+        let mut harness = Harness::new_eframe(|_cc| PcbReviewerApp::default());
+        assert!(harness.query_by_label("Active Tool: Select").is_some());
+        assert!(harness.query_by_label("Review Pins: 2").is_some());
+
+        // Press 'P' -&gt; activates PlacePin tool
+        harness.key_press(egui::Key::P);
+        harness.run();
+        assert_eq!(harness.state().view.active_tool, ActiveTool::PlacePin);
+        assert!(harness.query_by_label("Active Tool: Place Pin (P)").is_some());
+
+        // Click a review pin button in the Panel -&gt; opens the floating callout Window
+        harness
+            .get_by_label("Pin #1: Check U1 thermal relief (@alice)")
+            .click();
+        harness.run();
+        assert_eq!(harness.state().view.selected_pin, Some(PinId(1)));
+        assert!(harness.query_by_label("Anchor: (20.0, 27.0) mm").is_some());
+
+        // Close the floating callout window
+        harness.get_by_label("Close Callout").click();
+        harness.run();
+        assert_eq!(harness.state().view.selected_pin, None);
+        assert!(harness.query_by_label("Anchor: (20.0, 27.0) mm").is_none());
+    }
 }</code></pre>
 </div>
 

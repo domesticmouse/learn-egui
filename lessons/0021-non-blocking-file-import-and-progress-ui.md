@@ -39,9 +39,20 @@ sequenceDiagram
     Note over UI: Swaps self.board, sets ImportJobState::Succeeded
 ```
 
-## Channel Messages & `ImportJobState`
+## 2. Anatomy of Non-Blocking File Import & Progress UI: Block by Block
 
-```rust caption="Background worker and ImportJobState in crates/pcb-doc/src/lib.rs"
+Let's walk through the new code in `crates/pcb-doc/src/lib.rs` and `src/main.rs` across four logical blocks—covering the channel message protocol, the background worker thread, the non-blocking `try_recv()` frame poll with `egui::ProgressBar`, and the test suite—before viewing the complete assembled listing in context.
+
+### Block 1: Progress Ratio Math, `ImportJobMessage` & `ImportJobState` (`crates/pcb-doc/src/lib.rs`)
+
+```rust
+pub fn progress_fraction(completed_steps: usize, total_steps: usize) -> f32 {
+    if total_steps == 0 {
+        return 0.0;
+    }
+    (completed_steps as f32 / total_steps as f32).clamp(0.0, 1.0)
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ImportJobMessage {
     Progress {
@@ -62,6 +73,273 @@ pub enum ImportJobState {
     Running { fraction: f32, phase: String },
     Succeeded { board_id: String },
     Failed(String),
+}
+
+impl ImportJobState {
+    pub fn is_running(&self) -> bool {
+        matches!(self, ImportJobState::Running { .. })
+    }
+
+    pub fn status_badge(&self) -> String {
+        match self {
+            ImportJobState::Idle => "Import: Idle".to_owned(),
+            ImportJobState::Running { fraction, phase } => {
+                format!("Importing: {phase} ({:.0}%)", fraction * 100.0)
+            }
+            ImportJobState::Succeeded { board_id } => format!("Import OK: {board_id}"),
+            ImportJobState::Failed(err) => format!("Import Error: {err}"),
+        }
+    }
+}
+```
+
+- **`progress_fraction(completed_steps, total_steps)`**: Guards against division-by-zero (`if total_steps == 0 { return 0.0; }`) so `f32::NAN` never reaches `egui::ProgressBar`, then clamps the ratio to `0.0..=1.0`.
+- **`ImportJobMessage`**: The typed message protocol sent across `std::sync::mpsc::channel` from the worker thread to the UI thread (`Progress`, `Completed { board_id, board }`, or `Failed(SessionIoError)`). Because `BoardModel`'s collections are wrapped in `Arc<...>`, `ImportJobMessage` is `Send + 'static` and moves across thread boundaries in `O(1)` pointer copies.
+- **`ImportJobState::is_running` & `status_badge`**: Tracks the UI-side state machine (`Idle`, `Running { fraction, phase }`, `Succeeded { board_id }`, `Failed(String)`) and formats a status badge for the session panel.
+
+### Block 2: Background Worker Thread (`spawn_background_session_import`) & State Transitions (`crates/pcb-doc/src/lib.rs`)
+
+```rust
+pub fn spawn_background_session_import(
+    raw_json: String,
+) -> std::sync::mpsc::Receiver<ImportJobMessage> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        if tx
+            .send(ImportJobMessage::Progress {
+                completed_steps: 1,
+                total_steps: 2,
+                phase: "Validating envelope".to_owned(),
+            })
+            .is_err()
+        {
+            return;
+        }
+        match BoardModel::from_session_json(&raw_json) {
+            Ok((board_id, board)) => {
+                let _ = tx.send(ImportJobMessage::Progress {
+                    completed_steps: 2,
+                    total_steps: 2,
+                    phase: "Loading copper layers".to_owned(),
+                });
+                let _ = tx.send(ImportJobMessage::Completed { board_id, board });
+            }
+            Err(err) => {
+                let _ = tx.send(ImportJobMessage::Failed(err));
+            }
+        }
+    });
+    rx
+}
+
+impl BoardModel {
+    pub fn apply_import_message(
+        &mut self,
+        active_board_id: &mut String,
+        state: &mut ImportJobState,
+        msg: ImportJobMessage,
+    ) {
+        match msg {
+            ImportJobMessage::Progress {
+                completed_steps,
+                total_steps,
+                phase,
+            } => {
+                let fraction = progress_fraction(completed_steps, total_steps);
+                *state = ImportJobState::Running { fraction, phase };
+            }
+            ImportJobMessage::Completed { board_id, board } => {
+                *active_board_id = board_id.clone();
+                *self = board;
+                *state = ImportJobState::Succeeded { board_id };
+            }
+            ImportJobMessage::Failed(err) => {
+                *state = ImportJobState::Failed(err.to_string());
+            }
+        }
+    }
+}
+```
+
+- **`std::sync::mpsc::channel()` & `std::thread::spawn(move || { ... })`**: Creates a multi-producer, single-consumer channel pair `(tx, rx)`. The `move` closure transfers ownership of `tx` and `raw_json: String` onto a background OS thread while returning `rx` (`Receiver<ImportJobMessage>`) immediately to the UI caller.
+- **Early Cancellation Detection (`if tx.send(...).is_err() { return; }`)**: If the user clicks `"Cancel Import"` on the UI thread (dropping `rx`), `tx.send(...)` returns `Err(SendError)` and the worker exits before doing expensive parsing work.
+- **`BoardModel::apply_import_message`**: A pure domain state-transition method that applies each `ImportJobMessage` to `self`, `active_board_id`, and `state`.
+
+### Block 3: Non-Blocking `try_recv()` Polling, `ctx.request_repaint()` & `egui::ProgressBar` (`src/main.rs`)
+
+```rust
+// Added fields on `pub struct PcbReviewerApp`:
+pub import_rx: Option<std::sync::mpsc::Receiver<ImportJobMessage>>,
+pub import_state: ImportJobState,
+
+// Added methods on `impl PcbReviewerApp`:
+pub fn start_async_import(&mut self, raw_json: String) {
+    self.import_state = ImportJobState::Running {
+        fraction: 0.0,
+        phase: "Spawning worker".to_owned(),
+    };
+    self.import_rx = Some(spawn_background_session_import(raw_json));
+}
+
+pub fn cancel_async_import(&mut self) {
+    self.import_rx = None;
+    self.import_state = ImportJobState::Idle;
+}
+
+pub fn poll_async_import(&mut self, ctx: &egui::Context) {
+    if let Some(rx) = &self.import_rx {
+        while let Ok(msg) = rx.try_recv() {
+            self.board.apply_import_message(
+                &mut self.view.active_board_id,
+                &mut self.import_state,
+                msg,
+            );
+        }
+    }
+    if self.import_state.is_running() {
+        ctx.request_repaint();
+    }
+}
+
+// Inside `PcbReviewerApp::render_session_panel`:
+ui.label(self.import_state.status_badge());
+if let ImportJobState::Running { fraction, phase } = &self.import_state {
+    ui.add(egui::ProgressBar::new(*fraction).text(phase));
+}
+if ui.button("Cancel Import").clicked() {
+    self.cancel_async_import();
+}
+```
+
+- **`while let Ok(msg) = rx.try_recv()`**: Called at the top of `eframe::App::ui` via `self.poll_async_import(ui.ctx())`. Unlike `rx.recv()` (which blocks the calling thread and freezes the window), `rx.try_recv()` drains all currently queued messages and returns `Err(TryRecvError::Empty)` in nanoseconds when no more messages are ready.
+- **`if self.import_state.is_running() { ctx.request_repaint(); }`**: Wakes `eframe`'s reactive event loop on the next frame so `poll_async_import` keeps polling the channel even when the mouse cursor is completely still.
+- **`ui.add(egui::ProgressBar::new(*fraction).text(phase))`**: Renders an animated `egui::ProgressBar` with the current worker phase text while `self.import_state` is `Running`.
+
+### Block 4: Worker Channel Streaming & Headless Progress Tests (`crates/pcb-doc/src/lib.rs` & `src/main.rs`)
+
+```rust
+// In `crates/pcb-doc/src/lib.rs` (`#[cfg(test)] mod tests`):
+#[test]
+fn background_session_import_streams_progress_and_handles_errors_and_cancellation() {
+    assert_eq!(progress_fraction(0, 0), 0.0);
+    assert_eq!(progress_fraction(1, 4), 0.25);
+    assert_eq!(progress_fraction(5, 2), 1.0);
+
+    assert!(!ImportJobState::Idle.is_running());
+    assert_eq!(ImportJobState::Idle.status_badge(), "Import: Idle");
+    let running = ImportJobState::Running {
+        fraction: 0.5,
+        phase: "Validating envelope".to_owned(),
+    };
+    assert!(running.is_running());
+    assert_eq!(
+        running.status_badge(),
+        "Importing: Validating envelope (50%)"
+    );
+
+    let mut source_board = BoardModel::default();
+    source_board.clear_review_pins();
+    let valid_json = source_board.to_session_json("async-rev-d").unwrap();
+
+    let rx = spawn_background_session_import(valid_json);
+    let msgs: Vec<ImportJobMessage> = rx.iter().collect();
+    assert_eq!(msgs.len(), 3);
+    assert_eq!(
+        msgs[0],
+        ImportJobMessage::Progress {
+            completed_steps: 1,
+            total_steps: 2,
+            phase: "Validating envelope".to_owned(),
+        }
+    );
+    assert_eq!(
+        msgs[1],
+        ImportJobMessage::Progress {
+            completed_steps: 2,
+            total_steps: 2,
+            phase: "Loading copper layers".to_owned(),
+        }
+    );
+
+    let mut target_board = BoardModel::default();
+    let mut active_id = "old-id".to_owned();
+    let mut state = ImportJobState::Idle;
+    for msg in msgs {
+        target_board.apply_import_message(&mut active_id, &mut state, msg);
+    }
+    assert_eq!(active_id, "async-rev-d");
+    assert!(target_board.review_pins.is_empty());
+    assert_eq!(
+        state,
+        ImportJobState::Succeeded {
+            board_id: "async-rev-d".to_owned()
+        }
+    );
+    assert_eq!(state.status_badge(), "Import OK: async-rev-d");
+
+    let bad_rx = spawn_background_session_import("{ broken".to_owned());
+    let bad_msgs: Vec<ImportJobMessage> = bad_rx.iter().collect();
+    assert_eq!(bad_msgs.len(), 2);
+    for msg in bad_msgs {
+        target_board.apply_import_message(&mut active_id, &mut state, msg);
+    }
+    assert!(matches!(state, ImportJobState::Failed(_)));
+    assert!(state.status_badge().starts_with("Import Error:"));
+}
+```
+
+- **Deterministic Channel Collection (`rx.iter().collect()`)**: In unit tests, `rx.iter().collect()` collects every message emitted by `spawn_background_session_import` until the worker thread drops `tx`, letting us assert the exact sequence of `Progress` and `Completed` / `Failed` messages without sleep timers.
+- **Controlled `mpsc` Injection in `egui_kittest` (`src/main.rs`)**: In `standalone_layer_swatch_and_headless_ui_workflows_pass`, we create a controlled `std::sync::mpsc::channel()`, send `ImportJobMessage::Progress { completed_steps: 1, total_steps: 2, phase: "Validating envelope".to_owned() }`, assign `harness.state_mut().import_rx = Some(rx)`, call `harness.step()`, and verify `"Importing: Validating envelope (50%)"` before clicking `"Cancel Import"`.
+
+### Complete Lesson 0021 Code Listing (In Context)
+
+Here are the complete background import worker, state machine, UI polling, and test additions in `crates/pcb-doc/src/lib.rs` and `src/main.rs`:
+
+```rust caption="Complete ImportJobMessage, ImportJobState, and worker in crates/pcb-doc/src/lib.rs"
+pub fn progress_fraction(completed_steps: usize, total_steps: usize) -> f32 {
+    if total_steps == 0 {
+        return 0.0;
+    }
+    (completed_steps as f32 / total_steps as f32).clamp(0.0, 1.0)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ImportJobMessage {
+    Progress {
+        completed_steps: usize,
+        total_steps: usize,
+        phase: String,
+    },
+    Completed {
+        board_id: String,
+        board: BoardModel,
+    },
+    Failed(SessionIoError),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ImportJobState {
+    Idle,
+    Running { fraction: f32, phase: String },
+    Succeeded { board_id: String },
+    Failed(String),
+}
+
+impl ImportJobState {
+    pub fn is_running(&self) -> bool {
+        matches!(self, ImportJobState::Running { .. })
+    }
+
+    pub fn status_badge(&self) -> String {
+        match self {
+            ImportJobState::Idle => "Import: Idle".to_owned(),
+            ImportJobState::Running { fraction, phase } => {
+                format!("Importing: {phase} ({:.0}%)", fraction * 100.0)
+            }
+            ImportJobState::Succeeded { board_id } => format!("Import OK: {board_id}"),
+            ImportJobState::Failed(err) => format!("Import Error: {err}"),
+        }
+    }
 }
 
 pub fn spawn_background_session_import(
@@ -95,6 +373,88 @@ pub fn spawn_background_session_import(
     });
     rx
 }
+
+impl BoardModel {
+    pub fn apply_import_message(
+        &mut self,
+        active_board_id: &mut String,
+        state: &mut ImportJobState,
+        msg: ImportJobMessage,
+    ) {
+        match msg {
+            ImportJobMessage::Progress {
+                completed_steps,
+                total_steps,
+                phase,
+            } => {
+                let fraction = progress_fraction(completed_steps, total_steps);
+                *state = ImportJobState::Running { fraction, phase };
+            }
+            ImportJobMessage::Completed { board_id, board } => {
+                *active_board_id = board_id.clone();
+                *self = board;
+                *state = ImportJobState::Succeeded { board_id };
+            }
+            ImportJobMessage::Failed(err) => {
+                *state = ImportJobState::Failed(err.to_string());
+            }
+        }
+    }
+}
+```
+
+```rust caption="Complete non-blocking mpsc polling, ProgressBar UI, and headless test in src/main.rs"
+impl PcbReviewerApp {
+    pub fn start_async_import(&mut self, raw_json: String) {
+        self.import_state = ImportJobState::Running {
+            fraction: 0.0,
+            phase: "Spawning worker".to_owned(),
+        };
+        self.import_rx = Some(spawn_background_session_import(raw_json));
+    }
+
+    pub fn cancel_async_import(&mut self) {
+        self.import_rx = None;
+        self.import_state = ImportJobState::Idle;
+    }
+
+    pub fn poll_async_import(&mut self, ctx: &egui::Context) {
+        if let Some(rx) = &self.import_rx {
+            while let Ok(msg) = rx.try_recv() {
+                self.board.apply_import_message(
+                    &mut self.view.active_board_id,
+                    &mut self.import_state,
+                    msg,
+                );
+            }
+        }
+        if self.import_state.is_running() {
+            ctx.request_repaint();
+        }
+    }
+}
+
+// Inside `standalone_layer_swatch_and_headless_ui_workflows_pass` (`src/main.rs`):
+assert!(harness.query_by_label("Import: Idle").is_some());
+let (tx, rx) = std::sync::mpsc::channel();
+tx.send(ImportJobMessage::Progress {
+    completed_steps: 1,
+    total_steps: 2,
+    phase: "Validating envelope".to_owned(),
+})
+.unwrap();
+harness.state_mut().import_rx = Some(rx);
+harness.step();
+assert!(
+    harness
+        .query_by_label("Importing: Validating envelope (50%)")
+        .is_some()
+);
+
+harness.get_by_label("Cancel Import").click();
+harness.run();
+assert_eq!(harness.state().import_state, ImportJobState::Idle);
+assert!(harness.state().import_rx.is_none());
 ```
 
 {{widget:async-import-sim}}

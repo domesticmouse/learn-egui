@@ -69,46 +69,456 @@ flowchart LR
 </figure>
 <p><em>Figure 13.1: Same-layer pads on distinct nets are checked against <code>min_clearance_mm</code>, emitting <code>DrcViolation</code> markers rendered as red halos on the canvas and clickable jump buttons in <code>Panel::left</code>.</em></p>
 <h2 id="1-just-in-time-rust-bounding-box-reduction-iterator-reduce-amp-f32-clamp">1. Just-in-Time Rust: Bounding-Box Reduction (<code>Iterator::reduce</code>) &amp; <code>f32::clamp</code></h2>
-<p>To compute the edge-to-edge Euclidean distance between two axis-aligned rectangular pads <code>a</code> and <code>b</code>, we subtract their half-widths <code>(a.size_mm.x + b.size_mm.x) * 0.5</code> from the centre-to-centre distance <code>(a.center_mm.x - b.center_mm.x).abs()</code> along each axis, clamp negative values (which represent axis overlap) to <code>0.0</code> via <code>.max(0.0)</code>, and take the hypotenuse with <code>.hypot(...)</code>:<span class="sidenote-number"></span><span class="sidenote">Notice how <code>pads_bounding_box_mm</code> uses <code>.map(SmdPad::bounds_mm).reduce(Rect::union)</code>: <code>Iterator::reduce</code> folds the iterator using the first pad's <code>Rect</code> as the initial accumulator and returns <code>None</code> if the board has zero pads.</span></p>
-<pre><code class="language-rust">pub fn pad_edge_gap_mm(a: &amp;SmdPad, b: &amp;SmdPad) -&gt; f32 {
+<p>To compute the edge-to-edge Euclidean distance between two axis-aligned rectangular pads <code>a</code> and <code>b</code>, we subtract their half-widths <code>(a.size_mm.x + b.size_mm.x) * 0.5</code> from the centre-to-centre distance <code>(a.center_mm.x - b.center_mm.x).abs()</code> along each axis, clamp negative values (which represent axis overlap) to <code>0.0</code> via <code>.max(0.0)</code>, and take the hypotenuse with <code>.hypot(...)</code>.<span class="sidenote-number"></span><span class="sidenote">Notice how <code>pads_bounding_box_mm</code> uses <code>.map(SmdPad::bounds_mm).reduce(Rect::union)</code>: <code>Iterator::reduce</code> folds the iterator using the first pad's <code>Rect</code> as the initial accumulator and returns <code>None</code> if the board has zero pads.</span></p>
+<h2 id="2-detecting-drc-clearance-violations-amp-clamping-the-minimap-camera">2. Detecting DRC Clearance Violations &amp; Clamping the Minimap Camera</h2>
+<p>When iterating over pad pairs in <code>detect_pad_clearance_violations</code>, we maintain a <code>seen: Vec&lt;&amp;SmdPad&gt;</code> slice of previously visited pads. That way, each unordered pair <code>(a, b)</code> is tested once without index arithmetic (<code>idx + 1</code>), and whenever <code>a.layer == b.layer &amp;&amp; a.net != b.net</code> with <code>gap &lt; min_clearance_mm</code>, we record a <code>DrcViolation</code> at the midpoint between the two pads.</p>
+<p>Meanwhile, when the engineer pans the <code>egui::Scene</code> camera near or beyond the board edge <code>(0, 0)..(100, 70) mm</code>, <code>ViewState::clamped_minimap_camera_rect</code> uses <a href="https://doc.rust-lang.org/std/primitive.f32.html#method.clamp"><code>f32::clamp</code></a> to keep the minimap's camera box inside <code>board_bounds_mm</code>.</p>
+<h2 id="3-code-walkthrough-block-by-block">3. Code Walkthrough: Block by Block</h2>
+<p>Let's walk through the new <code>DrcViolation</code> struct, <code>pad_edge_gap_mm</code> geometry math, <code>BoardModel</code> DRC/bounding-box methods, <code>ViewState::clamped_minimap_camera_rect</code>, UI halo rendering, and tests in <code>apps/0013-drc-violation-overlay-and-minimap/src/main.rs</code> block by block before viewing the complete listing in context.</p>
+<h3 id="block-1-drcviolation-amp-pad-edge-gap-mm-euclidean-clearance-math">Block 1: <code>DrcViolation</code> &amp; <code>pad_edge_gap_mm</code> Euclidean Clearance Math</h3>
+<pre><code class="language-rust">/// Design Rule Check (DRC) copper-to-copper clearance violation between two nets.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DrcViolation {
+    pub layer: PcbLayer,
+    pub net_a: NetId,
+    pub net_b: NetId,
+    pub center_mm: Pos2,
+    pub measured_gap_mm: f32,
+    pub required_gap_mm: f32,
+}
+
+impl DrcViolation {
+    pub fn summary_label(&amp;self) -&gt; String {
+        format!(
+            "DRC: {} vs {} ({:.1} mm &lt; {:.1} mm)",
+            self.net_a.signal_name(),
+            self.net_b.signal_name(),
+            self.measured_gap_mm,
+            self.required_gap_mm
+        )
+    }
+}
+
+/// Computes the Euclidean edge-to-edge gap (in mm) between two axis-aligned SMD pads.
+pub fn pad_edge_gap_mm(a: &amp;SmdPad, b: &amp;SmdPad) -&gt; f32 {
     let dx = (a.center_mm.x - b.center_mm.x).abs() - (a.size_mm.x + b.size_mm.x) * 0.5;
     let dy = (a.center_mm.y - b.center_mm.y).abs() - (a.size_mm.y + b.size_mm.y) * 0.5;
     dx.max(0.0).hypot(dy.max(0.0))
-}
-
-impl BoardModel {
+}</code></pre>
+<ul>
+<li><strong><code>DrcViolation</code></strong>: Value type (<code>Copy</code>) storing the offending <code>PcbLayer</code>, both <code>NetId</code>s, the midpoint <code>center_mm</code> between the two pads, <code>measured_gap_mm</code>, and <code>required_gap_mm</code>.</li>
+<li><strong><code>(a.center_mm.x - b.center_mm.x).abs() - (a.size_mm.x + b.size_mm.x) * 0.5</code></strong>: Computes the 1D edge-to-edge separation along X by subtracting the sum of both pads' half-widths from their centre-to-centre distance.</li>
+<li><strong><code>dx.max(0.0).hypot(dy.max(0.0))</code></strong>: Clamps negative axis separations (when two pads overlap horizontally or vertically) to <code>0.0</code> before computing the 2D Euclidean hypotenuse $\sqrt{\max(dx, 0)^2 + \max(dy, 0)^2}$.</li>
+</ul>
+<h3 id="block-2-pads-bounding-box-mm-iterator-reduce-amp-detect-pad-clearance-violations">Block 2: <code>pads_bounding_box_mm</code> (<code>Iterator::reduce</code>) &amp; <code>detect_pad_clearance_violations</code></h3>
+<pre><code class="language-rust">impl BoardModel {
+    /// Computes the union bounding box across all pads on the board using `Iterator::reduce`.
     pub fn pads_bounding_box_mm(&amp;self) -&gt; Option&lt;Rect&gt; {
         self.pads
             .iter()
             .map(SmdPad::bounds_mm)
             .reduce(Rect::union)
     }
+
+    /// Detects same-layer, different-net pad pairs whose edge gap is strictly below `min_clearance_mm`.
+    pub fn detect_pad_clearance_violations(&amp;self, min_clearance_mm: f32) -&gt; Vec&lt;DrcViolation&gt; {
+        let mut violations = Vec::new();
+        let mut seen: Vec&lt;&amp;SmdPad&gt; = Vec::new();
+        for b in &amp;self.pads {
+            for a in &amp;seen {
+                if a.layer == b.layer &amp;&amp; a.net != b.net {
+                    let gap = pad_edge_gap_mm(a, b);
+                    if gap &lt; min_clearance_mm {
+                        violations.push(DrcViolation {
+                            layer: a.layer,
+                            net_a: a.net,
+                            net_b: b.net,
+                            center_mm: pos2(
+                                (a.center_mm.x + b.center_mm.x) * 0.5,
+                                (a.center_mm.y + b.center_mm.y) * 0.5,
+                            ),
+                            measured_gap_mm: gap,
+                            required_gap_mm: min_clearance_mm,
+                        });
+                    }
+                }
+            }
+            seen.push(b);
+        }
+        violations
+    }
 }</code></pre>
-<h2 id="2-detecting-drc-clearance-violations-amp-clamping-the-minimap-camera">2. Detecting DRC Clearance Violations &amp; Clamping the Minimap Camera</h2>
-<p>When iterating over pad pairs in <code>detect_pad_clearance_violations</code>, we maintain a <code>seen: Vec&lt;&amp;SmdPad&gt;</code> slice of previously visited pads. That way, each unordered pair <code>(a, b)</code> is tested once without index arithmetic (<code>idx + 1</code>), and whenever <code>a.layer == b.layer &amp;&amp; a.net != b.net</code> with <code>gap &lt; min_clearance_mm</code>, we record a <code>DrcViolation</code> at the midpoint between the two pads.</p>
-<p>Meanwhile, when the engineer pans the <code>egui::Scene</code> camera near or beyond the board edge <code>(0, 0)..(100, 70) mm</code>, <code>ViewState::clamped_minimap_camera_rect</code> uses <a href="https://doc.rust-lang.org/std/primitive.f32.html#method.clamp"><code>f32::clamp</code></a> to keep the minimap's camera box inside <code>board_bounds_mm</code>:</p>
-<pre><code class="language-rust">pub fn clamped_minimap_camera_rect(&amp;self, board_bounds_mm: Rect) -&gt; Rect {
-    let min_x = self
-        .pcb_scene_rect
-        .min
-        .x
-        .clamp(board_bounds_mm.min.x, board_bounds_mm.max.x);
-    let min_y = self
-        .pcb_scene_rect
-        .min
-        .y
-        .clamp(board_bounds_mm.min.y, board_bounds_mm.max.y);
-    let max_x = self
-        .pcb_scene_rect
-        .max
-        .x
-        .clamp(min_x, board_bounds_mm.max.x);
-    let max_y = self
-        .pcb_scene_rect
-        .max
-        .y
-        .clamp(min_y, board_bounds_mm.max.y);
-    Rect::from_min_max(pos2(min_x, min_y), pos2(max_x, max_y))
+<ul>
+<li><strong><code>.map(SmdPad::bounds_mm).reduce(Rect::union)</code></strong>: Passed a function pointer <code>SmdPad::bounds_mm</code> (<code>fn(&amp;SmdPad) -&gt; Rect</code>) and <code>Rect::union</code> (<code>fn(Rect, Rect) -&gt; Rect</code>), <code>Iterator::reduce</code> folds all pad rectangles into <code>Some(union_rect)</code> (or <code>None</code> when <code>self.pads</code> is empty).</li>
+<li><strong><code>let mut seen: Vec&lt;&amp;SmdPad&gt;</code></strong>: Holds shared references <code>&amp;SmdPad</code> to pads visited so far, comparing each new pad <code>b</code> against every prior pad <code>a</code> without index arithmetic (<code>idx + 1</code>) that could spawn equivalent index-offset mutants.</li>
+<li><strong><code>if a.layer == b.layer &amp;&amp; a.net != b.net</code> and <code>if gap &lt; min_clearance_mm</code></strong>: Only copper pads on the <strong>same layer</strong> belonging to <strong>different nets</strong> can short-circuit each other, and a violation is raised when <code>gap</code> is strictly less than <code>min_clearance_mm</code>.</li>
+</ul>
+<h3 id="block-3-clamped-minimap-camera-rect-f32-clamp-inspector-jump-amp-red-drc-halos">Block 3: <code>clamped_minimap_camera_rect</code> (<code>f32::clamp</code>), Inspector Jump &amp; Red DRC Halos</h3>
+<pre><code class="language-rust">impl ViewState {
+    /// Clamps `pcb_scene_rect` so the minimap viewport indicator stays within `board_bounds_mm`.
+    pub fn clamped_minimap_camera_rect(&amp;self, board_bounds_mm: Rect) -&gt; Rect {
+        let min_x = self
+            .pcb_scene_rect
+            .min
+            .x
+            .clamp(board_bounds_mm.min.x, board_bounds_mm.max.x);
+        let min_y = self
+            .pcb_scene_rect
+            .min
+            .y
+            .clamp(board_bounds_mm.min.y, board_bounds_mm.max.y);
+        let max_x = self
+            .pcb_scene_rect
+            .max
+            .x
+            .clamp(min_x, board_bounds_mm.max.x);
+        let max_y = self
+            .pcb_scene_rect
+            .max
+            .y
+            .clamp(min_y, board_bounds_mm.max.y);
+        Rect::from_min_max(pos2(min_x, min_y), pos2(max_x, max_y))
+    }
+}
+
+// Inside PcbReviewerApp::render_side_panel():
+        ui.separator();
+        ui.heading("DRC &amp; Minimap");
+        let violations = self
+            .board
+            .detect_pad_clearance_violations(self.view.min_clearance_mm);
+        ui.horizontal(|ui| {
+            ui.checkbox(&amp;mut self.view.show_drc_overlay, "Show DRC Violations");
+            ui.label(format!("DRC Violations: {}", violations.len()));
+        });
+        for v in &amp;violations {
+            if ui.button(v.summary_label()).clicked() {
+                self.view.pcb_scene_rect = Rect::from_center_size(v.center_mm, vec2(40.0, 30.0));
+            }
+        }
+        let board_bounds = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0));
+        let clamped_cam = self.view.clamped_minimap_camera_rect(board_bounds);
+        ui.label(format!(
+            "Minimap Camera: ({:.0}, {:.0})..({:.0}, {:.0}) mm",
+            clamped_cam.min.x, clamped_cam.min.y, clamped_cam.max.x, clamped_cam.max.y
+        ));
+
+// Inside PcbReviewerApp::paint_board():
+        if self.view.show_drc_overlay {
+            for v in self
+                .board
+                .detect_pad_clearance_violations(self.view.min_clearance_mm)
+            {
+                let center_px = self.view.viewport.world_to_screen(v.center_mm);
+                painter.circle_stroke(
+                    center_px,
+                    14.0_f32,
+                    Stroke::new(2.0_f32, Color32::from_rgb(255, 85, 85)),
+                );
+            }
+        }</code></pre>
+<ul>
+<li><strong>Chained <code>f32::clamp</code> in <code>clamped_minimap_camera_rect</code></strong>: First clamps <code>min_x</code> and <code>min_y</code> into <code>board_bounds_mm</code>, then clamps <code>max_x</code> to <code>min_x..=board_bounds_mm.max.x</code> (and <code>max_y</code> to <code>min_y..=board_bounds_mm.max.y</code>) so the returned <code>Rect</code> is always valid (<code>min &lt;= max</code>) and strictly inside the board outline.</li>
+<li><strong>Clicking a DRC Violation Button</strong>: Clicking <code>ui.button(v.summary_label())</code> in <code>Panel::left</code> recentres <code>self.view.pcb_scene_rect</code> directly over <code>v.center_mm</code> (<code>40×30 mm</code> window), immediately updating the <code>&quot;Minimap Camera: ...&quot;</code> readout.</li>
+<li><strong><code>painter.circle_stroke(center_px, 14.0_f32, ...)</code></strong>: When <code>self.view.show_drc_overlay</code> is enabled, draws a <code>14.0 px</code> radius red warning halo around each violation midpoint on the 2D canvas.</li>
+</ul>
+<h3 id="block-4-drc-geometry-boundary-amp-minimap-clamping-tests-cfg-test-mod-tests">Block 4: DRC Geometry, Boundary &amp; Minimap Clamping Tests (<code>#[cfg(test)] mod tests</code>)</h3>
+<pre><code class="language-rust">    #[test]
+    fn drc_clearance_bounding_box_and_minimap_clamping_are_exact() {
+        let pad_a = SmdPad {
+            center_mm: pos2(10.0, 12.0),
+            size_mm: vec2(4.0, 2.0),
+            layer: PcbLayer::TopCopper,
+            net: NetId(1),
+        };
+        let pad_b = SmdPad {
+            center_mm: pos2(18.0, 27.0),
+            size_mm: vec2(6.0, 4.0),
+            layer: PcbLayer::TopCopper,
+            net: NetId(2),
+        };
+        // dx = |10 - 18| - 5 = 3.0, dy = |12 - 27| - 3 = 12.0 -&gt; hypot(3, 12)
+        assert!((pad_edge_gap_mm(&amp;pad_a, &amp;pad_b) - 3.0_f32.hypot(12.0_f32)).abs() &lt; 1e-4);
+
+        let mut board = BoardModel::default();
+        assert_eq!(
+            board.pads_bounding_box_mm(),
+            Some(Rect::from_min_max(pos2(18.0, 20.8), pos2(22.0, 49.2)))
+        );
+
+        // At exact boundary 7.6 mm, `gap &lt; min_clearance_mm` must be false
+        assert!(board.detect_pad_clearance_violations(7.6).is_empty());
+
+        board.pads.push(SmdPad {
+            center_mm: pos2(20.0, 20.0),
+            size_mm: vec2(4.0, 2.4),
+            layer: PcbLayer::TopCopper,
+            net: NetId(1),
+        });
+        let violations = board.detect_pad_clearance_violations(8.0);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].center_mm, pos2(20.0, 27.0));
+        assert!((violations[0].measured_gap_mm - 7.6).abs() &lt; 1e-4);
+        assert_eq!(
+            violations[0].summary_label(),
+            "DRC: VCC_3V3 vs SPI_CLK (7.6 mm &lt; 8.0 mm)"
+        );
+
+        // Minimap camera clamping when panned outside board bounds (0,0)..(100,70)
+        let mut view = ViewState::default();
+        view.pcb_scene_rect = Rect::from_min_max(pos2(-25.0, -10.0), pos2(130.0, 95.0));
+        let board_bounds = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0));
+        assert_eq!(
+            view.clamped_minimap_camera_rect(board_bounds),
+            Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0))
+        );
+    }</code></pre>
+<ul>
+<li><strong>Diagonal &amp; Axis-Overlapping Pad Checks</strong>: Testing <code>pad_a</code> vs. <code>pad_b</code> with non-zero, asymmetric <code>dx = 3.0</code> and <code>dy = 12.0</code> catches arithmetic mutations in <code>pad_edge_gap_mm</code>, while the default board pads test <code>dx &lt; 0.0</code> clamped to <code>0.0</code> via <code>.max(0.0)</code>.</li>
+<li><strong>Strict Inequality Boundary (<code>7.6 mm</code> vs. <code>8.0 mm</code>)</strong>: Asserting <code>detect_pad_clearance_violations(7.6).is_empty()</code> alongside <code>detect_pad_clearance_violations(8.0).len() == 1</code> kills the <code>&lt;</code> $\to$ <code>&lt;=</code> boundary mutant.</li>
+</ul>
+<h3 id="complete-lesson-0013-drc-violation-overlay-amp-minimap-clamping-listing">Complete Lesson 0013 DRC Violation Overlay &amp; Minimap Clamping Listing</h3>
+<p>Here is the complete assembled DRC geometry engine, <code>BoardModel</code> methods, <code>ViewState</code> minimap clamping, <code>PcbReviewerApp</code> inspector/canvas halo rendering, and tests in context from <code>apps/0013-drc-violation-overlay-and-minimap/src/main.rs</code>:</p>
+<pre><code class="language-rust">/// Design Rule Check (DRC) copper-to-copper clearance violation between two nets.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DrcViolation {
+    pub layer: PcbLayer,
+    pub net_a: NetId,
+    pub net_b: NetId,
+    pub center_mm: Pos2,
+    pub measured_gap_mm: f32,
+    pub required_gap_mm: f32,
+}
+
+impl DrcViolation {
+    pub fn summary_label(&amp;self) -&gt; String {
+        format!(
+            "DRC: {} vs {} ({:.1} mm &lt; {:.1} mm)",
+            self.net_a.signal_name(),
+            self.net_b.signal_name(),
+            self.measured_gap_mm,
+            self.required_gap_mm
+        )
+    }
+}
+
+/// Computes the Euclidean edge-to-edge gap (in mm) between two axis-aligned SMD pads.
+pub fn pad_edge_gap_mm(a: &amp;SmdPad, b: &amp;SmdPad) -&gt; f32 {
+    let dx = (a.center_mm.x - b.center_mm.x).abs() - (a.size_mm.x + b.size_mm.x) * 0.5;
+    let dy = (a.center_mm.y - b.center_mm.y).abs() - (a.size_mm.y + b.size_mm.y) * 0.5;
+    dx.max(0.0).hypot(dy.max(0.0))
+}
+
+impl BoardModel {
+    // ... find_component, filter_components, review pin methods ...
+
+    /// Computes the union bounding box across all pads on the board using `Iterator::reduce`.
+    pub fn pads_bounding_box_mm(&amp;self) -&gt; Option&lt;Rect&gt; {
+        self.pads
+            .iter()
+            .map(SmdPad::bounds_mm)
+            .reduce(Rect::union)
+    }
+
+    /// Detects same-layer, different-net pad pairs whose edge gap is strictly below `min_clearance_mm`.
+    pub fn detect_pad_clearance_violations(&amp;self, min_clearance_mm: f32) -&gt; Vec&lt;DrcViolation&gt; {
+        let mut violations = Vec::new();
+        let mut seen: Vec&lt;&amp;SmdPad&gt; = Vec::new();
+        for b in &amp;self.pads {
+            for a in &amp;seen {
+                if a.layer == b.layer &amp;&amp; a.net != b.net {
+                    let gap = pad_edge_gap_mm(a, b);
+                    if gap &lt; min_clearance_mm {
+                        violations.push(DrcViolation {
+                            layer: a.layer,
+                            net_a: a.net,
+                            net_b: b.net,
+                            center_mm: pos2(
+                                (a.center_mm.x + b.center_mm.x) * 0.5,
+                                (a.center_mm.y + b.center_mm.y) * 0.5,
+                            ),
+                            measured_gap_mm: gap,
+                            required_gap_mm: min_clearance_mm,
+                        });
+                    }
+                }
+            }
+            seen.push(b);
+        }
+        violations
+    }
+}
+
+pub struct ViewState {
+    // ... layer booleans, viewport, selection &amp; triage fields ...
+    pub min_clearance_mm: f32,
+    pub show_drc_overlay: bool,
+}
+
+impl ViewState {
+    // ... layer &amp; selection methods ...
+
+    /// Clamps `pcb_scene_rect` so the minimap viewport indicator stays within `board_bounds_mm`.
+    pub fn clamped_minimap_camera_rect(&amp;self, board_bounds_mm: Rect) -&gt; Rect {
+        let min_x = self
+            .pcb_scene_rect
+            .min
+            .x
+            .clamp(board_bounds_mm.min.x, board_bounds_mm.max.x);
+        let min_y = self
+            .pcb_scene_rect
+            .min
+            .y
+            .clamp(board_bounds_mm.min.y, board_bounds_mm.max.y);
+        let max_x = self
+            .pcb_scene_rect
+            .max
+            .x
+            .clamp(min_x, board_bounds_mm.max.x);
+        let max_y = self
+            .pcb_scene_rect
+            .max
+            .y
+            .clamp(min_y, board_bounds_mm.max.y);
+        Rect::from_min_max(pos2(min_x, min_y), pos2(max_x, max_y))
+    }
+}
+
+impl PcbReviewerApp {
+    pub fn render_side_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        // ... PCB Layers, BOM Inspector, Review Pins &amp; Triage ...
+
+        ui.separator();
+        ui.heading("DRC &amp; Minimap");
+        let violations = self
+            .board
+            .detect_pad_clearance_violations(self.view.min_clearance_mm);
+        ui.horizontal(|ui| {
+            ui.checkbox(&amp;mut self.view.show_drc_overlay, "Show DRC Violations");
+            ui.label(format!("DRC Violations: {}", violations.len()));
+        });
+        for v in &amp;violations {
+            if ui.button(v.summary_label()).clicked() {
+                self.view.pcb_scene_rect = Rect::from_center_size(v.center_mm, vec2(40.0, 30.0));
+            }
+        }
+        let board_bounds = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0));
+        let clamped_cam = self.view.clamped_minimap_camera_rect(board_bounds);
+        ui.label(format!(
+            "Minimap Camera: ({:.0}, {:.0})..({:.0}, {:.0}) mm",
+            clamped_cam.min.x, clamped_cam.min.y, clamped_cam.max.x, clamped_cam.max.y
+        ));
+
+        // ... Net Inspector ...
+    }
+
+    fn paint_board(&amp;self, painter: &amp;egui::Painter, canvas_rect: Rect) {
+        // ... board outline, traces, pads, silkscreen ...
+
+        if self.view.show_drc_overlay {
+            for v in self
+                .board
+                .detect_pad_clearance_violations(self.view.min_clearance_mm)
+            {
+                let center_px = self.view.viewport.world_to_screen(v.center_mm);
+                painter.circle_stroke(
+                    center_px,
+                    14.0_f32,
+                    Stroke::new(2.0_f32, Color32::from_rgb(255, 85, 85)),
+                );
+            }
+        }
+
+        // ... review pins &amp; ruler overlay ...
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    // ... Lesson 0001-0012 unit tests ...
+
+    #[test]
+    fn drc_clearance_bounding_box_and_minimap_clamping_are_exact() {
+        let pad_a = SmdPad {
+            center_mm: pos2(10.0, 12.0),
+            size_mm: vec2(4.0, 2.0),
+            layer: PcbLayer::TopCopper,
+            net: NetId(1),
+        };
+        let pad_b = SmdPad {
+            center_mm: pos2(18.0, 27.0),
+            size_mm: vec2(6.0, 4.0),
+            layer: PcbLayer::TopCopper,
+            net: NetId(2),
+        };
+        assert!((pad_edge_gap_mm(&amp;pad_a, &amp;pad_b) - 3.0_f32.hypot(12.0_f32)).abs() &lt; 1e-4);
+
+        let mut board = BoardModel::default();
+        assert_eq!(
+            board.pads_bounding_box_mm(),
+            Some(Rect::from_min_max(pos2(18.0, 20.8), pos2(22.0, 49.2)))
+        );
+
+        assert!(board.detect_pad_clearance_violations(7.6).is_empty());
+
+        board.pads.push(SmdPad {
+            center_mm: pos2(20.0, 20.0),
+            size_mm: vec2(4.0, 2.4),
+            layer: PcbLayer::TopCopper,
+            net: NetId(1),
+        });
+        let violations = board.detect_pad_clearance_violations(8.0);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].center_mm, pos2(20.0, 27.0));
+        assert!((violations[0].measured_gap_mm - 7.6).abs() &lt; 1e-4);
+        assert_eq!(
+            violations[0].summary_label(),
+            "DRC: VCC_3V3 vs SPI_CLK (7.6 mm &lt; 8.0 mm)"
+        );
+
+        let mut view = ViewState::default();
+        view.pcb_scene_rect = Rect::from_min_max(pos2(-25.0, -10.0), pos2(130.0, 95.0));
+        let board_bounds = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0));
+        assert_eq!(
+            view.clamped_minimap_camera_rect(board_bounds),
+            Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0))
+        );
+
+        view.pcb_scene_rect = Rect::from_min_max(pos2(40.0, 30.0), pos2(20.0, 15.0));
+        assert_eq!(
+            view.clamped_minimap_camera_rect(board_bounds),
+            Rect::from_min_max(pos2(40.0, 30.0), pos2(40.0, 30.0))
+        );
+    }
+
+    #[test]
+    fn headless_drc_violation_button_and_triage_workflow() {
+        let mut harness = Harness::new_eframe(|_cc| PcbReviewerApp::default());
+        assert!(harness.query_by_label("DRC Violations: 1").is_some());
+        assert!(
+            harness
+                .query_by_label("Minimap Camera: (0, 0)..(100, 70) mm")
+                .is_some()
+        );
+
+        // Click the DRC violation button -&gt; centers camera on violation midpoint (20, 27)
+        harness
+            .get_by_label("DRC: VCC_3V3 vs SPI_CLK (7.6 mm &lt; 8.0 mm)")
+            .click();
+        harness.run();
+        assert_eq!(
+            harness.state().view.pcb_scene_rect,
+            Rect::from_center_size(pos2(20.0, 27.0), vec2(40.0, 30.0))
+        );
+        assert!(
+            harness
+                .query_by_label("Minimap Camera: (0, 12)..(40, 42) mm")
+                .is_some()
+        );
+    }
 }</code></pre>
 </div>
 

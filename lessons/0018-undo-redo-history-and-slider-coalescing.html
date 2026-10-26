@@ -88,15 +88,85 @@ sequenceDiagram
     Note over Hist: Restores x=20.0 mm in a single step!
   </pre>
 </figure>
-<h2 id="o-1-undo-redo-swaps-with-std-mem-replace"><code>O(1)</code> Undo/Redo Swaps with <code>std::mem::replace</code></h2>
-<p>When the user clicks <strong>Undo (Z)</strong> or presses <code>Key::Z</code>, <code>BoardHistory::undo(&amp;mut self, current: &amp;mut BoardModel)</code> pops the most recent <code>HistoryEntry</code> from the back of <code>undo_stack</code>, swaps <code>entry.doc</code> into <code>*current</code> using <code>std::mem::replace(current, entry.doc)</code>, and pushes the replaced state onto <code>redo_stack</code>.<span class="sidenote-number"></span><span class="sidenote"><strong>Zero-Clone State Swap:</strong> <code>std::mem::replace(current, entry.doc)</code> moves the saved <code>BoardModel</code> into <code>*current</code> and returns the outgoing <code>BoardModel</code> for <code>redo_stack</code> without even incrementing <code>Arc</code> reference counts!</span></p>
-<figure>
-  <figcaption>BoardHistory record_edit, commit_coalesce, and undo in crates/pcb-doc/src/lib.rs</figcaption>
-  <pre><code class="language-rust">impl BoardHistory {
+<h2 id="o-1-undo-redo-swaps-amp-slider-coalescing-block-by-block"><code>O(1)</code> Undo/Redo Swaps &amp; Slider Coalescing: Block by Block</h2>
+<p>When the user clicks <strong>Undo (Z)</strong> or presses <code>Key::Z</code>, <code>BoardHistory::undo(&amp;mut self, current: &amp;mut BoardModel)</code> pops the most recent <code>HistoryEntry</code> from the back of <code>undo_stack</code>, swaps <code>entry.doc</code> into <code>*current</code> using <code>std::mem::replace(current, entry.doc)</code>, and pushes the replaced state onto <code>redo_stack</code>.<span class="sidenote-number"></span><span class="sidenote"><strong>Zero-Clone State Swap:</strong> <code>std::mem::replace(current, entry.doc)</code> moves the saved <code>BoardModel</code> into <code>*current</code> and returns the outgoing <code>BoardModel</code> for <code>redo_stack</code> without even incrementing <code>Arc</code> reference counts!</span> Let's walk through all the new undo/redo and slider-coalescing blocks across <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code>, then view the assembled listing in context.</p>
+<h3 id="block-1-bounded-boardhistory-ring-buffer-vecdeque-lt-historyentry-gt-amp-telemetry-accessors-crates-pcb-doc-src-lib-rs">Block 1: Bounded <code>BoardHistory</code> Ring Buffer (<code>VecDeque&lt;HistoryEntry&gt;</code>) &amp; Telemetry Accessors (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">use std::{
+    collections::{HashMap, VecDeque, hash_map::Entry},
+    sync::Arc,
+};
+
+/// Default maximum undo history entries retained in the ring buffer.
+pub const DEFAULT_MAX_HISTORY: usize = 32;
+
+/// A single copy-on-write snapshot entry stored in `BoardHistory`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HistoryEntry {
+    pub label: String,
+    pub doc: BoardModel,
+}
+
+/// Bounded copy-on-write undo/redo history with continuous slider drag coalescing.
+#[derive(Clone, Debug)]
+pub struct BoardHistory {
+    undo_stack: VecDeque&lt;HistoryEntry&gt;,
+    redo_stack: Vec&lt;HistoryEntry&gt;,
+    max_entries: usize,
+    active_coalesce_key: Option&lt;String&gt;,
+    revision: u64,
+}
+
+impl Default for BoardHistory {
+    fn default() -&gt; Self {
+        Self::new(DEFAULT_MAX_HISTORY)
+    }
+}
+
+impl BoardHistory {
+    pub fn new(max_entries: usize) -&gt; Self {
+        Self {
+            undo_stack: VecDeque::new(),
+            redo_stack: Vec::new(),
+            max_entries: max_entries.max(1),
+            active_coalesce_key: None,
+            revision: 0,
+        }
+    }
+
+    pub fn undo_len(&amp;self) -&gt; usize {
+        self.undo_stack.len()
+    }
+
+    pub fn redo_len(&amp;self) -&gt; usize {
+        self.redo_stack.len()
+    }
+
+    pub fn can_undo(&amp;self) -&gt; bool {
+        !self.undo_stack.is_empty()
+    }
+
+    pub fn can_redo(&amp;self) -&gt; bool {
+        !self.redo_stack.is_empty()
+    }
+
+    pub fn revision(&amp;self) -&gt; u64 {
+        self.revision
+    }
+}</code></pre>
+<ul>
+<li><strong><code>HistoryEntry { label, doc }</code></strong>: Pairs a human-readable action label (such as <code>&quot;Update Pin Status&quot;</code> or <code>&quot;Drag Pin X&quot;</code>) with a pre-mutation <code>BoardModel</code> snapshot (<code>O(1)</code> <code>Arc</code> handles).</li>
+<li><strong>Private <code>BoardHistory</code> Fields + Public Accessors</strong>: Keeping <code>undo_stack</code>, <code>redo_stack</code>, <code>max_entries</code>, <code>active_coalesce_key</code>, and <code>revision</code> private ensures callers cannot push onto <code>undo_stack</code> without clearing <code>redo_stack</code> or enforcing the ring-buffer bound.</li>
+<li><strong><code>max_entries: max_entries.max(1)</code></strong>: Clamps the capacity floor to <code>1</code> inside <code>BoardHistory::new</code> so a caller passing <code>0</code> never creates a degenerate history buffer that immediately evicts every edit.</li>
+</ul>
+<h3 id="block-2-coalesced-edit-recording-record-edit-amp-commit-coalesce-o-1-undo-redo-std-mem-replace-amp-move-review-pin-x-crates-pcb-doc-src-lib-rs">Block 2: Coalesced Edit Recording (<code>record_edit</code> &amp; <code>commit_coalesce</code>), <code>O(1)</code> Undo/Redo (<code>std::mem::replace</code>) &amp; <code>move_review_pin_x</code> (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">impl BoardHistory {
+    /// Commits any in-flight continuous drag gesture so the next edit starts a fresh undo entry.
     pub fn commit_coalesce(&amp;mut self) {
         self.active_coalesce_key = None;
     }
 
+    /// Records a pre-mutation `before` snapshot, coalescing consecutive edits that share the same
+    /// `Some(coalesce_key)` into a single undo entry while incrementing `revision` on every frame.
     pub fn record_edit(&amp;mut self, label: &amp;str, before: BoardModel, coalesce_key: Option&lt;&amp;str&gt;) {
         let should_coalesce =
             self.active_coalesce_key.as_deref() == coalesce_key &amp;&amp; coalesce_key.is_some();
@@ -116,6 +186,7 @@ sequenceDiagram
         self.revision += 1;
     }
 
+    /// Undoes the most recent edit in `O(1)` `Arc` pointer swaps, pushing the current state onto `redo_stack`.
     pub fn undo(&amp;mut self, current: &amp;mut BoardModel) -&gt; Option&lt;String&gt; {
         let entry = self.undo_stack.pop_back()?;
         self.active_coalesce_key = None;
@@ -127,6 +198,424 @@ sequenceDiagram
         });
         self.revision += 1;
         Some(label)
+    }
+
+    /// Redoes the most recently undone edit in `O(1)` `Arc` pointer swaps.
+    pub fn redo(&amp;mut self, current: &amp;mut BoardModel) -&gt; Option&lt;String&gt; {
+        let entry = self.redo_stack.pop()?;
+        self.active_coalesce_key = None;
+        let label = entry.label.clone();
+        let prev = std::mem::replace(current, entry.doc);
+        if self.undo_stack.len() &gt;= self.max_entries {
+            self.undo_stack.pop_front();
+        }
+        self.undo_stack.push_back(HistoryEntry {
+            label: entry.label,
+            doc: prev,
+        });
+        self.revision += 1;
+        Some(label)
+    }
+}
+
+impl BoardModel {
+    /// Updates a single review pin's X coordinate in millimetres using copy-on-write (`Arc::make_mut`).
+    pub fn move_review_pin_x(&amp;mut self, id: PinId, new_x_mm: f32) -&gt; bool {
+        let Some(pin) = Arc::make_mut(&amp;mut self.review_pins).get_mut(&amp;id) else {
+            return false;
+        };
+        pin.position_mm.x = new_x_mm;
+        true
+    }
+}</code></pre>
+<ul>
+<li><strong><code>self.active_coalesce_key.as_deref() == coalesce_key &amp;&amp; coalesce_key.is_some()</code></strong>: <a href="https://doc.rust-lang.org/std/option/enum.Option.html#method.as_deref"><code>Option::as_deref</code></a> borrows <code>Option&lt;String&gt;</code> as <code>Option&lt;&amp;str&gt;</code> without allocating. Checking <code>coalesce_key.is_some()</code> ensures discrete edits (<code>None</code>) never coalesce with one another, whereas consecutive slider frames passing <code>Some(&quot;drag_pin_1_x&quot;)</code> keep the original pre-drag <code>before</code> snapshot on <code>undo_stack</code>.</li>
+<li><strong>Bounded Ring-Buffer Eviction (<code>pop_front</code> + <code>push_back</code>)</strong>: When <code>self.undo_stack.len() &gt;= self.max_entries</code>, <code>self.undo_stack.pop_front()</code> drops the oldest <code>HistoryEntry</code> in <code>O(1)</code> time before <code>push_back</code> appends the newest snapshot.</li>
+<li><strong><code>std::mem::replace(current, entry.doc)</code> in <code>undo</code> and <code>redo</code></strong>: Moves <code>entry.doc</code> directly into <code>*current</code> and returns the displaced <code>BoardModel</code> (<code>prev</code>) to push onto the opposite stack. Both <code>undo</code> and <code>redo</code> also reset <code>self.active_coalesce_key = None</code> and increment <code>self.revision</code>.</li>
+</ul>
+<h3 id="block-3-discrete-vs-coalesced-ui-edits-z-y-hotkeys-amp-egui-slider-drag-stopped-src-main-rs">Block 3: Discrete vs. Coalesced UI Edits, <code>Z</code>/<code>Y</code> Hotkeys &amp; <code>egui::Slider</code> <code>drag_stopped()</code> (<code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">pub struct PcbReviewerApp {
+    pub board: BoardModel,
+    pub baseline_snapshot: BoardModel,
+    pub history: BoardHistory,
+    pub view: ViewState,
+    pub saved_session_json: String,
+}
+
+impl PcbReviewerApp {
+    /// Discrete undoable edit: transitions a review pin status and records a non-coalesced undo step.
+    pub fn apply_pin_status_edit(&amp;mut self, id: PinId, next: ReviewStatus) -&gt; bool {
+        let before = self.board.clone();
+        if self.board.transition_pin_status(id, next) {
+            self.history.record_edit("Update Pin Status", before, None);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Discrete undoable edit: adds a review pin and records a non-coalesced undo step.
+    pub fn add_review_pin_edit(&amp;mut self, world_mm: Pos2) -&gt; PinId {
+        let before = self.board.clone();
+        let new_id = self.board.add_review_pin_at(
+            world_mm,
+            "reviewer",
+            "Inspect clearance",
+            PinSeverity::Warning,
+        );
+        self.history.record_edit("Place Review Pin", before, None);
+        new_id
+    }
+
+    /// Coalesced continuous edit: moves a review pin's X coordinate and merges consecutive slider frames
+    /// sharing `drag_pin_&lt;id&gt;_x` into a single undo entry.
+    pub fn drag_review_pin_x(&amp;mut self, id: PinId, new_x_mm: f32) -&gt; bool {
+        let before = self.board.clone();
+        if self.board.move_review_pin_x(id, new_x_mm) {
+            let key = format!("drag_pin_{}_x", id.0);
+            self.history.record_edit("Drag Pin X", before, Some(&amp;key));
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Commits any active continuous slider drag so subsequent drags start a fresh undo step.
+    pub fn commit_drag_gesture(&amp;mut self) {
+        self.history.commit_coalesce();
+    }
+
+    pub fn undo_board_edit(&amp;mut self) -&gt; Option&lt;String&gt; {
+        self.history.undo(&amp;mut self.board)
+    }
+
+    pub fn redo_board_edit(&amp;mut self) -&gt; Option&lt;String&gt; {
+        self.history.redo(&amp;mut self.board)
+    }
+}</code></pre>
+<p>And inside <code>render_session_panel</code> and <code>render_active_pin_callout</code> in <code>src/main.rs</code>:</p>
+<pre><code class="language-rust">// Inside render_session_panel(&amp;mut self, ui: &amp;mut egui::Ui):
+ui.heading("Undo / Redo History");
+ui.label(format!(
+    "History: {} Undo | {} Redo (Rev {})",
+    self.history.undo_len(),
+    self.history.redo_len(),
+    self.history.revision()
+));
+ui.horizontal(|ui| {
+    if ui
+        .add_enabled(self.history.can_undo(), egui::Button::new("Undo (Z)"))
+        .clicked()
+    {
+        self.undo_board_edit();
+    }
+    if ui
+        .add_enabled(self.history.can_redo(), egui::Button::new("Redo (Y)"))
+        .clicked()
+    {
+        self.redo_board_edit();
+    }
+});
+
+// Inside render_active_pin_callout(&amp;mut self, ctx: &amp;egui::Context):
+let mut x_mm = pin.position_mm.x;
+let slider_resp = ui.add(egui::Slider::new(&amp;mut x_mm, 5.0..=95.0).text("Pin X (mm)"));
+if slider_resp.changed() {
+    self.drag_review_pin_x(pin.id, x_mm);
+}
+if slider_resp.drag_stopped() {
+    self.commit_drag_gesture();
+}</code></pre>
+<ul>
+<li><strong>Pre-Mutation <code>let before = self.board.clone();</code></strong>: Every undoable action takes an <code>O(1)</code> <code>Arc</code> snapshot <em>before</em> mutating <code>self.board</code>, recording the snapshot only if the domain mutation succeeds (<code>if self.board.transition_pin_status(...)</code> / <code>if self.board.move_review_pin_x(...)</code>).</li>
+<li><strong><code>ui.add_enabled(self.history.can_undo(), egui::Button::new(&quot;Undo (Z)&quot;))</code></strong>: Disables and grays out the Undo/Redo buttons automatically when the corresponding stack is empty, while <code>handle_hotkeys</code> also consumes <code>egui::Key::Z</code> and <code>egui::Key::Y</code>.</li>
+<li><strong><code>slider_resp.changed()</code> + <code>slider_resp.drag_stopped()</code></strong>: While the user drags the <code>&quot;Pin X (mm)&quot;</code> slider inside the Review Callout window, <code>slider_resp.changed()</code> calls <code>self.drag_review_pin_x(pin.id, x_mm)</code> with <code>Some(&quot;drag_pin_&lt;id&gt;_x&quot;)</code>. On the frame the user releases the mouse button, <code>slider_resp.drag_stopped()</code> returns <code>true</code> and calls <code>self.commit_drag_gesture()</code>.</li>
+</ul>
+<h3 id="block-4-ring-buffer-eviction-tests-coalesced-drag-proptest-amp-egui-kittest-undo-redo-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Block 4: Ring-Buffer Eviction Tests, Coalesced Drag <code>proptest!</code> &amp; <code>egui_kittest</code> Undo/Redo (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">// In crates/pcb-doc/src/lib.rs (#[cfg(test)] mod tests):
+proptest! {
+    #[test]
+    fn prop_coalesced_drag_restores_exact_initial_state_in_single_undo(
+        drag_steps in prop::collection::vec(10.0_f32..90.0_f32, 2..12),
+    ) {
+        let initial = BoardModel::default();
+        let mut working = initial.clone();
+        let mut history = BoardHistory::default();
+
+        for x in &amp;drag_steps {
+            let before = working.clone();
+            working.move_review_pin_x(PinId(1), *x);
+            history.record_edit("Drag Pin #1 X", before, Some("drag_pin_1_x"));
+        }
+        history.commit_coalesce();
+
+        prop_assert_eq!(history.undo_len(), 1);
+        let final_dragged = working.clone();
+        let undone_label = history.undo(&amp;mut working);
+        prop_assert_eq!(undone_label.as_deref(), Some("Drag Pin #1 X"));
+        prop_assert_eq!(&amp;working, &amp;initial);
+        prop_assert_eq!(working.shared_arc_buffers(&amp;initial), 4);
+
+        let redone_label = history.redo(&amp;mut working);
+        prop_assert_eq!(redone_label.as_deref(), Some("Drag Pin #1 X"));
+        prop_assert_eq!(&amp;working, &amp;final_dragged);
+    }
+}</code></pre>
+<ul>
+<li><strong><code>prop::collection::vec(10.0_f32..90.0_f32, 2..12)</code></strong>: Generates randomized multi-frame slider trajectories of 2 to 11 drag steps.</li>
+<li><strong>Single-Step Undo &amp; Pointer Identity Verification</strong>: Asserts that regardless of how many drag frames fired, <code>history.undo_len() == 1</code>, a single <code>history.undo(&amp;mut working)</code> restores <code>&amp;working == &amp;initial</code> with all 4 <code>Arc</code> buffers pointer-shared (<code>working.shared_arc_buffers(&amp;initial) == 4</code>), and <code>history.redo(&amp;mut working)</code> restores <code>&amp;final_dragged</code>.</li>
+</ul>
+<h3 id="complete-lesson-0018-undo-redo-amp-coalescing-listing-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Complete Lesson 0018 Undo/Redo &amp; Coalescing Listing (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<p>Here are all the new and updated Lesson <code>0018</code> sections across <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code> in full context:</p>
+<figure>
+  <figcaption>Complete Lesson 0018 Undo/Redo and Slider Coalescing additions in crates/pcb-doc/src/lib.rs and src/main.rs</figcaption>
+  <pre><code class="language-rust">// === crates/pcb-doc/src/lib.rs ===
+use std::{
+    collections::{HashMap, VecDeque, hash_map::Entry},
+    sync::Arc,
+};
+
+/// Default maximum undo history entries retained in the ring buffer.
+pub const DEFAULT_MAX_HISTORY: usize = 32;
+
+/// A single copy-on-write snapshot entry stored in `BoardHistory`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HistoryEntry {
+    pub label: String,
+    pub doc: BoardModel,
+}
+
+/// Bounded copy-on-write undo/redo history with continuous slider drag coalescing.
+#[derive(Clone, Debug)]
+pub struct BoardHistory {
+    undo_stack: VecDeque&lt;HistoryEntry&gt;,
+    redo_stack: Vec&lt;HistoryEntry&gt;,
+    max_entries: usize,
+    active_coalesce_key: Option&lt;String&gt;,
+    revision: u64,
+}
+
+impl Default for BoardHistory {
+    fn default() -&gt; Self {
+        Self::new(DEFAULT_MAX_HISTORY)
+    }
+}
+
+impl BoardHistory {
+    pub fn new(max_entries: usize) -&gt; Self {
+        Self {
+            undo_stack: VecDeque::new(),
+            redo_stack: Vec::new(),
+            max_entries: max_entries.max(1),
+            active_coalesce_key: None,
+            revision: 0,
+        }
+    }
+
+    pub fn undo_len(&amp;self) -&gt; usize {
+        self.undo_stack.len()
+    }
+
+    pub fn redo_len(&amp;self) -&gt; usize {
+        self.redo_stack.len()
+    }
+
+    pub fn can_undo(&amp;self) -&gt; bool {
+        !self.undo_stack.is_empty()
+    }
+
+    pub fn can_redo(&amp;self) -&gt; bool {
+        !self.redo_stack.is_empty()
+    }
+
+    pub fn revision(&amp;self) -&gt; u64 {
+        self.revision
+    }
+
+    /// Commits any in-flight continuous drag gesture so the next edit starts a fresh undo entry.
+    pub fn commit_coalesce(&amp;mut self) {
+        self.active_coalesce_key = None;
+    }
+
+    /// Records a pre-mutation `before` snapshot, coalescing consecutive edits that share the same
+    /// `Some(coalesce_key)` into a single undo entry while incrementing `revision` on every frame.
+    pub fn record_edit(&amp;mut self, label: &amp;str, before: BoardModel, coalesce_key: Option&lt;&amp;str&gt;) {
+        let should_coalesce =
+            self.active_coalesce_key.as_deref() == coalesce_key &amp;&amp; coalesce_key.is_some();
+
+        if !should_coalesce {
+            if self.undo_stack.len() &gt;= self.max_entries {
+                self.undo_stack.pop_front();
+            }
+            self.undo_stack.push_back(HistoryEntry {
+                label: label.to_owned(),
+                doc: before,
+            });
+        }
+
+        self.redo_stack.clear();
+        self.active_coalesce_key = coalesce_key.map(str::to_owned);
+        self.revision += 1;
+    }
+
+    /// Undoes the most recent edit in `O(1)` `Arc` pointer swaps, pushing the current state onto `redo_stack`.
+    pub fn undo(&amp;mut self, current: &amp;mut BoardModel) -&gt; Option&lt;String&gt; {
+        let entry = self.undo_stack.pop_back()?;
+        self.active_coalesce_key = None;
+        let label = entry.label.clone();
+        let prev = std::mem::replace(current, entry.doc);
+        self.redo_stack.push(HistoryEntry {
+            label: entry.label,
+            doc: prev,
+        });
+        self.revision += 1;
+        Some(label)
+    }
+
+    /// Redoes the most recently undone edit in `O(1)` `Arc` pointer swaps.
+    pub fn redo(&amp;mut self, current: &amp;mut BoardModel) -&gt; Option&lt;String&gt; {
+        let entry = self.redo_stack.pop()?;
+        self.active_coalesce_key = None;
+        let label = entry.label.clone();
+        let prev = std::mem::replace(current, entry.doc);
+        if self.undo_stack.len() &gt;= self.max_entries {
+            self.undo_stack.pop_front();
+        }
+        self.undo_stack.push_back(HistoryEntry {
+            label: entry.label,
+            doc: prev,
+        });
+        self.revision += 1;
+        Some(label)
+    }
+}
+
+impl BoardModel {
+    /// Updates a single review pin's X coordinate in millimetres using copy-on-write (`Arc::make_mut`).
+    pub fn move_review_pin_x(&amp;mut self, id: PinId, new_x_mm: f32) -&gt; bool {
+        let Some(pin) = Arc::make_mut(&amp;mut self.review_pins).get_mut(&amp;id) else {
+            return false;
+        };
+        pin.position_mm.x = new_x_mm;
+        true
+    }
+}
+
+// === src/main.rs ===
+pub struct PcbReviewerApp {
+    pub board: BoardModel,
+    pub baseline_snapshot: BoardModel,
+    pub history: BoardHistory,
+    pub view: ViewState,
+    pub saved_session_json: String,
+}
+
+impl Default for PcbReviewerApp {
+    fn default() -&gt; Self {
+        let board = BoardModel::default();
+        let baseline_snapshot = board.clone();
+        Self {
+            board,
+            baseline_snapshot,
+            history: BoardHistory::default(),
+            view: ViewState::default(),
+            saved_session_json: String::new(),
+        }
+    }
+}
+
+impl PcbReviewerApp {
+    /// Discrete undoable edit: transitions a review pin status and records a non-coalesced undo step.
+    pub fn apply_pin_status_edit(&amp;mut self, id: PinId, next: ReviewStatus) -&gt; bool {
+        let before = self.board.clone();
+        if self.board.transition_pin_status(id, next) {
+            self.history.record_edit("Update Pin Status", before, None);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Discrete undoable edit: adds a review pin and records a non-coalesced undo step.
+    pub fn add_review_pin_edit(&amp;mut self, world_mm: Pos2) -&gt; PinId {
+        let before = self.board.clone();
+        let new_id = self.board.add_review_pin_at(
+            world_mm,
+            "reviewer",
+            "Inspect clearance",
+            PinSeverity::Warning,
+        );
+        self.history.record_edit("Place Review Pin", before, None);
+        new_id
+    }
+
+    /// Coalesced continuous edit: moves a review pin's X coordinate and merges consecutive slider frames
+    /// sharing `drag_pin_&lt;id&gt;_x` into a single undo entry.
+    pub fn drag_review_pin_x(&amp;mut self, id: PinId, new_x_mm: f32) -&gt; bool {
+        let before = self.board.clone();
+        if self.board.move_review_pin_x(id, new_x_mm) {
+            let key = format!("drag_pin_{}_x", id.0);
+            self.history.record_edit("Drag Pin X", before, Some(&amp;key));
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Commits any active continuous slider drag so subsequent drags start a fresh undo step.
+    pub fn commit_drag_gesture(&amp;mut self) {
+        self.history.commit_coalesce();
+    }
+
+    /// Undoes the most recent edit on `self.board`.
+    pub fn undo_board_edit(&amp;mut self) -&gt; Option&lt;String&gt; {
+        self.history.undo(&amp;mut self.board)
+    }
+
+    /// Redoes the most recently undone edit on `self.board`.
+    pub fn redo_board_edit(&amp;mut self) -&gt; Option&lt;String&gt; {
+        self.history.redo(&amp;mut self.board)
+    }
+
+    pub fn render_active_pin_callout(&amp;mut self, ctx: &amp;egui::Context) {
+        let Some(pin_id) = self.view.selected_pin else {
+            return;
+        };
+        let Some(pin) = self.board.review_pins.get(&amp;pin_id).cloned() else {
+            return;
+        };
+
+        egui::Window::new("Review Callout")
+            .id(egui::Id::unique(("review_pin_callout", pin.id.0)))
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.label(pin.summary_line());
+                ui.label(pin.coordinates_label());
+                let mut x_mm = pin.position_mm.x;
+                let slider_resp =
+                    ui.add(egui::Slider::new(&amp;mut x_mm, 5.0..=95.0).text("Pin X (mm)"));
+                if slider_resp.changed() {
+                    self.drag_review_pin_x(pin.id, x_mm);
+                }
+                if slider_resp.drag_stopped() {
+                    self.commit_drag_gesture();
+                }
+                ui.horizontal(|ui| {
+                    if ui.button("Mark Resolved").clicked() {
+                        self.apply_pin_status_edit(pin.id, ReviewStatus::Resolved);
+                    }
+                    if ui.button("Mark Verified").clicked() {
+                        self.apply_pin_status_edit(pin.id, ReviewStatus::Verified);
+                    }
+                    if ui.button("Reopen Pin").clicked() {
+                        self.apply_pin_status_edit(pin.id, ReviewStatus::Open);
+                    }
+                });
+                if ui.button("Close Callout").clicked() {
+                    self.view.selected_pin = None;
+                }
+            });
     }
 }</code></pre>
 </figure>

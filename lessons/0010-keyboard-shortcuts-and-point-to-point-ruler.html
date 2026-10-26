@@ -71,8 +71,13 @@ stateDiagram-v2
 <p><em>Figure 10.1: Tool state machine modelled with a data-carrying Rust <code>enum ActiveTool</code> so ruler coordinates only exist while in <code>Measure</code> mode.</em></p>
 <h2 id="1-just-in-time-rust-state-machines-with-data-carrying-enums">1. Just-in-Time Rust: State Machines with Data-Carrying Enums</h2>
 <p>Unlike C or Java enums that are glorified integer constants, each variant of a Rust <code>enum</code> can carry its own typed payload (<a href="https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html">Rust Book §6.1</a>).</p>
-<p>So, by modelling our CAD tool as <code>ActiveTool</code>, it becomes impossible for stale ruler coordinates to hang around when the user switches back to <code>Select</code> mode:<span class="sidenote-number"></span><span class="sidenote">Making illegal states unrepresentable is one of Rust's best party tricks: instead of juggling separate <code>is_measuring: bool</code> and <code>ruler_start: Option&lt;Pos2&gt;</code> fields that inevitably get out of sync, the <code>ActiveTool::Measure</code> variant owns its endpoints directly.</span></p>
-<pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq)]
+<p>So, by modelling our CAD tool as <code>ActiveTool</code>, it becomes impossible for stale ruler coordinates to hang around when the user switches back to <code>Select</code> mode.<span class="sidenote-number"></span><span class="sidenote">Making illegal states unrepresentable is one of Rust's best party tricks: instead of juggling separate <code>is_measuring: bool</code> and <code>ruler_start: Option&lt;Pos2&gt;</code> fields that inevitably get out of sync, the <code>ActiveTool::Measure</code> variant owns its endpoints directly.</span></p>
+<h2 id="2-anatomy-of-lesson-0010-s-additions-block-by-block">2. Anatomy of Lesson 0010's Additions: Block by Block</h2>
+<p>Let's examine each block of new and updated code in <code>apps/0010-keyboard-shortcuts-and-point-to-point-ruler/src/main.rs</code> compared to Lesson 0009, and then view the complete implementation in context.</p>
+<h3 id="block-1-activetool-data-carrying-enum-amp-rulermeasurement-geometry">Block 1: <code>ActiveTool</code> Data-Carrying Enum &amp; <code>RulerMeasurement</code> Geometry</h3>
+<pre><code class="language-rust">/// Data-carrying enum modeling the active CAD interaction tool.
+/// Ruler endpoints (`start_mm`, `end_mm`) only exist when `Measure` is active.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ActiveTool {
     Select,
     Measure {
@@ -81,6 +86,7 @@ pub enum ActiveTool {
     },
 }
 
+/// Point-to-point Euclidean measurement result in physical millimeters.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RulerMeasurement {
     pub dx_mm: f32,
@@ -99,26 +105,476 @@ impl RulerMeasurement {
             distance_mm,
         }
     }
-}</code></pre>
-<h2 id="2-consuming-keyboard-shortcuts-with-ctx-input-mut-amp-consume-key">2. Consuming Keyboard Shortcuts with <code>ctx.input_mut</code> &amp; <code>consume_key</code></h2>
-<p>Now, what happens if the user is typing <code>&quot;m&quot;</code> into the BOM search box from Lesson 0009? You definitely don't want that keystroke switching tools mid-search!</p>
-<p>So, we first check <code>!ctx.wants_keyboard_input()</code> to make sure no text box has keyboard focus, and then match our CAD hotkeys using <a href="https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key"><code>InputState::consume_key</code></a>. Calling <code>consume_key</code> both returns <code>true</code> when the key was pressed and removes the key event from the frame's queue so no other widget reacts to it twice:</p>
-<pre><code class="language-rust">pub fn handle_hotkeys(&amp;mut self, ctx: &amp;egui::Context) {
-    if ctx.wants_keyboard_input() {
-        return;
-    }
-    let pressed_f = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F));
-    let pressed_m = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::M));
-    let pressed_esc = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
 
-    if pressed_f {
-        self.view.fit_board_in_viewport();
+    pub fn summary_label(&amp;self) -&gt; String {
+        format!(
+            "Ruler: dx={:.1} mm, dy={:.1} mm, dist={:.1} mm",
+            self.dx_mm, self.dy_mm, self.distance_mm
+        )
     }
-    if pressed_m {
-        self.view.activate_measure_tool();
+}</code></pre>
+<ul>
+<li><strong><code>pub enum ActiveTool</code></strong>: Defines two variants: a unit variant <code>Select</code> and a struct-like variant <code>Measure { start_mm: Option&lt;Pos2&gt;, end_mm: Option&lt;Pos2&gt; }</code>. Because <code>Option&lt;Pos2&gt;</code> is <code>Copy</code>, the entire <code>ActiveTool</code> enum derives <code>Clone, Copy, Debug, PartialEq</code>.</li>
+<li><strong><code>dx_mm.hypot(dy_mm)</code></strong>: Standard library <code>f32::hypot</code> computes $\sqrt{\Delta x^2 + \Delta y^2}$ without intermediate overflow or underflow.</li>
+<li><strong><code>pub fn summary_label(&amp;self) -&gt; String</code></strong>: Formats the measurement to 1 decimal place (<code>{:.1}</code>) for both the top status bar and the canvas ruler callout.</li>
+</ul>
+<h3 id="block-2-tool-state-transitions-on-viewstate">Block 2: Tool State Transitions on <code>ViewState</code></h3>
+<pre><code class="language-rust">pub struct ViewState {
+    // ... [layer booleans, viewport, pcb_scene_rect, selection, bom_search_query] ...
+    pub active_tool: ActiveTool,
+}
+
+impl Default for ViewState {
+    fn default() -&gt; Self {
+        let mut view = Self {
+            // ...
+            active_tool: ActiveTool::Select,
+        };
+        view.reset_layers();
+        view
     }
-    if pressed_esc {
-        self.view.cancel_tool_and_selection();
+}
+
+impl ViewState {
+    // ...
+    pub fn fit_board_in_viewport(&amp;mut self) {
+        self.viewport = BoardViewport::default();
+        self.pcb_scene_rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0));
+    }
+
+    pub fn activate_measure_tool(&amp;mut self) {
+        self.active_tool = ActiveTool::Measure {
+            start_mm: None,
+            end_mm: None,
+        };
+    }
+
+    pub fn set_measure_points(&amp;mut self, start_mm: Pos2, end_mm: Pos2) {
+        self.active_tool = ActiveTool::Measure {
+            start_mm: Some(start_mm),
+            end_mm: Some(end_mm),
+        };
+    }
+
+    pub fn current_measurement(&amp;self) -&gt; Option&lt;RulerMeasurement&gt; {
+        match self.active_tool {
+            ActiveTool::Measure {
+                start_mm: Some(s),
+                end_mm: Some(e),
+            } =&gt; Some(RulerMeasurement::between(s, e)),
+            _ =&gt; None,
+        }
+    }
+
+    pub fn cancel_tool_and_selection(&amp;mut self) {
+        self.active_tool = ActiveTool::Select;
+        self.selected_net = None;
+        self.selected_component = None;
+    }
+}</code></pre>
+<ul>
+<li><strong><code>fit_board_in_viewport(&amp;mut self)</code></strong>: Renames our earlier <code>reset_viewport</code> helper to match CAD terminology (<code>Fit Board</code>, bound to <code>Key::F</code>), restoring both <code>BoardViewport::default()</code> and the full <code>100×70 mm</code> <code>pcb_scene_rect</code>.</li>
+<li><strong><code>activate_measure_tool</code> &amp; <code>set_measure_points</code></strong>: Transition <code>self.active_tool</code> into <code>ActiveTool::Measure</code> with either empty (<code>None</code>) or populated (<code>Some(...)</code>) endpoints.</li>
+<li><strong>Nested Pattern Matching in <code>current_measurement(&amp;self)</code></strong>: The pattern <code>ActiveTool::Measure { start_mm: Some(s), end_mm: Some(e) }</code> destructures both the enum variant <em>and</em> both inner <code>Option&lt;Pos2&gt;</code> fields in a single match arm, returning <code>Some(RulerMeasurement::between(s, e))</code> only when both endpoints have been placed.</li>
+<li><strong><code>cancel_tool_and_selection(&amp;mut self)</code></strong>: Bound to <code>Key::Escape</code> (and the <code>&quot;Clear Selection&quot;</code> button), resetting <code>active_tool</code> back to <code>ActiveTool::Select</code>—which automatically drops any active ruler endpoints—while clearing <code>selected_net</code> and <code>selected_component</code>.</li>
+</ul>
+<h3 id="block-3-consuming-hotkeys-consume-key-amp-drawing-the-ruler-overlay">Block 3: Consuming Hotkeys (<code>consume_key</code>) &amp; Drawing the Ruler Overlay</h3>
+<p>We match our CAD hotkeys using <a href="https://docs.rs/egui/latest/egui/struct.InputState.html#method.consume_key"><code>InputState::consume_key</code></a>. Calling <code>consume_key</code> both returns <code>true</code> when the key was pressed and removes the key event from the frame's queue so no other widget reacts to it twice:</p>
+<pre><code class="language-rust">impl PcbReviewerApp {
+    // ...
+    pub fn handle_hotkeys(&amp;mut self, ctx: &amp;egui::Context) {
+        let pressed_f = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F));
+        let pressed_m = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::M));
+        let pressed_esc =
+            ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+
+        if pressed_f {
+            self.view.fit_board_in_viewport();
+        }
+        if pressed_m {
+            self.view.activate_measure_tool();
+        }
+        if pressed_esc {
+            self.view.cancel_tool_and_selection();
+        }
+    }
+
+    pub fn render_schematic_bar(&amp;mut self, ui: &amp;mut egui::Ui) {
+        ui.horizontal(|ui| {
+            // ... [Schematic symbol buttons &amp; Focused Footprint label] ...
+            ui.separator();
+            match self.view.active_tool {
+                ActiveTool::Select =&gt; {
+                    ui.label("Active Tool: Select");
+                }
+                ActiveTool::Measure { .. } =&gt; {
+                    ui.label("Active Tool: Measure (M)");
+                }
+            }
+            if let Some(measurement) = self.view.current_measurement() {
+                ui.label(measurement.summary_label());
+            }
+        });
+    }
+}</code></pre>
+<p>And inside <code>render_canvas</code> and <code>paint_board</code>, we branch on <code>self.view.active_tool</code> to record ruler clicks and draw the yellow measurement vector on top of the board:</p>
+<pre><code class="language-rust">// Inside render_canvas() when `response.clicked()`:
+match &amp;mut self.view.active_tool {
+    ActiveTool::Select =&gt; {
+        self.view.selected_net = self.view.hovered_net;
+    }
+    ActiveTool::Measure { start_mm, end_mm } =&gt; {
+        if start_mm.is_none() {
+            *start_mm = Some(world_mm);
+        } else {
+            *end_mm = Some(world_mm);
+        }
+    }
+}
+
+// Inside paint_board() after drawing silkscreen:
+if let ActiveTool::Measure {
+    start_mm: Some(s_mm),
+    end_mm: Some(e_mm),
+} = self.view.active_tool
+{
+    let p0 = self.view.viewport.world_to_screen(s_mm);
+    let p1 = self.view.viewport.world_to_screen(e_mm);
+    let ruler_color = Color32::from_rgb(255, 230, 100);
+    painter.line_segment([p0, p1], Stroke::new(2.0_f32, ruler_color));
+    if let Some(m) = self.view.current_measurement() {
+        let mid = pos2((p0.x + p1.x) * 0.5, (p0.y + p1.y) * 0.5 - 10.0);
+        painter.text(
+            mid,
+            Align2::CENTER_BOTTOM,
+            m.summary_label(),
+            FontId::monospace(11.0),
+            ruler_color,
+        );
+    }
+}</code></pre>
+<ul>
+<li><strong><code>ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, ...))</code></strong>: Borrows <code>egui::InputState</code> mutably at the start of <code>eframe::App::ui</code> (<code>self.handle_hotkeys(ui.ctx())</code>), consuming unmodified <code>Key::F</code>, <code>Key::M</code>, and <code>Key::Escape</code> presses.</li>
+<li><strong><code>ActiveTool::Measure { .. }</code></strong>: In <code>render_schematic_bar</code>, the <code>..</code> wildcard pattern ignores the inner <code>start_mm</code> and <code>end_mm</code> fields when we only care whether the user is in <code>Measure</code> mode.</li>
+<li><strong>Mutable Struct-Variant Binding (<code>match &amp;mut self.view.active_tool</code>)</strong>: Matching on <code>&amp;mut self.view.active_tool</code> binds <code>start_mm</code> and <code>end_mm</code> as <code>&amp;mut Option&lt;Pos2&gt;</code> references, allowing <code>*start_mm = Some(world_mm)</code> and <code>*end_mm = Some(world_mm)</code> to update the enum payload in place on canvas clicks.</li>
+<li><strong><code>if let ActiveTool::Measure { start_mm: Some(s_mm), end_mm: Some(e_mm) } = self.view.active_tool</code></strong>: Projects both millimetre endpoints into screen coordinates (<code>p0</code>, <code>p1</code>), draws a <code>2.0_f32</code> yellow ruler segment, and anchors <code>m.summary_label()</code> above the midpoint using <code>Align2::CENTER_BOTTOM</code>.</li>
+</ul>
+<h3 id="block-4-unit-amp-headless-hotkey-tests-harness-key-press">Block 4: Unit &amp; Headless Hotkey Tests (<code>harness.key_press</code>)</h3>
+<pre><code class="language-rust">#[test]
+fn ruler_measurement_computes_deltas_hypotenuse_and_summary_label() {
+    let mut view = ViewState::default();
+    assert_eq!(view.current_measurement(), None);
+
+    view.activate_measure_tool();
+    assert_eq!(view.current_measurement(), None);
+
+    // 3-4-5 right triangle scaled by 12: dx=48, dy=36 -&gt; dist=60
+    view.set_measure_points(pos2(20.0, 22.0), pos2(68.0, 58.0));
+    let m = view.current_measurement().expect("measurement should exist");
+    assert_eq!(m.dx_mm, 48.0);
+    assert_eq!(m.dy_mm, 36.0);
+    assert_eq!(m.distance_mm, 60.0);
+    assert_eq!(
+        m.summary_label(),
+        "Ruler: dx=48.0 mm, dy=36.0 mm, dist=60.0 mm"
+    );
+}
+
+#[test]
+fn headless_hotkeys_switch_tools_and_fit_viewport() {
+    let mut harness = Harness::new_eframe(|_cc| PcbReviewerApp::default());
+    assert!(harness.query_by_label("Active Tool: Select").is_some());
+
+    harness.key_press(egui::Key::M);
+    harness.run();
+    assert_eq!(
+        harness.state().view.active_tool,
+        ActiveTool::Measure {
+            start_mm: None,
+            end_mm: None,
+        }
+    );
+    assert!(harness.query_by_label("Active Tool: Measure (M)").is_some());
+
+    harness
+        .state_mut()
+        .view
+        .set_measure_points(pos2(20.0, 22.0), pos2(68.0, 58.0));
+    harness.state_mut().view.selected_net = Some(NetId(1));
+    harness.run();
+    assert!(
+        harness
+            .query_by_label("Ruler: dx=48.0 mm, dy=36.0 mm, dist=60.0 mm")
+            .is_some()
+    );
+
+    harness.key_press(egui::Key::Escape);
+    harness.run();
+    assert_eq!(harness.state().view.active_tool, ActiveTool::Select);
+    assert_eq!(harness.state().view.selected_net, None);
+
+    harness.state_mut().view.viewport.pan_by(vec2(45.0, -30.0));
+    harness.key_press(egui::Key::F);
+    harness.run();
+    assert_eq!(harness.state().view.viewport, BoardViewport::default());
+}</code></pre>
+<ul>
+<li><strong>Non-Zero Asymmetric 3-4-5 Right Triangle (<code>(20.0, 22.0)</code> to <code>(68.0, 58.0)</code>)</strong>: Choosing non-zero start coordinates (<code>20.0, 22.0</code>) and asymmetric deltas (<code>dx = 48.0</code>, <code>dy = 36.0</code>, <code>distance = 60.0</code>) ensures <code>cargo-mutants</code> catches any mutation that swaps <code>-</code> for <code>+</code> in <code>end_mm.x - start_mm.x</code> or <code>end_mm.y - start_mm.y</code>.</li>
+<li><strong><code>harness.key_press(egui::Key::M)</code> / <code>Key::Escape</code> / <code>Key::F</code></strong>: Injects synthetic key-down and key-up events into the headless <code>egui::Context</code> before <code>harness.run()</code>, testing every branch of <code>handle_hotkeys</code> and the rendered status bar labels without opening an OS window.</li>
+</ul>
+<h3 id="complete-lesson-0010-listing-in-context">Complete Lesson 0010 Listing (In Context)</h3>
+<p>Here is how <code>ActiveTool</code>, <code>RulerMeasurement</code>, <code>ViewState</code>, <code>handle_hotkeys</code>, and the ruler overlay assemble in <code>apps/0010-keyboard-shortcuts-and-point-to-point-ruler/src/main.rs</code>:</p>
+<pre><code class="language-rust">// ... [Imports, MIN_ZOOM, MAX_ZOOM, main(), NetId, PcbLayer, TraceSegment, SmdPad, ComponentSymbol] ...
+
+/// Data-carrying enum modeling the active CAD interaction tool.
+/// Ruler endpoints (`start_mm`, `end_mm`) only exist when `Measure` is active.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ActiveTool {
+    Select,
+    Measure {
+        start_mm: Option&lt;Pos2&gt;,
+        end_mm: Option&lt;Pos2&gt;,
+    },
+}
+
+/// Point-to-point Euclidean measurement result in physical millimeters.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RulerMeasurement {
+    pub dx_mm: f32,
+    pub dy_mm: f32,
+    pub distance_mm: f32,
+}
+
+impl RulerMeasurement {
+    pub fn between(start_mm: Pos2, end_mm: Pos2) -&gt; Self {
+        let dx_mm = end_mm.x - start_mm.x;
+        let dy_mm = end_mm.y - start_mm.y;
+        let distance_mm = dx_mm.hypot(dy_mm);
+        Self {
+            dx_mm,
+            dy_mm,
+            distance_mm,
+        }
+    }
+
+    pub fn summary_label(&amp;self) -&gt; String {
+        format!(
+            "Ruler: dx={:.1} mm, dy={:.1} mm, dist={:.1} mm",
+            self.dx_mm, self.dy_mm, self.distance_mm
+        )
+    }
+}
+
+// ... [BoardViewport, sample_traces(), sample_pads(), sample_components(), BoardModel] ...
+
+pub struct ViewState {
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
+    pub viewport: BoardViewport,
+    pub pcb_scene_rect: Rect,
+    pub selected_component: Option&lt;String&gt;,
+    pub hovered_net: Option&lt;NetId&gt;,
+    pub selected_net: Option&lt;NetId&gt;,
+    pub bom_search_query: String,
+    pub active_tool: ActiveTool,
+}
+
+impl Default for ViewState {
+    fn default() -&gt; Self {
+        let mut view = Self {
+            show_top_copper: false,
+            show_bottom_copper: false,
+            show_silkscreen: false,
+            show_ratsnest: false,
+            viewport: BoardViewport::default(),
+            pcb_scene_rect: Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0)),
+            selected_component: None,
+            hovered_net: None,
+            selected_net: None,
+            bom_search_query: String::new(),
+            active_tool: ActiveTool::Select,
+        };
+        view.reset_layers();
+        view
+    }
+}
+
+impl ViewState {
+    // ... [reset_layers, isolate_top_copper, show_all_layers, clear_bom_query,
+    //      is_layer_visible, active_net, focus_component] ...
+
+    pub fn fit_board_in_viewport(&amp;mut self) {
+        self.viewport = BoardViewport::default();
+        self.pcb_scene_rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0));
+    }
+
+    pub fn activate_measure_tool(&amp;mut self) {
+        self.active_tool = ActiveTool::Measure {
+            start_mm: None,
+            end_mm: None,
+        };
+    }
+
+    pub fn set_measure_points(&amp;mut self, start_mm: Pos2, end_mm: Pos2) {
+        self.active_tool = ActiveTool::Measure {
+            start_mm: Some(start_mm),
+            end_mm: Some(end_mm),
+        };
+    }
+
+    pub fn current_measurement(&amp;self) -&gt; Option&lt;RulerMeasurement&gt; {
+        match self.active_tool {
+            ActiveTool::Measure {
+                start_mm: Some(s),
+                end_mm: Some(e),
+            } =&gt; Some(RulerMeasurement::between(s, e)),
+            _ =&gt; None,
+        }
+    }
+
+    pub fn cancel_tool_and_selection(&amp;mut self) {
+        self.active_tool = ActiveTool::Select;
+        self.selected_net = None;
+        self.selected_component = None;
+    }
+}
+
+#[derive(Default)]
+pub struct PcbReviewerApp {
+    pub board: BoardModel,
+    pub view: ViewState,
+}
+
+impl PcbReviewerApp {
+    // ... [visible_traces_in_z_order, hit_test_net_at_mm] ...
+
+    pub fn handle_hotkeys(&amp;mut self, ctx: &amp;egui::Context) {
+        let pressed_f = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F));
+        let pressed_m = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::M));
+        let pressed_esc =
+            ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+
+        if pressed_f {
+            self.view.fit_board_in_viewport();
+        }
+        if pressed_m {
+            self.view.activate_measure_tool();
+        }
+        if pressed_esc {
+            self.view.cancel_tool_and_selection();
+        }
+    }
+
+    pub fn render_schematic_bar(&amp;mut self, ui: &amp;mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Schematic Symbols (Cross-Probe):");
+            for comp in &amp;self.board.components {
+                let label = format!("Probe {} ({})", comp.ref_des, comp.value);
+                if ui.button(label).clicked() {
+                    self.view.focus_component(&amp;self.board, &amp;comp.ref_des);
+                }
+            }
+            if let Some(focused) = &amp;self.view.selected_component {
+                ui.label(format!("Focused Footprint: {focused}"));
+            }
+            ui.separator();
+            match self.view.active_tool {
+                ActiveTool::Select =&gt; {
+                    ui.label("Active Tool: Select");
+                }
+                ActiveTool::Measure { .. } =&gt; {
+                    ui.label("Active Tool: Measure (M)");
+                }
+            }
+            if let Some(measurement) = self.view.current_measurement() {
+                ui.label(measurement.summary_label());
+            }
+        });
+    }
+
+    // ... [render_side_panel calling self.view.cancel_tool_and_selection() on "Clear Selection"] ...
+
+    fn render_canvas(&amp;mut self, ui: &amp;mut egui::Ui) {
+        let mut scene_rect = self.view.pcb_scene_rect;
+        egui::Scene::new()
+            .zoom_range(0.5..=8.0)
+            .show(ui, &amp;mut scene_rect, |ui| {
+                let (response, painter) =
+                    ui.allocate_painter(vec2(720.0, 520.0), Sense::click_and_drag());
+
+                if response.dragged() {
+                    self.view.viewport.pan_by(response.drag_delta());
+                }
+
+                if let Some(hover_pos) = response.hover_pos() {
+                    let world_mm = self.view.viewport.screen_to_world(hover_pos);
+                    self.view.hovered_net = self.hit_test_net_at_mm(world_mm);
+                    if response.clicked() {
+                        match &amp;mut self.view.active_tool {
+                            ActiveTool::Select =&gt; {
+                                self.view.selected_net = self.view.hovered_net;
+                            }
+                            ActiveTool::Measure { start_mm, end_mm } =&gt; {
+                                if start_mm.is_none() {
+                                    *start_mm = Some(world_mm);
+                                } else {
+                                    *end_mm = Some(world_mm);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    self.view.hovered_net = None;
+                }
+
+                self.paint_board(&amp;painter, response.rect);
+            });
+        self.view.pcb_scene_rect = scene_rect;
+    }
+
+    fn paint_board(&amp;self, painter: &amp;egui::Painter, canvas_rect: Rect) {
+        // ... [board outline, traces, pads, and silkscreen painting unchanged] ...
+
+        if let ActiveTool::Measure {
+            start_mm: Some(s_mm),
+            end_mm: Some(e_mm),
+        } = self.view.active_tool
+        {
+            let p0 = self.view.viewport.world_to_screen(s_mm);
+            let p1 = self.view.viewport.world_to_screen(e_mm);
+            let ruler_color = Color32::from_rgb(255, 230, 100);
+            painter.line_segment([p0, p1], Stroke::new(2.0_f32, ruler_color));
+            if let Some(m) = self.view.current_measurement() {
+                let mid = pos2((p0.x + p1.x) * 0.5, (p0.y + p1.y) * 0.5 - 10.0);
+                painter.text(
+                    mid,
+                    Align2::CENTER_BOTTOM,
+                    m.summary_label(),
+                    FontId::monospace(11.0),
+                    ruler_color,
+                );
+            }
+        }
+    }
+}
+
+impl eframe::App for PcbReviewerApp {
+    fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame) {
+        self.handle_hotkeys(ui.ctx());
+
+        egui::Panel::top("schematic_cross_probe_bar").show(ui, |ui| {
+            self.render_schematic_bar(ui);
+        });
+
+        egui::Panel::left("layer_panel").show(ui, |ui| {
+            self.render_side_panel(ui);
+        });
+
+        egui::CentralPanel::default().show(ui, |ui| {
+            self.render_canvas(ui);
+        });
     }
 }</code></pre>
 </div>

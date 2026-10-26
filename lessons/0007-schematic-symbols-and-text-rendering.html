@@ -73,32 +73,7 @@ flowchart LR
 <li><strong><code>&amp;str</code> (String Slice):</strong> An immutable, fat-pointer view (<code>ptr + len</code>) borrowing existing UTF-8 bytes in memory (such as a compile-time string literal <code>&quot;Top Copper (F.Cu)&quot;</code> or a slice of a <code>String</code>). It is <code>Copy</code> and does not own heap memory.</li>
 <li><strong><code>String</code> (Owned UTF-8 Buffer):</strong> A growable, heap-allocated UTF-8 buffer (backed by <code>Vec&lt;u8&gt;</code>) owned by a struct field (like <code>pub ref_des: String</code>) or freshly constructed at runtime with the <a href="https://doc.rust-lang.org/std/macro.format.html"><code>format!()</code></a> macro.</li>
 </ul>
-<pre><code class="language-rust">#[derive(Clone, Debug, PartialEq)]
-pub struct ComponentSymbol {
-    pub ref_des: String,
-    pub value: String,
-    pub package_name: String,
-    pub center_mm: Pos2,
-    pub body_size_mm: Vec2,
-}
-
-impl ComponentSymbol {
-    /// Formats a human-readable summary for the left Panel Component Inspector.
-    pub fn inspector_label(&amp;self) -&gt; String {
-        format!("{}: {} ({})", self.ref_des, self.value, self.package_name)
-    }
-}</code></pre>
-<h2 id="2-drawing-silkscreen-reference-designators-with-painter-text">2. Drawing Silkscreen Reference Designators with <code>Painter::text</code></h2>
-<p>On the 2D canvas, <a href="https://docs.rs/egui/latest/egui/struct.Painter.html#method.text"><code>Painter::text</code></a> renders crisp vector-rasterised glyphs anchored to any screen-space <code>Pos2</code> using <a href="https://docs.rs/egui/latest/egui/enum.Align2.html"><code>Align2</code></a> and <a href="https://docs.rs/egui/latest/egui/struct.FontId.html"><code>FontId</code></a>:<span class="sidenote-number"></span><span class="sidenote">Using <code>Align2::CENTER_CENTER</code> places the exact geometric centre of the rendered glyph bounding box at <code>center_px</code>, keeping <code>U1</code> centred inside its IC body at any zoom level.</span></p>
-<pre><code class="language-rust">let center_px = self.viewport.world_to_screen(comp.center_mm);
-painter.text(
-    center_px,
-    egui::Align2::CENTER_CENTER,
-    &amp;comp.ref_des,
-    egui::FontId::monospace((2.2 * scale).clamp(9.0, 22.0)),
-    PcbLayer::Silkscreen.color(),
-);</code></pre>
-<h2 id="3-headless-ui-verification-with-egui-kittest-harness">3. Headless UI Verification with <code>egui_kittest::Harness</code></h2>
+<h2 id="2-headless-ui-setup-with-egui-kittest-cargo-toml">2. Headless UI Setup with <code>egui_kittest</code> (<code>Cargo.toml</code>)</h2>
 <p>So, how do you test a GUI without opening a real OS window and hijacking your mouse cursor?</p>
 <p>Turns out, <code>egui_kittest</code> solves this cleanly by tapping into AccessKit's semantic accessibility node tree. Add <code>egui_kittest</code> as a development dependency with its <code>eframe</code> feature enabled:</p>
 <pre><code class="language-console">cargo add --dev egui_kittest --features eframe</code></pre>
@@ -118,23 +93,488 @@ egui_kittest = { version = "0.37", features = ["eframe"] }
 # 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
 [profile.dev.package."*"]
 opt-level = 2</code></pre>
+<h2 id="3-anatomy-of-lesson-0007-s-additions-block-by-block">3. Anatomy of Lesson 0007's Additions: Block by Block</h2>
+<p>Let's unpack every piece of code added or updated in <code>apps/0007-schematic-symbols-and-text-rendering/src/main.rs</code> compared to Lesson 0006, one block at a time, and then review the complete listing in context.</p>
+<h3 id="block-1-netid-formatting-componentsymbol-amp-sample-footprints">Block 1: <code>NetId</code> Formatting, <code>ComponentSymbol</code> &amp; Sample Footprints</h3>
+<pre><code class="language-rust">use eframe::egui::{
+    self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, emath::TSTransform,
+    pos2, vec2,
+};
+
+impl NetId {
+    /// Returns a freshly formatted, heap-allocated `String` net code (`"NET_1"`).
+    pub fn code(self) -&gt; String {
+        format!("NET_{}", self.0)
+    }
+
+    /// Returns a zero-allocation static string slice (`&amp;'static str`) for known signal names.
+    pub fn signal_name(self) -&gt; &amp;'static str {
+        match self.0 {
+            1 =&gt; "VCC_3V3",
+            2 =&gt; "SPI_CLK",
+            _ =&gt; "UNASSIGNED",
+        }
+    }
+}
+
+/// Silkscreen/schematic component metadata rendered on the canvas with `Painter::text`
+/// and listed in the `Panel` Component Inspector.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ComponentSymbol {
+    pub ref_des: String,
+    pub value: String,
+    pub package_name: String,
+    pub center_mm: Pos2,
+    pub body_size_mm: Vec2,
+}
+
+impl ComponentSymbol {
+    pub fn inspector_label(&amp;self) -&gt; String {
+        format!("{}: {} ({})", self.ref_des, self.value, self.package_name)
+    }
+}
+
+fn sample_components() -&gt; Vec&lt;ComponentSymbol&gt; {
+    vec![
+        ComponentSymbol {
+            ref_des: "U1".to_owned(),
+            value: "LDO_3V3".to_owned(),
+            package_name: "SOT-23".to_owned(),
+            center_mm: pos2(20.0, 27.0),
+            body_size_mm: vec2(12.0, 16.0),
+        },
+        ComponentSymbol {
+            ref_des: "R12".to_owned(),
+            value: "10k".to_owned(),
+            package_name: "0603".to_owned(),
+            center_mm: pos2(52.0, 35.0),
+            body_size_mm: vec2(10.0, 6.0),
+        },
+        ComponentSymbol {
+            ref_des: "J1".to_owned(),
+            value: "CONN_2P".to_owned(),
+            package_name: "Header".to_owned(),
+            center_mm: pos2(68.0, 35.0),
+            body_size_mm: vec2(10.0, 14.0),
+        },
+    ]
+}</code></pre>
+<ul>
+<li><strong><code>use eframe::egui::{..., Align2, FontId}</code></strong>: Imports <code>Align2</code> (2D anchor alignment for text bounding boxes) and <code>FontId</code> (font family + size in logical points) alongside our existing <code>egui</code> primitives.</li>
+<li><strong><code>NetId::code(self) -&gt; String</code> vs. <code>NetId::signal_name(self) -&gt; &amp;'static str</code></strong>: Contrasts our two Rust string types directly. <code>code</code> uses <code>format!(&quot;NET_{}&quot;, self.0)</code> to allocate a brand-new <code>String</code> on the heap at runtime, whereas <code>signal_name</code> returns a <code>&amp;'static str</code> slice pointing straight into the binary's read-only data segment with zero heap allocation.</li>
+<li><strong><code>#[derive(Clone, Debug, PartialEq)] pub struct ComponentSymbol</code></strong>: Notice we derive <code>Clone</code>—and <strong>not</strong> <code>Copy</code>—because <code>ref_des</code>, <code>value</code>, and <code>package_name</code> are heap-allocated <code>String</code> buffers. Rust forbids implicit bitwise <code>Copy</code> on types that own heap memory.</li>
+<li><strong><code>pub fn inspector_label(&amp;self) -&gt; String</code></strong>: Borrows <code>&amp;self</code> immutably and uses <code>format!(&quot;{}: {} ({})&quot;, ...)</code> to build a formatted summary string (<code>&quot;U1: LDO_3V3 (SOT-23)&quot;</code>) for the side-panel inspector.</li>
+<li><strong><code>&quot;U1&quot;.to_owned()</code> in <code>sample_components()</code></strong>: String literals like <code>&quot;U1&quot;</code> have type <code>&amp;'static str</code>; calling <code>.to_owned()</code> (from the <code>ToOwned</code> trait) allocates an owned <code>String</code> copy to populate each struct field.</li>
+</ul>
+<h3 id="block-2-storing-components-amp-extracting-render-side-panel-render-canvas">Block 2: Storing <code>components</code> &amp; Extracting <code>render_side_panel</code> / <code>render_canvas</code></h3>
+<pre><code class="language-rust">pub struct PcbReviewerApp {
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
+    pub viewport: BoardViewport,
+    pub traces: Vec&lt;TraceSegment&gt;,
+    pub pads: Vec&lt;SmdPad&gt;,
+    pub components: Vec&lt;ComponentSymbol&gt;,
+    pub hovered_net: Option&lt;NetId&gt;,
+    pub selected_net: Option&lt;NetId&gt;,
+}
+
+impl Default for PcbReviewerApp {
+    fn default() -&gt; Self {
+        let mut app = Self {
+            show_top_copper: false,
+            show_bottom_copper: false,
+            show_silkscreen: false,
+            show_ratsnest: false,
+            viewport: BoardViewport::default(),
+            traces: sample_traces(),
+            pads: sample_pads(),
+            components: sample_components(),
+            hovered_net: None,
+            selected_net: None,
+        };
+        app.reset_layers();
+        app
+    }
+}
+
+impl PcbReviewerApp {
+    // ...
+    pub fn render_side_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        ui.heading("PCB Layers");
+        ui.checkbox(&amp;mut self.show_top_copper, "Top Copper (F.Cu)");
+        ui.checkbox(&amp;mut self.show_bottom_copper, "Bottom Copper (B.Cu)");
+        ui.checkbox(&amp;mut self.show_silkscreen, "Silkscreen (F.SilkS)");
+        ui.checkbox(&amp;mut self.show_ratsnest, "Ratsnest (Unrouted)");
+
+        ui.separator();
+        if ui.button("Isolate Top Copper").clicked() {
+            self.isolate_top_copper();
+        }
+        if ui.button("Show All Layers").clicked() {
+            self.show_all_layers();
+        }
+
+        ui.separator();
+        ui.heading("Components (RefDes)");
+        if self.show_silkscreen {
+            for comp in &amp;self.components {
+                ui.label(comp.inspector_label());
+            }
+        } else {
+            ui.label("Enable Silkscreen to inspect component RefDes.");
+        }
+
+        ui.separator();
+        ui.heading("Net Inspector");
+        if let Some(net) = self.active_net() {
+            ui.label(format!("Active Net: {} ({})", net.code(), net.signal_name()));
+            if ui.button("Clear Selection").clicked() {
+                self.selected_net = None;
+            }
+        } else {
+            ui.label("Hover or click a pad to cross-probe its net.");
+        }
+    }
+
+    fn render_canvas(&amp;mut self, ui: &amp;mut egui::Ui) {
+        // Allocates painter, pans/zooms viewport, hit-tests pads, and calls self.paint_board(...)
+        // ...
+    }
+}
+
+impl eframe::App for PcbReviewerApp {
+    fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame) {
+        egui::Panel::left("layer_panel").show(ui, |ui| {
+            self.render_side_panel(ui);
+        });
+
+        egui::CentralPanel::default().show(ui, |ui| {
+            self.render_canvas(ui);
+        });
+    }
+}</code></pre>
+<ul>
+<li><strong><code>pub components: Vec&lt;ComponentSymbol&gt;</code></strong>: Adds the owned vector of silkscreen/schematic component symbols to <code>PcbReviewerApp</code> and initialises it with <code>sample_components()</code> inside <code>impl Default</code>.</li>
+<li><strong>Extracting <code>render_side_panel</code> and <code>render_canvas</code></strong>: Moving the left panel body into <code>pub fn render_side_panel(&amp;mut self, ui: &amp;mut egui::Ui)</code> and the viewport interaction into <code>fn render_canvas(&amp;mut self, ui: &amp;mut egui::Ui)</code> keeps <code>eframe::App::ui</code> clean and lets <code>.cargo/mutants.toml</code> target <code>ui</code> and <code>render_side_panel</code> for mutation testing while excluding the raw pixel-painting method <code>render_canvas</code>.</li>
+<li><strong><code>for comp in &amp;self.components</code></strong>: Borrows <code>self.components</code> immutably (<code>&amp;Vec&lt;ComponentSymbol&gt;</code>) so each iteration yields <code>comp: &amp;ComponentSymbol</code> without moving or cloning the underlying <code>String</code> fields.</li>
+<li><strong><code>ui.label(comp.inspector_label())</code> &amp; <code>net.code()</code> / <code>net.signal_name()</code></strong>: Renders each component's formatted <code>RefDes: Value (Package)</code> summary when <code>self.show_silkscreen</code> is enabled, and displays both the owned <code>net.code()</code> and borrowed <code>net.signal_name()</code> in the Net Inspector.</li>
+</ul>
+<h3 id="block-3-drawing-silkscreen-outlines-amp-reference-designators-painter-text">Block 3: Drawing Silkscreen Outlines &amp; Reference Designators (<code>Painter::text</code>)</h3>
+<p>On the 2D canvas, <a href="https://docs.rs/egui/latest/egui/struct.Painter.html#method.text"><code>Painter::text</code></a> renders crisp vector-rasterised glyphs anchored to any screen-space <code>Pos2</code> using <a href="https://docs.rs/egui/latest/egui/enum.Align2.html"><code>Align2</code></a> and <a href="https://docs.rs/egui/latest/egui/struct.FontId.html"><code>FontId</code></a>:<span class="sidenote-number"></span><span class="sidenote">Using <code>Align2::CENTER_CENTER</code> places the exact geometric centre of the rendered glyph bounding box at <code>center_px</code>, keeping <code>U1</code> centred inside its IC body at any zoom level.</span></p>
+<pre><code class="language-rust">if self.show_silkscreen {
+    let silk_color = PcbLayer::Silkscreen.color();
+    for comp in &amp;self.components {
+        let body_mm = Rect::from_center_size(comp.center_mm, comp.body_size_mm);
+        let screen_body = Rect::from_min_max(
+            self.viewport.world_to_screen(body_mm.min),
+            self.viewport.world_to_screen(body_mm.max),
+        );
+        painter.rect(
+            screen_body,
+            0.4 * scale,
+            Color32::from_rgba_unmultiplied(240, 230, 140, 14),
+            Stroke::new((0.25 * scale).max(1.0), silk_color),
+            StrokeKind::Inside,
+        );
+        let center_px = self.viewport.world_to_screen(comp.center_mm);
+        painter.text(
+            center_px,
+            Align2::CENTER_CENTER,
+            &amp;comp.ref_des,
+            FontId::monospace((2.2 * scale).clamp(9.0, 22.0)),
+            silk_color,
+        );
+    }
+}</code></pre>
+<ul>
+<li><strong><code>Rect::from_center_size(comp.center_mm, comp.body_size_mm)</code></strong>: Computes the component body rectangle in board millimetres, then projects <code>.min</code> and <code>.max</code> into screen pixels via <code>self.viewport.world_to_screen(...)</code>.</li>
+<li><strong><code>Color32::from_rgba_unmultiplied(240, 230, 140, 14)</code></strong>: Fills the component courtyard with a subtle translucent silkscreen tint (<code>alpha = 14</code>) bordered by a <code>StrokeKind::Inside</code> outline.</li>
+<li><strong><code>painter.text(center_px, Align2::CENTER_CENTER, &amp;comp.ref_des, ...)</code></strong>: Draws the reference designator centred over <code>center_px</code>. Notice we pass <code>&amp;comp.ref_des</code> (<code>&amp;String</code>), which coerces to <code>&amp;str</code> (<code>impl Into&lt;WidgetText&gt;</code>) without cloning the string.</li>
+<li><strong><code>FontId::monospace((2.2 * scale).clamp(9.0, 22.0))</code></strong>: Scales the monospace font size proportionally with the viewport zoom <code>scale</code> while clamping between <code>9.0</code> and <code>22.0</code> logical points so labels stay legible when zoomed out and never overwhelm the screen when zoomed in.</li>
+</ul>
+<h3 id="block-4-unit-amp-headless-ui-verification-egui-kittest-harness">Block 4: Unit &amp; Headless UI Verification (<code>egui_kittest::Harness</code>)</h3>
 <p>With <code>egui_kittest</code> under <code>[dev-dependencies]</code>, we can spin up our entire <code>eframe::App</code> headlessly in milliseconds, query widgets by their label, and click buttons directly from <code>cargo test</code>:</p>
 <pre><code class="language-rust">use egui_kittest::{Harness, kittest::Queryable};
+
+#[test]
+fn net_id_code_and_signal_name_distinguish_owned_string_from_str_slice() {
+    assert_eq!(NetId(1).code(), "NET_1");
+    assert_eq!(NetId(1).signal_name(), "VCC_3V3");
+
+    assert_eq!(NetId(2).code(), "NET_2");
+    assert_eq!(NetId(2).signal_name(), "SPI_CLK");
+
+    assert_eq!(NetId(99).code(), "NET_99");
+    assert_eq!(NetId(99).signal_name(), "UNASSIGNED");
+}
+
+#[test]
+fn component_symbol_inspector_label_formats_ref_des_value_and_package() {
+    let comp = ComponentSymbol {
+        ref_des: "U1".to_owned(),
+        value: "LDO_3V3".to_owned(),
+        package_name: "SOT-23".to_owned(),
+        center_mm: pos2(20.0, 27.0),
+        body_size_mm: vec2(12.0, 16.0),
+    };
+    assert_eq!(comp.inspector_label(), "U1: LDO_3V3 (SOT-23)");
+}
 
 #[test]
 fn headless_ui_renders_component_labels_and_toggles_layers() {
     let mut harness = Harness::new_eframe(|_cc| PcbReviewerApp::default());
 
-    // 1. Verify silkscreen component labels are rendered in the left Panel
     assert!(harness.query_by_label("U1: LDO_3V3 (SOT-23)").is_some());
     assert!(harness.query_by_label("R12: 10k (0603)").is_some());
+    assert!(harness.query_by_label("J1: CONN_2P (Header)").is_some());
 
-    // 2. Click "Isolate Top Copper" and run a frame
     harness.get_by_label("Isolate Top Copper").click();
     harness.run();
     assert!(!harness.state().show_bottom_copper);
     assert!(!harness.state().show_silkscreen);
     assert!(harness.query_by_label("U1: LDO_3V3 (SOT-23)").is_none());
+    assert!(harness
+        .query_by_label("Enable Silkscreen to inspect component RefDes.")
+        .is_some());
+
+    harness.get_by_label("Show All Layers").click();
+    harness.run();
+    assert!(harness.state().show_ratsnest);
+    assert!(harness.query_by_label("U1: LDO_3V3 (SOT-23)").is_some());
+
+    harness.state_mut().selected_net = Some(NetId(1));
+    harness.run();
+    assert!(harness
+        .query_by_label("Active Net: NET_1 (VCC_3V3)")
+        .is_some());
+
+    harness.get_by_label("Clear Selection").click();
+    harness.run();
+    assert_eq!(harness.state().selected_net, None);
+}</code></pre>
+<ul>
+<li><strong><code>use egui_kittest::{Harness, kittest::Queryable}</code></strong>: Brings in <code>Harness</code> (the headless <code>egui</code>/<code>eframe</code> runner) and the <code>Queryable</code> trait (which adds <code>.query_by_label(...)</code> and <code>.get_by_label(...)</code> to the harness).</li>
+<li><strong><code>Harness::new_eframe(|_cc| PcbReviewerApp::default())</code></strong>: Boots <code>PcbReviewerApp</code> inside an offscreen <code>eframe</code> context and runs the initial layout frame so the AccessKit node tree is immediately ready to query.</li>
+<li><strong><code>harness.query_by_label(...)</code> vs. <code>harness.get_by_label(...)</code></strong>: <code>query_by_label</code> returns an <code>Option</code> (<code>is_some()</code> / <code>is_none()</code>), making it ideal for asserting whether a conditional label is present or hidden. <code>get_by_label</code> unwraps the node (panicking with a helpful widget tree dump if missing) so you can chain <code>.click()</code> on buttons like <code>&quot;Isolate Top Copper&quot;</code>, <code>&quot;Show All Layers&quot;</code>, and <code>&quot;Clear Selection&quot;</code>.</li>
+<li><strong><code>harness.run()</code> &amp; <code>harness.state()</code> / <code>harness.state_mut()</code></strong>: After queuing a <code>.click()</code> or mutating state via <code>harness.state_mut()</code>, calling <code>harness.run()</code> steps the immediate-mode loop forward so <code>eframe::App::ui</code> processes the interaction and updates the rendered widget tree.</li>
+</ul>
+<h3 id="complete-lesson-0007-listing-in-context">Complete Lesson 0007 Listing (In Context)</h3>
+<p>Here is how all four blocks assemble in <code>apps/0007-schematic-symbols-and-text-rendering/src/main.rs</code> alongside our existing viewport and layer logic:</p>
+<pre><code class="language-rust">use eframe::egui::{
+    self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, emath::TSTransform,
+    pos2, vec2,
+};
+
+// ... [MIN_ZOOM, MAX_ZOOM, and fn main() unchanged from Lesson 0006] ...
+
+/// Strongly-typed identifier for an electrical net (e.g. `NetId(1)` = `VCC_3V3`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NetId(pub u32);
+
+impl NetId {
+    /// Returns a freshly formatted, heap-allocated `String` net code (`"NET_1"`).
+    pub fn code(self) -&gt; String {
+        format!("NET_{}", self.0)
+    }
+
+    /// Returns a zero-allocation static string slice (`&amp;'static str`) for known signal names.
+    pub fn signal_name(self) -&gt; &amp;'static str {
+        match self.0 {
+            1 =&gt; "VCC_3V3",
+            2 =&gt; "SPI_CLK",
+            _ =&gt; "UNASSIGNED",
+        }
+    }
+}
+
+// ... [PcbLayer, TraceSegment, SmdPad, BoardViewport, sample_traces(), sample_pads()] ...
+
+/// Silkscreen/schematic component metadata rendered on the canvas with `Painter::text`
+/// and listed in the `Panel` Component Inspector.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ComponentSymbol {
+    pub ref_des: String,
+    pub value: String,
+    pub package_name: String,
+    pub center_mm: Pos2,
+    pub body_size_mm: Vec2,
+}
+
+impl ComponentSymbol {
+    pub fn inspector_label(&amp;self) -&gt; String {
+        format!("{}: {} ({})", self.ref_des, self.value, self.package_name)
+    }
+}
+
+fn sample_components() -&gt; Vec&lt;ComponentSymbol&gt; {
+    vec![
+        ComponentSymbol {
+            ref_des: "U1".to_owned(),
+            value: "LDO_3V3".to_owned(),
+            package_name: "SOT-23".to_owned(),
+            center_mm: pos2(20.0, 27.0),
+            body_size_mm: vec2(12.0, 16.0),
+        },
+        ComponentSymbol {
+            ref_des: "R12".to_owned(),
+            value: "10k".to_owned(),
+            package_name: "0603".to_owned(),
+            center_mm: pos2(52.0, 35.0),
+            body_size_mm: vec2(10.0, 6.0),
+        },
+        ComponentSymbol {
+            ref_des: "J1".to_owned(),
+            value: "CONN_2P".to_owned(),
+            package_name: "Header".to_owned(),
+            center_mm: pos2(68.0, 35.0),
+            body_size_mm: vec2(10.0, 14.0),
+        },
+    ]
+}
+
+pub struct PcbReviewerApp {
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
+    pub viewport: BoardViewport,
+    pub traces: Vec&lt;TraceSegment&gt;,
+    pub pads: Vec&lt;SmdPad&gt;,
+    pub components: Vec&lt;ComponentSymbol&gt;,
+    pub hovered_net: Option&lt;NetId&gt;,
+    pub selected_net: Option&lt;NetId&gt;,
+}
+
+impl Default for PcbReviewerApp {
+    fn default() -&gt; Self {
+        let mut app = Self {
+            show_top_copper: false,
+            show_bottom_copper: false,
+            show_silkscreen: false,
+            show_ratsnest: false,
+            viewport: BoardViewport::default(),
+            traces: sample_traces(),
+            pads: sample_pads(),
+            components: sample_components(),
+            hovered_net: None,
+            selected_net: None,
+        };
+        app.reset_layers();
+        app
+    }
+}
+
+impl PcbReviewerApp {
+    // ... [reset_layers, isolate_top_copper, show_all_layers, reset_viewport,
+    //      is_layer_visible, visible_traces_in_z_order, hit_test_net_at_mm, active_net] ...
+
+    pub fn render_side_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        ui.heading("PCB Layers");
+        ui.checkbox(&amp;mut self.show_top_copper, "Top Copper (F.Cu)");
+        ui.checkbox(&amp;mut self.show_bottom_copper, "Bottom Copper (B.Cu)");
+        ui.checkbox(&amp;mut self.show_silkscreen, "Silkscreen (F.SilkS)");
+        ui.checkbox(&amp;mut self.show_ratsnest, "Ratsnest (Unrouted)");
+
+        ui.separator();
+        if ui.button("Isolate Top Copper").clicked() {
+            self.isolate_top_copper();
+        }
+        if ui.button("Show All Layers").clicked() {
+            self.show_all_layers();
+        }
+
+        ui.separator();
+        ui.heading("Components (RefDes)");
+        if self.show_silkscreen {
+            for comp in &amp;self.components {
+                ui.label(comp.inspector_label());
+            }
+        } else {
+            ui.label("Enable Silkscreen to inspect component RefDes.");
+        }
+
+        ui.separator();
+        ui.heading("Net Inspector");
+        if let Some(net) = self.active_net() {
+            ui.label(format!("Active Net: {} ({})", net.code(), net.signal_name()));
+            if ui.button("Clear Selection").clicked() {
+                self.selected_net = None;
+            }
+        } else {
+            ui.label("Hover or click a pad to cross-probe its net.");
+        }
+    }
+
+    fn render_canvas(&amp;mut self, ui: &amp;mut egui::Ui) {
+        let (response, painter) =
+            ui.allocate_painter(ui.available_size(), Sense::click_and_drag());
+
+        if response.dragged() {
+            self.viewport.pan_by(response.drag_delta());
+        }
+
+        if let Some(hover_pos) = response.hover_pos() {
+            let scroll_y = ui.input(|i| i.smooth_scroll_delta.y);
+            if scroll_y != 0.0 {
+                let zoom_factor = (scroll_y * 0.005).exp();
+                self.viewport.zoom_around(hover_pos, zoom_factor);
+            }
+
+            let world_mm = self.viewport.screen_to_world(hover_pos);
+            self.hovered_net = self.hit_test_net_at_mm(world_mm);
+            if response.clicked() {
+                self.selected_net = self.hovered_net;
+            }
+        } else {
+            self.hovered_net = None;
+        }
+
+        self.paint_board(&amp;painter, response.rect);
+    }
+
+    fn paint_board(&amp;self, painter: &amp;egui::Painter, canvas_rect: Rect) {
+        // ... [board outline, visible traces, and SMD pads painting unchanged] ...
+
+        if self.show_silkscreen {
+            let silk_color = PcbLayer::Silkscreen.color();
+            for comp in &amp;self.components {
+                let body_mm = Rect::from_center_size(comp.center_mm, comp.body_size_mm);
+                let screen_body = Rect::from_min_max(
+                    self.viewport.world_to_screen(body_mm.min),
+                    self.viewport.world_to_screen(body_mm.max),
+                );
+                painter.rect(
+                    screen_body,
+                    0.4 * scale,
+                    Color32::from_rgba_unmultiplied(240, 230, 140, 14),
+                    Stroke::new((0.25 * scale).max(1.0), silk_color),
+                    StrokeKind::Inside,
+                );
+                let center_px = self.viewport.world_to_screen(comp.center_mm);
+                painter.text(
+                    center_px,
+                    Align2::CENTER_CENTER,
+                    &amp;comp.ref_des,
+                    FontId::monospace((2.2 * scale).clamp(9.0, 22.0)),
+                    silk_color,
+                );
+            }
+        }
+    }
+}
+
+impl eframe::App for PcbReviewerApp {
+    fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame) {
+        egui::Panel::left("layer_panel").show(ui, |ui| {
+            self.render_side_panel(ui);
+        });
+
+        egui::CentralPanel::default().show(ui, |ui| {
+            self.render_canvas(ui);
+        });
+    }
 }</code></pre>
 </div>
 

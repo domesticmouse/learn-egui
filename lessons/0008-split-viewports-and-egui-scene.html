@@ -79,22 +79,90 @@ for comp in &amp;self.components {
 }</code></pre>
 <p>If you have written Rust for more than ten minutes, you have probably met that exact error (<code>E0502</code>).</p>
 <p>Turns out, Rust's borrow checker is smarter than it looks at first glance: it tracks borrows at the <strong>individual struct field level</strong>. When we group our read-only board data into <code>pub board: BoardModel</code> and our mutable UI/camera state into <code>pub view: ViewState</code>, <code>rustc</code> can see that <code>&amp;self.board</code> and <code>&amp;mut self.view</code> are completely disjoint in memory!</p>
-<pre><code class="language-rust">pub struct BoardModel {
+<h2 id="2-anatomy-of-lesson-0008-s-additions-block-by-block">2. Anatomy of Lesson 0008's Additions: Block by Block</h2>
+<p>Let's walk through the new and updated code in <code>apps/0008-split-viewports-and-egui-scene/src/main.rs</code> block by block, then assemble the full cross-probing implementation in context.</p>
+<h3 id="block-1-extending-componentsymbol-with-primary-net-amp-defining-boardmodel">Block 1: Extending <code>ComponentSymbol</code> with <code>primary_net</code> &amp; Defining <code>BoardModel</code></h3>
+<pre><code class="language-rust">#[derive(Clone, Debug, PartialEq)]
+pub struct ComponentSymbol {
+    pub ref_des: String,
+    pub value: String,
+    pub package_name: String,
+    pub center_mm: Pos2,
+    pub body_size_mm: Vec2,
+    pub primary_net: NetId,
+}
+
+/// Immutable board domain data (`&amp;self.board`) separated from `ViewState` (`&amp;mut self.view`)
+/// so UI panels can iterate over components while mutating camera and selection state.
+pub struct BoardModel {
     pub traces: Vec&lt;TraceSegment&gt;,
     pub pads: Vec&lt;SmdPad&gt;,
     pub components: Vec&lt;ComponentSymbol&gt;,
 }
 
+impl Default for BoardModel {
+    fn default() -&gt; Self {
+        Self {
+            traces: sample_traces(),
+            pads: sample_pads(),
+            components: sample_components(),
+        }
+    }
+}
+
+impl BoardModel {
+    pub fn find_component(&amp;self, ref_des: &amp;str) -&gt; Option&lt;&amp;ComponentSymbol&gt; {
+        self.components.iter().find(|c| c.ref_des == ref_des)
+    }
+}</code></pre>
+<ul>
+<li><strong><code>pub primary_net: NetId</code></strong>: Links each <code>ComponentSymbol</code> (<code>U1</code>, <code>R12</code>, <code>J1</code>) to its primary electrical net (<code>NetId(1)</code> for <code>U1</code>/<code>J1</code>, <code>NetId(2)</code> for <code>R12</code>) so clicking a schematic symbol can highlight its traces and pads on the PCB.</li>
+<li><strong><code>pub struct BoardModel</code></strong>: Houses the read-only domain vectors (<code>traces</code>, <code>pads</code>, <code>components</code>) in their own struct so borrowing <code>&amp;self.board</code> never conflicts with mutating <code>self.view</code>.</li>
+<li><strong><code>pub fn find_component(&amp;self, ref_des: &amp;str) -&gt; Option&lt;&amp;ComponentSymbol&gt;</code></strong>: Iterates over <code>self.components</code> with <code>.iter().find(|c| c.ref_des == ref_des)</code> and returns an optional borrowed reference <code>Option&lt;&amp;ComponentSymbol&gt;</code> tied to the lifetime of <code>&amp;self</code>—no <code>ComponentSymbol</code> cloning required.</li>
+</ul>
+<h3 id="block-2-viewstate-amp-split-borrow-camera-focusing-focus-component">Block 2: <code>ViewState</code> &amp; Split-Borrow Camera Focusing (<code>focus_component</code>)</h3>
+<pre><code class="language-rust">/// Mutable camera, layer visibility, and cross-probe selection state (`&amp;mut self.view`).
 pub struct ViewState {
-    pub selected_component: Option&lt;String&gt;,
-    pub selected_net: Option&lt;NetId&gt;,
-    pub hovered_net: Option&lt;NetId&gt;,
-    pub pcb_scene_rect: Rect,
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
     pub viewport: BoardViewport,
+    pub pcb_scene_rect: Rect,
+    pub selected_component: Option&lt;String&gt;,
+    pub hovered_net: Option&lt;NetId&gt;,
+    pub selected_net: Option&lt;NetId&gt;,
+}
+
+impl Default for ViewState {
+    fn default() -&gt; Self {
+        let mut view = Self {
+            show_top_copper: false,
+            show_bottom_copper: false,
+            show_silkscreen: false,
+            show_ratsnest: false,
+            viewport: BoardViewport::default(),
+            pcb_scene_rect: Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0)),
+            selected_component: None,
+            hovered_net: None,
+            selected_net: None,
+        };
+        view.reset_layers();
+        view
+    }
 }
 
 impl ViewState {
-    /// Reads `&amp;BoardModel` immutably while mutating `&amp;mut self` (`ViewState`)!
+    // ... [reset_layers, isolate_top_copper, show_all_layers, is_layer_visible, active_net] ...
+
+    pub fn reset_viewport(&amp;mut self) {
+        self.viewport = BoardViewport::default();
+        self.pcb_scene_rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0));
+    }
+
+    /// Cross-probes a component from the Schematic Symbol Bar into the PCB camera.
+    /// Demonstrates split borrowing: `board` is borrowed immutably (`&amp;BoardModel`)
+    /// while `self` (`&amp;mut ViewState`) is mutated in place.
     pub fn focus_component(&amp;mut self, board: &amp;BoardModel, ref_des: &amp;str) -&gt; bool {
         if let Some(comp) = board.find_component(ref_des) {
             self.selected_component = Some(comp.ref_des.clone());
@@ -106,19 +174,344 @@ impl ViewState {
         }
     }
 }</code></pre>
-<h2 id="2-multi-panel-layouts-with-panel-top-amp-egui-scene">2. Multi-Panel Layouts with <code>Panel::top</code> &amp; <code>egui::Scene</code></h2>
-<p>Alongside our custom <code>TSTransform</code> canvas from Lesson 0004, <code>egui</code> also ships a built-in pan-and-zoom container called <a href="https://docs.rs/egui/latest/egui/containers/scene/struct.Scene.html"><code>egui::Scene</code></a>. You pass <code>&amp;mut self.view.pcb_scene_rect</code> into <code>Scene::new().show(...)</code>, and <code>Scene</code> automatically updates that <code>Rect</code> whenever the user drags or scrolls—or whenever our schematic cross-probe overwrites <code>pcb_scene_rect</code> to jump the camera straight to a component:</p>
-<pre><code class="language-rust">egui::Panel::top("schematic_cross_probe_bar").show(ui, |ui| {
-    ui.horizontal(|ui| {
-        ui.label("Schematic Symbols (Click to Cross-Probe):");
-        for comp in &amp;self.board.components {
-            let btn_label = format!("Probe {} ({})", comp.ref_des, comp.value);
-            if ui.button(btn_label).clicked() {
-                self.view.focus_component(&amp;self.board, &amp;comp.ref_des);
+<ul>
+<li><strong><code>pub pcb_scene_rect: Rect</code> &amp; <code>pub selected_component: Option&lt;String&gt;</code></strong>: <code>pcb_scene_rect</code> tracks the 2D camera rectangle managed by <code>egui::Scene</code> (initialised to the full <code>100×70 mm</code> board bounds), while <code>selected_component</code> remembers which schematic <code>RefDes</code> is currently cross-probed.</li>
+<li><strong><code>pub fn focus_component(&amp;mut self, board: &amp;BoardModel, ref_des: &amp;str) -&gt; bool</code></strong>: Takes <code>&amp;mut self</code> (<code>&amp;mut ViewState</code>) alongside a shared <code>&amp;BoardModel</code> reference and a <code>&amp;str</code> slice. Because <code>BoardModel</code> and <code>ViewState</code> are separate fields on <code>PcbReviewerApp</code>, callers can pass <code>&amp;self.board</code> while mutating <code>self.view</code>!</li>
+<li><strong><code>Rect::from_center_size(comp.center_mm, vec2(40.0, 30.0))</code></strong>: Recentres <code>self.pcb_scene_rect</code> directly over <code>comp.center_mm</code> with a <code>40×30</code> camera window, sets <code>selected_net = Some(comp.primary_net)</code>, and returns <code>true</code> when found (or <code>false</code> for an unknown <code>ref_des</code>).</li>
+</ul>
+<h3 id="block-3-multi-panel-workspace-panel-top-amp-egui-scene">Block 3: Multi-Panel Workspace (<code>Panel::top</code> &amp; <code>egui::Scene</code>)</h3>
+<p>Alongside our custom <code>TSTransform</code> canvas from Lesson 0004, <code>egui</code> also ships a built-in pan-and-zoom container called <a href="https://docs.rs/egui/latest/egui/containers/scene/struct.Scene.html"><code>egui::Scene</code></a>. You pass <code>&amp;mut scene_rect</code> into <code>Scene::new().show(...)</code>, and <code>Scene</code> automatically updates that <code>Rect</code> whenever the user drags or scrolls—or whenever our schematic cross-probe overwrites <code>pcb_scene_rect</code> to jump the camera straight to a component:</p>
+<pre><code class="language-rust">#[derive(Default)]
+pub struct PcbReviewerApp {
+    pub board: BoardModel,
+    pub view: ViewState,
+}
+
+impl PcbReviewerApp {
+    // ...
+    pub fn render_schematic_bar(&amp;mut self, ui: &amp;mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Schematic Symbols (Cross-Probe):");
+            for comp in &amp;self.board.components {
+                let label = format!("Probe {} ({})", comp.ref_des, comp.value);
+                if ui.button(label).clicked() {
+                    self.view.focus_component(&amp;self.board, &amp;comp.ref_des);
+                }
             }
+            if let Some(focused) = &amp;self.view.selected_component {
+                ui.label(format!("Focused Footprint: {focused}"));
+            }
+        });
+    }
+
+    fn render_canvas(&amp;mut self, ui: &amp;mut egui::Ui) {
+        let mut scene_rect = self.view.pcb_scene_rect;
+        egui::Scene::new()
+            .zoom_range(0.5..=8.0)
+            .show(ui, &amp;mut scene_rect, |ui| {
+                let (response, painter) =
+                    ui.allocate_painter(vec2(720.0, 520.0), Sense::click_and_drag());
+
+                if response.dragged() {
+                    self.view.viewport.pan_by(response.drag_delta());
+                }
+
+                if let Some(hover_pos) = response.hover_pos() {
+                    let world_mm = self.view.viewport.screen_to_world(hover_pos);
+                    self.view.hovered_net = self.hit_test_net_at_mm(world_mm);
+                    if response.clicked() {
+                        self.view.selected_net = self.view.hovered_net;
+                    }
+                } else {
+                    self.view.hovered_net = None;
+                }
+
+                self.paint_board(&amp;painter, response.rect);
+            });
+        self.view.pcb_scene_rect = scene_rect;
+    }
+}
+
+impl eframe::App for PcbReviewerApp {
+    fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame) {
+        egui::Panel::top("schematic_cross_probe_bar").show(ui, |ui| {
+            self.render_schematic_bar(ui);
+        });
+
+        egui::Panel::left("layer_panel").show(ui, |ui| {
+            self.render_side_panel(ui);
+        });
+
+        egui::CentralPanel::default().show(ui, |ui| {
+            self.render_canvas(ui);
+        });
+    }
+}</code></pre>
+<ul>
+<li><strong><code>#[derive(Default)] pub struct PcbReviewerApp</code></strong>: Now that both <code>BoardModel</code> and <code>ViewState</code> implement <code>Default</code> with our desired startup values, <code>PcbReviewerApp</code> can use <code>#[derive(Default)]</code> cleanly.</li>
+<li><strong>Disjoint Borrow Inside <code>for comp in &amp;self.board.components</code></strong>: The <code>for</code> loop holds an immutable borrow of <code>self.board.components</code> (<code>&amp;self.board</code>), and inside the loop body <code>self.view.focus_component(&amp;self.board, &amp;comp.ref_des)</code> mutably borrows <code>self.view</code> while sharing <code>&amp;self.board</code>. Zero temporary <code>.clone()</code> allocations needed!</li>
+<li><strong>Copying <code>let mut scene_rect = self.view.pcb_scene_rect</code></strong>: Because <code>Rect</code> is <code>Copy</code>, copying <code>self.view.pcb_scene_rect</code> into a local stack variable <code>scene_rect</code> before calling <code>egui::Scene::new().zoom_range(0.5..=8.0).show(ui, &amp;mut scene_rect, |ui| { ... })</code> avoids holding a mutable borrow on <code>self.view.pcb_scene_rect</code> while the inner closure also accesses <code>self</code> (<code>self.hit_test_net_at_mm(...)</code> and <code>self.paint_board(...)</code>). After <code>Scene::show</code> finishes, we write <code>self.view.pcb_scene_rect = scene_rect;</code> back.</li>
+<li><strong><code>egui::Panel::top(&quot;schematic_cross_probe_bar&quot;)</code></strong>: Claims the top horizontal strip of the window <em>before</em> <code>Panel::left</code> and <code>CentralPanel</code> divide up the remaining vertical space.</li>
+</ul>
+<h3 id="block-4-unit-amp-headless-cross-probe-verification-cfg-test">Block 4: Unit &amp; Headless Cross-Probe Verification (<code>#[cfg(test)]</code>)</h3>
+<pre><code class="language-rust">#[test]
+fn focus_component_centers_scene_rect_and_returns_false_for_unknown_ref_des() {
+    let board = BoardModel::default();
+    let mut view = ViewState::default();
+
+    assert!(view.focus_component(&amp;board, "R12"));
+    assert_eq!(view.selected_component.as_deref(), Some("R12"));
+    assert_eq!(view.selected_net, Some(NetId(2)));
+    assert_eq!(
+        view.pcb_scene_rect,
+        Rect::from_center_size(pos2(52.0, 35.0), vec2(40.0, 30.0))
+    );
+
+    assert!(!view.focus_component(&amp;board, "U999"));
+}
+
+#[test]
+fn clicking_schematic_probe_button_updates_pcb_camera_rect_and_net() {
+    let mut harness = Harness::new_eframe(|_cc| PcbReviewerApp::default());
+
+    harness.get_by_label("Probe R12 (10k)").click();
+    harness.run();
+
+    assert_eq!(
+        harness.state().view.selected_component.as_deref(),
+        Some("R12")
+    );
+    assert_eq!(harness.state().view.selected_net, Some(NetId(2)));
+    assert_eq!(
+        harness.state().view.pcb_scene_rect.center(),
+        pos2(52.0, 35.0)
+    );
+    assert!(harness.query_by_label("Focused Footprint: R12").is_some());
+
+    harness.get_by_label("Clear Selection").click();
+    harness.run();
+    assert_eq!(harness.state().view.selected_net, None);
+    assert_eq!(harness.state().view.selected_component, None);
+}</code></pre>
+<ul>
+<li><strong><code>view.selected_component.as_deref()</code></strong>: Converts <code>Option&lt;&amp;String&gt;</code> into <code>Option&lt;&amp;str&gt;</code> so we can compare it directly against <code>Some(&quot;R12&quot;)</code> without allocating a temporary <code>String</code>.</li>
+<li><strong>Testing Both <code>true</code> and <code>false</code> Arms of <code>focus_component</code></strong>: Asserting both <code>assert!(view.focus_component(&amp;board, &quot;R12&quot;))</code> and <code>assert!(!view.focus_component(&amp;board, &quot;U999&quot;))</code> ensures <code>cargo-mutants</code> catches any mutation that replaces the return value with a constant <code>true</code> or <code>false</code>.</li>
+<li><strong>End-to-End Cross-Probe via <code>harness.get_by_label(&quot;Probe R12 (10k)&quot;).click()</code></strong>: Clicks the top schematic bar button headlessly, steps a frame with <code>harness.run()</code>, and verifies that <code>selected_component</code>, <code>selected_net</code>, <code>pcb_scene_rect.center()</code>, and the <code>&quot;Focused Footprint: R12&quot;</code> status label all update in lockstep.</li>
+</ul>
+<h3 id="complete-lesson-0008-listing-in-context">Complete Lesson 0008 Listing (In Context)</h3>
+<p>Here is how <code>BoardModel</code>, <code>ViewState</code>, <code>PcbReviewerApp</code>, and our cross-probing UI fit together in <code>apps/0008-split-viewports-and-egui-scene/src/main.rs</code>:</p>
+<pre><code class="language-rust">// ... [Imports, MIN_ZOOM, MAX_ZOOM, main(), NetId, PcbLayer, TraceSegment, SmdPad unchanged] ...
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ComponentSymbol {
+    pub ref_des: String,
+    pub value: String,
+    pub package_name: String,
+    pub center_mm: Pos2,
+    pub body_size_mm: Vec2,
+    pub primary_net: NetId,
+}
+
+impl ComponentSymbol {
+    pub fn inspector_label(&amp;self) -&gt; String {
+        format!("{}: {} ({})", self.ref_des, self.value, self.package_name)
+    }
+}
+
+// ... [BoardViewport, sample_traces(), sample_pads(), sample_components() with primary_net] ...
+
+/// Immutable board domain data (`&amp;self.board`) separated from `ViewState` (`&amp;mut self.view`)
+/// so UI panels can iterate over components while mutating camera and selection state.
+pub struct BoardModel {
+    pub traces: Vec&lt;TraceSegment&gt;,
+    pub pads: Vec&lt;SmdPad&gt;,
+    pub components: Vec&lt;ComponentSymbol&gt;,
+}
+
+impl Default for BoardModel {
+    fn default() -&gt; Self {
+        Self {
+            traces: sample_traces(),
+            pads: sample_pads(),
+            components: sample_components(),
         }
-    });
-});</code></pre>
+    }
+}
+
+impl BoardModel {
+    pub fn find_component(&amp;self, ref_des: &amp;str) -&gt; Option&lt;&amp;ComponentSymbol&gt; {
+        self.components.iter().find(|c| c.ref_des == ref_des)
+    }
+}
+
+/// Mutable camera, layer visibility, and cross-probe selection state (`&amp;mut self.view`).
+pub struct ViewState {
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
+    pub viewport: BoardViewport,
+    pub pcb_scene_rect: Rect,
+    pub selected_component: Option&lt;String&gt;,
+    pub hovered_net: Option&lt;NetId&gt;,
+    pub selected_net: Option&lt;NetId&gt;,
+}
+
+impl Default for ViewState {
+    fn default() -&gt; Self {
+        let mut view = Self {
+            show_top_copper: false,
+            show_bottom_copper: false,
+            show_silkscreen: false,
+            show_ratsnest: false,
+            viewport: BoardViewport::default(),
+            pcb_scene_rect: Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0)),
+            selected_component: None,
+            hovered_net: None,
+            selected_net: None,
+        };
+        view.reset_layers();
+        view
+    }
+}
+
+impl ViewState {
+    pub fn reset_layers(&amp;mut self) {
+        self.show_top_copper = true;
+        self.show_bottom_copper = true;
+        self.show_silkscreen = true;
+        self.show_ratsnest = false;
+    }
+
+    pub fn isolate_top_copper(&amp;mut self) {
+        self.show_top_copper = true;
+        self.show_bottom_copper = false;
+        self.show_silkscreen = false;
+        self.show_ratsnest = false;
+    }
+
+    pub fn show_all_layers(&amp;mut self) {
+        self.show_top_copper = true;
+        self.show_bottom_copper = true;
+        self.show_silkscreen = true;
+        self.show_ratsnest = true;
+    }
+
+    pub fn reset_viewport(&amp;mut self) {
+        self.viewport = BoardViewport::default();
+        self.pcb_scene_rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0));
+    }
+
+    pub fn is_layer_visible(&amp;self, layer: PcbLayer) -&gt; bool {
+        match layer {
+            PcbLayer::BottomCopper =&gt; self.show_bottom_copper,
+            PcbLayer::TopCopper =&gt; self.show_top_copper,
+            PcbLayer::Silkscreen =&gt; self.show_silkscreen,
+            PcbLayer::Ratsnest =&gt; self.show_ratsnest,
+        }
+    }
+
+    pub fn active_net(&amp;self) -&gt; Option&lt;NetId&gt; {
+        self.selected_net.or(self.hovered_net)
+    }
+
+    /// Cross-probes a component from the Schematic Symbol Bar into the PCB camera.
+    /// Demonstrates split borrowing: `board` is borrowed immutably (`&amp;BoardModel`)
+    /// while `self` (`&amp;mut ViewState`) is mutated in place.
+    pub fn focus_component(&amp;mut self, board: &amp;BoardModel, ref_des: &amp;str) -&gt; bool {
+        if let Some(comp) = board.find_component(ref_des) {
+            self.selected_component = Some(comp.ref_des.clone());
+            self.selected_net = Some(comp.primary_net);
+            self.pcb_scene_rect = Rect::from_center_size(comp.center_mm, vec2(40.0, 30.0));
+            true
+        } else {
+            false
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct PcbReviewerApp {
+    pub board: BoardModel,
+    pub view: ViewState,
+}
+
+impl PcbReviewerApp {
+    // ... [visible_traces_in_z_order, hit_test_net_at_mm, paint_board] ...
+
+    pub fn render_schematic_bar(&amp;mut self, ui: &amp;mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Schematic Symbols (Cross-Probe):");
+            for comp in &amp;self.board.components {
+                let label = format!("Probe {} ({})", comp.ref_des, comp.value);
+                if ui.button(label).clicked() {
+                    self.view.focus_component(&amp;self.board, &amp;comp.ref_des);
+                }
+            }
+            if let Some(focused) = &amp;self.view.selected_component {
+                ui.label(format!("Focused Footprint: {focused}"));
+            }
+        });
+    }
+
+    pub fn render_side_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        // ... [Layer checkboxes and RefDes list reading self.board &amp; self.view] ...
+        ui.separator();
+        ui.heading("Net Inspector");
+        if let Some(net) = self.view.active_net() {
+            ui.label(format!("Active Net: {} ({})", net.code(), net.signal_name()));
+            if ui.button("Clear Selection").clicked() {
+                self.view.selected_net = None;
+                self.view.selected_component = None;
+            }
+        } else {
+            ui.label("Hover or click a pad to cross-probe its net.");
+        }
+    }
+
+    fn render_canvas(&amp;mut self, ui: &amp;mut egui::Ui) {
+        let mut scene_rect = self.view.pcb_scene_rect;
+        egui::Scene::new()
+            .zoom_range(0.5..=8.0)
+            .show(ui, &amp;mut scene_rect, |ui| {
+                let (response, painter) =
+                    ui.allocate_painter(vec2(720.0, 520.0), Sense::click_and_drag());
+
+                if response.dragged() {
+                    self.view.viewport.pan_by(response.drag_delta());
+                }
+
+                if let Some(hover_pos) = response.hover_pos() {
+                    let world_mm = self.view.viewport.screen_to_world(hover_pos);
+                    self.view.hovered_net = self.hit_test_net_at_mm(world_mm);
+                    if response.clicked() {
+                        self.view.selected_net = self.view.hovered_net;
+                    }
+                } else {
+                    self.view.hovered_net = None;
+                }
+
+                self.paint_board(&amp;painter, response.rect);
+            });
+        self.view.pcb_scene_rect = scene_rect;
+    }
+}
+
+impl eframe::App for PcbReviewerApp {
+    fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame) {
+        egui::Panel::top("schematic_cross_probe_bar").show(ui, |ui| {
+            self.render_schematic_bar(ui);
+        });
+
+        egui::Panel::left("layer_panel").show(ui, |ui| {
+            self.render_side_panel(ui);
+        });
+
+        egui::CentralPanel::default().show(ui, |ui| {
+            self.render_canvas(ui);
+        });
+    }
+}</code></pre>
 </div>
 
 <section class="full-width-panel" id="dual-scene-sim">

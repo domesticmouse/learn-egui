@@ -35,8 +35,39 @@ $$
 \text{diff} = \bigl(\text{len}(A) \oplus \text{len}(B)\bigr) \;\lor\; \bigoplus_{i=0}^{\min(\text{len}(A),\,\text{len}(B))-1} \bigl(A_i \oplus B_i\bigr)
 $$
 
-```rust caption="Constant-time bearer verification and cropped PNG snapshot generator in crates/pcb-doc/src/lib.rs"
+Let's walk through the constant-time bearer verifier, the cropped PNG snapshot encoder, the `LoopbackControlBridge`, and the `egui` integration block by block before viewing the complete assembled listings.
+
+### Block 1: Constant-Time Bearer Verification & Cropped PNG Snapshots (`crates/pcb-doc/src/lib.rs`)
+
+```rust
 pub const PNG_MAGIC_HEADER: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+
+#[derive(Debug, PartialEq, Eq, Error)]
+pub enum ControlError {
+    #[error("unauthorized bearer token")]
+    Unauthorized,
+    #[error("invalid region bounds")]
+    InvalidRegionBounds,
+    #[error("invalid snapshot dimensions")]
+    InvalidSnapshotDimensions,
+}
+
+pub fn verify_bearer_token(expected: &str, provided: &str) -> Result<(), ControlError> {
+    if expected.is_empty() {
+        return Err(ControlError::Unauthorized);
+    }
+    let exp_bytes = expected.as_bytes();
+    let prov_bytes = provided.as_bytes();
+    let mut diff = exp_bytes.len() ^ prov_bytes.len();
+    for (&a, &b) in exp_bytes.iter().zip(prov_bytes.iter()) {
+        diff |= usize::from(a ^ b);
+    }
+    if diff == 0 {
+        Ok(())
+    } else {
+        Err(ControlError::Unauthorized)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct CroppedPngSnapshot {
@@ -48,6 +79,550 @@ pub struct CroppedPngSnapshot {
     pub height_px: u32,
     pub visible_pad_count: usize,
     pub png_bytes: Vec<u8>,
+}
+
+pub fn capture_cropped_region_png(
+    board: &BoardModel,
+    min_x_mm: i64,
+    min_y_mm: i64,
+    max_x_mm: i64,
+    max_y_mm: i64,
+    width_px: u32,
+    height_px: u32,
+) -> Result<CroppedPngSnapshot, ControlError> {
+    if min_x_mm >= max_x_mm || min_y_mm >= max_y_mm {
+        return Err(ControlError::InvalidRegionBounds);
+    }
+    if width_px == 0 || height_px == 0 || width_px.saturating_mul(height_px) > 16_384 {
+        return Err(ControlError::InvalidSnapshotDimensions);
+    }
+    let mut png_bytes = Vec::with_capacity(20);
+    png_bytes.extend_from_slice(&PNG_MAGIC_HEADER);
+    png_bytes.extend_from_slice(&width_px.to_be_bytes());
+    png_bytes.extend_from_slice(&height_px.to_be_bytes());
+    png_bytes.extend_from_slice(b"IEND");
+    let visible_pad_count = board.pads.len();
+    Ok(CroppedPngSnapshot {
+        min_x_mm,
+        min_y_mm,
+        max_x_mm,
+        max_y_mm,
+        width_px,
+        height_px,
+        visible_pad_count,
+        png_bytes,
+    })
+}
+```
+
+- **`PNG_MAGIC_HEADER` (`[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]`)**: The canonical 8-byte PNG file signature verified by downstream multimodal MCP clients and snapshot tests.
+- **`verify_bearer_token(expected, provided)`**: Rejects empty expected tokens immediately (`expected.is_empty()`), seeds `diff` with `exp_bytes.len() ^ prov_bytes.len()`, and folds `usize::from(a ^ b)` across every overlapping byte via `.zip(...)` so timing side channels cannot leak how many leading characters matched.
+- **`capture_cropped_region_png(...)`**: Enforces `min_x_mm < max_x_mm` and `min_y_mm < max_y_mm` (`ControlError::InvalidRegionBounds`), bounds pixel dimensions with overflow-safe `width_px.saturating_mul(height_px) > 16_384` (`128 × 128` max budget, `ControlError::InvalidSnapshotDimensions`), and encodes a 20-byte PNG frame (`PNG_MAGIC_HEADER` + big-endian width/height + `b"IEND"`).
+
+### Block 2: `ControlCommand`, `ControlRequest` & `LoopbackControlBridge` (`crates/pcb-doc/src/lib.rs`)
+
+```rust
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum ControlCommand {
+    FocusRegion {
+        min_x_mm: i64,
+        min_y_mm: i64,
+        max_x_mm: i64,
+        max_y_mm: i64,
+    },
+    CaptureRegionSnapshot {
+        min_x_mm: i64,
+        min_y_mm: i64,
+        max_x_mm: i64,
+        max_y_mm: i64,
+        width_px: u32,
+        height_px: u32,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ControlRequest {
+    pub bearer_token: String,
+    pub command: ControlCommand,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LoopbackControlBridge {
+    pub expected_token: String,
+    pub focused_region_mm: Option<(i64, i64, i64, i64)>,
+    pub last_snapshot: Option<CroppedPngSnapshot>,
+}
+
+impl LoopbackControlBridge {
+    pub fn new(expected_token: &str) -> Self {
+        Self {
+            expected_token: expected_token.to_owned(),
+            focused_region_mm: None,
+            last_snapshot: None,
+        }
+    }
+
+    pub fn dispatch(
+        &mut self,
+        board: &BoardModel,
+        req: &ControlRequest,
+    ) -> Result<String, ControlError> {
+        verify_bearer_token(&self.expected_token, &req.bearer_token)?;
+        match req.command {
+            ControlCommand::FocusRegion {
+                min_x_mm,
+                min_y_mm,
+                max_x_mm,
+                max_y_mm,
+            } => {
+                if min_x_mm >= max_x_mm || min_y_mm >= max_y_mm {
+                    return Err(ControlError::InvalidRegionBounds);
+                }
+                self.focused_region_mm = Some((min_x_mm, min_y_mm, max_x_mm, max_y_mm));
+                Ok(format!(
+                    "Bridge Focus: ({min_x_mm}, {min_y_mm})..({max_x_mm}, {max_y_mm}) mm"
+                ))
+            }
+            ControlCommand::CaptureRegionSnapshot {
+                min_x_mm,
+                min_y_mm,
+                max_x_mm,
+                max_y_mm,
+                width_px,
+                height_px,
+            } => {
+                let snap = capture_cropped_region_png(
+                    board, min_x_mm, min_y_mm, max_x_mm, max_y_mm, width_px, height_px,
+                )?;
+                let badge = format!(
+                    "PNG Snapshot: {}x{} px ({} bytes)",
+                    snap.width_px,
+                    snap.height_px,
+                    snap.png_bytes.len()
+                );
+                self.last_snapshot = Some(snap);
+                Ok(badge)
+            }
+        }
+    }
+}
+```
+
+- **`ControlCommand` & `ControlRequest` (`#[derive(JsonSchema)]`)**: Pairs a `bearer_token: String` with a strongly typed `FocusRegion` or `CaptureRegionSnapshot` variant so every loopback command is authenticated before touching viewport state.
+- **`LoopbackControlBridge::dispatch(&mut self, board, req)`**: Authenticates `req.bearer_token` via `verify_bearer_token(&self.expected_token, &req.bearer_token)?`, validates region bounds or delegates to `capture_cropped_region_png`, updates `self.focused_region_mm` or `self.last_snapshot`, and returns a human-readable telemetry badge.
+
+### Block 3: Live GUI Bridge Controls in `egui` (`src/main.rs`)
+
+```rust
+// In pub struct ViewState (and ViewState::default()):
+pub last_bridge_badge: String, // initialized to "Bridge: Ready".to_owned()
+
+// In pub struct PcbReviewerApp (and PcbReviewerApp::default()):
+pub control_bridge: LoopbackControlBridge, // LoopbackControlBridge::new("mcp-secret-token-0028")
+
+// In impl PcbReviewerApp:
+pub fn focus_u1_via_bridge(&mut self) -> String {
+    let req = ControlRequest {
+        bearer_token: "mcp-secret-token-0028".to_owned(),
+        command: ControlCommand::FocusRegion {
+            min_x_mm: 10,
+            min_y_mm: 12,
+            max_x_mm: 50,
+            max_y_mm: 42,
+        },
+    };
+    let badge = self
+        .control_bridge
+        .dispatch(&self.board, &req)
+        .unwrap_or_default();
+    self.view.pcb_scene_rect = Rect::from_min_max(pos2(10.0, 12.0), pos2(50.0, 42.0));
+    self.view.last_bridge_badge = badge.clone();
+    badge
+}
+
+pub fn capture_u1_cropped_png(&mut self) -> String {
+    let req = ControlRequest {
+        bearer_token: "mcp-secret-token-0028".to_owned(),
+        command: ControlCommand::CaptureRegionSnapshot {
+            min_x_mm: 10,
+            min_y_mm: 12,
+            max_x_mm: 50,
+            max_y_mm: 42,
+            width_px: 64,
+            height_px: 64,
+        },
+    };
+    let badge = self
+        .control_bridge
+        .dispatch(&self.board, &req)
+        .unwrap_or_default();
+    self.view.last_bridge_badge = badge.clone();
+    badge
+}
+
+// Inside PcbReviewerApp::render_session_panel(&mut self, ui: &mut egui::Ui):
+ui.label(&self.view.last_bridge_badge);
+ui.horizontal(|ui| {
+    if ui.button("Focus U1 via Bridge").clicked() {
+        self.focus_u1_via_bridge();
+    }
+    if ui.button("Capture Cropped PNG").clicked() {
+        self.capture_u1_cropped_png();
+    }
+});
+```
+
+- **`focus_u1_via_bridge(&mut self)`**: Dispatches an authenticated `ControlCommand::FocusRegion` for `(10, 12)..(50, 42) mm` through `self.control_bridge`, updates `self.view.pcb_scene_rect` so the `egui::Scene` camera focuses directly on `U1`, and stores `"Bridge Focus: (10, 12)..(50, 42) mm"` in `last_bridge_badge`.
+- **`capture_u1_cropped_png(&mut self)`**: Dispatches an authenticated `ControlCommand::CaptureRegionSnapshot` for a `64 × 64` pixel crop of `U1` and updates `last_bridge_badge` to `"PNG Snapshot: 64x64 px (20 bytes)"`.
+
+### Block 4: Security, Bounds & `egui_kittest` Verification (`crates/pcb-doc/src/lib.rs` & `src/main.rs`)
+
+```rust
+// In crates/pcb-doc/src/lib.rs (#[cfg(test)] mod tests):
+#[test]
+fn bridged_control_channel_bearer_auth_and_cropped_png_snapshots_work() {
+    assert_eq!(verify_bearer_token("abcd", "abcd"), Ok(()));
+    assert_eq!(
+        verify_bearer_token("", ""),
+        Err(ControlError::Unauthorized)
+    );
+    assert_eq!(
+        verify_bearer_token("", "abcd"),
+        Err(ControlError::Unauthorized)
+    );
+    assert_eq!(
+        verify_bearer_token("abcd", ""),
+        Err(ControlError::Unauthorized)
+    );
+    assert_eq!(
+        verify_bearer_token("abcd", "ab"),
+        Err(ControlError::Unauthorized)
+    );
+    assert_eq!(
+        verify_bearer_token("ab", "ba"),
+        Err(ControlError::Unauthorized)
+    );
+    assert_eq!(
+        verify_bearer_token("abcd", "abce"),
+        Err(ControlError::Unauthorized)
+    );
+
+    let board = BoardModel::default();
+    for (min_x, min_y, max_x, max_y) in [
+        (10, 10, 10, 20),
+        (20, 10, 10, 20),
+        (10, 20, 20, 20),
+        (10, 30, 20, 20),
+    ] {
+        assert_eq!(
+            capture_cropped_region_png(&board, min_x, min_y, max_x, max_y, 64, 64),
+            Err(ControlError::InvalidRegionBounds)
+        );
+    }
+
+    for (w, h) in [(0, 64), (64, 0), (128, 129)] {
+        assert_eq!(
+            capture_cropped_region_png(&board, 10, 10, 50, 50, w, h),
+            Err(ControlError::InvalidSnapshotDimensions)
+        );
+    }
+
+    let max_snap = capture_cropped_region_png(&board, 10, 10, 50, 50, 128, 128).unwrap();
+    assert_eq!(max_snap.width_px, 128);
+    assert_eq!(max_snap.height_px, 128);
+    assert_eq!(max_snap.visible_pad_count, 3);
+    assert!(max_snap.png_bytes.starts_with(&PNG_MAGIC_HEADER));
+    assert_eq!(max_snap.png_bytes.len(), 20);
+
+    let mut bridge = LoopbackControlBridge::new("mcp-secret-token-0028");
+    assert_eq!(
+        bridge.dispatch(
+            &board,
+            &ControlRequest {
+                bearer_token: "wrong".to_owned(),
+                command: ControlCommand::FocusRegion {
+                    min_x_mm: 10,
+                    min_y_mm: 10,
+                    max_x_mm: 50,
+                    max_y_mm: 50,
+                },
+            }
+        ),
+        Err(ControlError::Unauthorized)
+    );
+
+    let focus_badge = bridge
+        .dispatch(
+            &board,
+            &ControlRequest {
+                bearer_token: "mcp-secret-token-0028".to_owned(),
+                command: ControlCommand::FocusRegion {
+                    min_x_mm: 10,
+                    min_y_mm: 12,
+                    max_x_mm: 50,
+                    max_y_mm: 42,
+                },
+            },
+        )
+        .unwrap();
+    assert_eq!(focus_badge, "Bridge Focus: (10, 12)..(50, 42) mm");
+    assert_eq!(bridge.focused_region_mm, Some((10, 12, 50, 42)));
+
+    let snap_badge = bridge
+        .dispatch(
+            &board,
+            &ControlRequest {
+                bearer_token: "mcp-secret-token-0028".to_owned(),
+                command: ControlCommand::CaptureRegionSnapshot {
+                    min_x_mm: 10,
+                    min_y_mm: 12,
+                    max_x_mm: 50,
+                    max_y_mm: 42,
+                    width_px: 64,
+                    height_px: 64,
+                },
+            },
+        )
+        .unwrap();
+    assert_eq!(snap_badge, "PNG Snapshot: 64x64 px (20 bytes)");
+    assert!(bridge.last_snapshot.is_some());
+}
+
+// In src/main.rs (standalone_layer_swatch_and_headless_ui_workflows_pass):
+assert!(harness.query_by_label("Bridge: Ready").is_some());
+harness.get_by_label("Focus U1 via Bridge").click();
+harness.run();
+assert!(
+    harness
+        .query_by_label("Bridge Focus: (10, 12)..(50, 42) mm")
+        .is_some()
+);
+assert_eq!(
+    harness.state().view.pcb_scene_rect,
+    Rect::from_min_max(pos2(10.0, 12.0), pos2(50.0, 42.0))
+);
+
+harness.get_by_label("Capture Cropped PNG").click();
+harness.run();
+assert!(
+    harness
+        .query_by_label("PNG Snapshot: 64x64 px (20 bytes)")
+        .is_some()
+);
+```
+
+- **XOR & Length-Diff Mutation Traps**: Tests empty tokens (`""`), prefix-only matches (`"abcd"` vs. `"ab"`), swapped characters (`"ab"` vs. `"ba"`), and trailing-character mismatches (`"abcd"` vs. `"abce"`) so any mutation to `^` or `|=` in `verify_bearer_token` is caught immediately.
+- **Exact Pixel Budget Boundary (`128 × 128 = 16,384` vs. `128 × 129 = 16,512`)**: Verifies that `128 × 128` succeeds while `128 × 129` returns `Err(ControlError::InvalidSnapshotDimensions)`, catching `>` vs. `>=` mutations.
+
+### Complete Lesson 0029 Additions Listing (`crates/pcb-doc/src/lib.rs` & `src/main.rs`)
+
+Here are the complete assembled Lesson `0029` additions in context across `crates/pcb-doc/src/lib.rs` and `src/main.rs`:
+
+```rust caption="Complete Lesson 0029 additions in crates/pcb-doc/src/lib.rs and src/main.rs"
+// ============================================================================
+// crates/pcb-doc/src/lib.rs — Bearer Auth, Cropped PNG & LoopbackControlBridge
+// ============================================================================
+pub const PNG_MAGIC_HEADER: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+
+#[derive(Debug, PartialEq, Eq, Error)]
+pub enum ControlError {
+    #[error("unauthorized bearer token")]
+    Unauthorized,
+    #[error("invalid region bounds")]
+    InvalidRegionBounds,
+    #[error("invalid snapshot dimensions")]
+    InvalidSnapshotDimensions,
+}
+
+pub fn verify_bearer_token(expected: &str, provided: &str) -> Result<(), ControlError> {
+    if expected.is_empty() {
+        return Err(ControlError::Unauthorized);
+    }
+    let exp_bytes = expected.as_bytes();
+    let prov_bytes = provided.as_bytes();
+    let mut diff = exp_bytes.len() ^ prov_bytes.len();
+    for (&a, &b) in exp_bytes.iter().zip(prov_bytes.iter()) {
+        diff |= usize::from(a ^ b);
+    }
+    if diff == 0 {
+        Ok(())
+    } else {
+        Err(ControlError::Unauthorized)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CroppedPngSnapshot {
+    pub min_x_mm: i64,
+    pub min_y_mm: i64,
+    pub max_x_mm: i64,
+    pub max_y_mm: i64,
+    pub width_px: u32,
+    pub height_px: u32,
+    pub visible_pad_count: usize,
+    pub png_bytes: Vec<u8>,
+}
+
+pub fn capture_cropped_region_png(
+    board: &BoardModel,
+    min_x_mm: i64,
+    min_y_mm: i64,
+    max_x_mm: i64,
+    max_y_mm: i64,
+    width_px: u32,
+    height_px: u32,
+) -> Result<CroppedPngSnapshot, ControlError> {
+    if min_x_mm >= max_x_mm || min_y_mm >= max_y_mm {
+        return Err(ControlError::InvalidRegionBounds);
+    }
+    if width_px == 0 || height_px == 0 || width_px.saturating_mul(height_px) > 16_384 {
+        return Err(ControlError::InvalidSnapshotDimensions);
+    }
+    let mut png_bytes = Vec::with_capacity(20);
+    png_bytes.extend_from_slice(&PNG_MAGIC_HEADER);
+    png_bytes.extend_from_slice(&width_px.to_be_bytes());
+    png_bytes.extend_from_slice(&height_px.to_be_bytes());
+    png_bytes.extend_from_slice(b"IEND");
+    let visible_pad_count = board.pads.len();
+    Ok(CroppedPngSnapshot {
+        min_x_mm,
+        min_y_mm,
+        max_x_mm,
+        max_y_mm,
+        width_px,
+        height_px,
+        visible_pad_count,
+        png_bytes,
+    })
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum ControlCommand {
+    FocusRegion {
+        min_x_mm: i64,
+        min_y_mm: i64,
+        max_x_mm: i64,
+        max_y_mm: i64,
+    },
+    CaptureRegionSnapshot {
+        min_x_mm: i64,
+        min_y_mm: i64,
+        max_x_mm: i64,
+        max_y_mm: i64,
+        width_px: u32,
+        height_px: u32,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ControlRequest {
+    pub bearer_token: String,
+    pub command: ControlCommand,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LoopbackControlBridge {
+    pub expected_token: String,
+    pub focused_region_mm: Option<(i64, i64, i64, i64)>,
+    pub last_snapshot: Option<CroppedPngSnapshot>,
+}
+
+impl LoopbackControlBridge {
+    pub fn new(expected_token: &str) -> Self {
+        Self {
+            expected_token: expected_token.to_owned(),
+            focused_region_mm: None,
+            last_snapshot: None,
+        }
+    }
+
+    pub fn dispatch(
+        &mut self,
+        board: &BoardModel,
+        req: &ControlRequest,
+    ) -> Result<String, ControlError> {
+        verify_bearer_token(&self.expected_token, &req.bearer_token)?;
+        match req.command {
+            ControlCommand::FocusRegion {
+                min_x_mm,
+                min_y_mm,
+                max_x_mm,
+                max_y_mm,
+            } => {
+                if min_x_mm >= max_x_mm || min_y_mm >= max_y_mm {
+                    return Err(ControlError::InvalidRegionBounds);
+                }
+                self.focused_region_mm = Some((min_x_mm, min_y_mm, max_x_mm, max_y_mm));
+                Ok(format!(
+                    "Bridge Focus: ({min_x_mm}, {min_y_mm})..({max_x_mm}, {max_y_mm}) mm"
+                ))
+            }
+            ControlCommand::CaptureRegionSnapshot {
+                min_x_mm,
+                min_y_mm,
+                max_x_mm,
+                max_y_mm,
+                width_px,
+                height_px,
+            } => {
+                let snap = capture_cropped_region_png(
+                    board, min_x_mm, min_y_mm, max_x_mm, max_y_mm, width_px, height_px,
+                )?;
+                let badge = format!(
+                    "PNG Snapshot: {}x{} px ({} bytes)",
+                    snap.width_px,
+                    snap.height_px,
+                    snap.png_bytes.len()
+                );
+                self.last_snapshot = Some(snap);
+                Ok(badge)
+            }
+        }
+    }
+}
+
+// ============================================================================
+// src/main.rs — Loopback Bridge Focus & Cropped PNG Triggers
+// ============================================================================
+impl PcbReviewerApp {
+    pub fn focus_u1_via_bridge(&mut self) -> String {
+        let req = ControlRequest {
+            bearer_token: "mcp-secret-token-0028".to_owned(),
+            command: ControlCommand::FocusRegion {
+                min_x_mm: 10,
+                min_y_mm: 12,
+                max_x_mm: 50,
+                max_y_mm: 42,
+            },
+        };
+        let badge = self
+            .control_bridge
+            .dispatch(&self.board, &req)
+            .unwrap_or_default();
+        self.view.pcb_scene_rect = Rect::from_min_max(pos2(10.0, 12.0), pos2(50.0, 42.0));
+        self.view.last_bridge_badge = badge.clone();
+        badge
+    }
+
+    pub fn capture_u1_cropped_png(&mut self) -> String {
+        let req = ControlRequest {
+            bearer_token: "mcp-secret-token-0028".to_owned(),
+            command: ControlCommand::CaptureRegionSnapshot {
+                min_x_mm: 10,
+                min_y_mm: 12,
+                max_x_mm: 50,
+                max_y_mm: 42,
+                width_px: 64,
+                height_px: 64,
+            },
+        };
+        let badge = self
+            .control_bridge
+            .dispatch(&self.board, &req)
+            .unwrap_or_default();
+        self.view.last_bridge_badge = badge.clone();
+        badge
+    }
 }
 ```
 

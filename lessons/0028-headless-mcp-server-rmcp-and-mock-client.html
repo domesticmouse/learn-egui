@@ -98,14 +98,28 @@ turso_parser = "=0.8.1"
 [dev-dependencies]
 proptest = "1.11"</code></pre>
 </figure>
-<figure>
-  <figcaption>PcbMcpServer with #[tool_router], kicad:// resources, and review prompts in crates/pcb-doc/src/lib.rs</figcaption>
-  <pre><code class="language-rust">use rmcp::{
+<p>Let's walk through the <code>PcbMcpServer</code> implementation and its <code>egui</code> integration block by block, then inspect the complete assembled listings.</p>
+<h3 id="block-1-pcbmcpserver-amp-tool-router-mcp-tools-crates-pcb-doc-src-lib-rs">Block 1: <code>PcbMcpServer</code> &amp; <code>#[tool_router]</code> MCP Tools (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">pub use rmcp::{
     ClientHandler, Json, ServerHandler, ServiceExt,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{CallToolRequestParams, Tool},
     tool, tool_handler, tool_router,
 };
+
+#[derive(Debug, PartialEq, Eq, Error)]
+pub enum McpServerError {
+    #[error("unknown MCP resource URI: `{0}`")]
+    UnknownResource(String),
+    #[error("unknown MCP prompt name: `{0}`")]
+    UnknownPrompt(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AddPinToolParams {
+    pub x_mm: f32,
+    pub y_mm: f32,
+}
 
 #[derive(Clone, Debug)]
 pub struct PcbMcpServer {
@@ -114,8 +128,490 @@ pub struct PcbMcpServer {
     tool_router: ToolRouter&lt;Self&gt;,
 }
 
+#[tool_router(router = tool_router)]
+impl PcbMcpServer {
+    pub fn new(board_id: &amp;str, board: BoardModel) -&gt; Self {
+        Self {
+            board_id: board_id.to_owned(),
+            board: Arc::new(std::sync::Mutex::new(board)),
+            tool_router: Self::tool_router(),
+        }
+    }
+
+    #[tool(
+        name = "pcb_query_spatial",
+        description = "Query pads and components within a radius of a target component"
+    )]
+    pub async fn pcb_query_spatial(
+        &amp;self,
+        Parameters(params): Parameters&lt;SpatialQueryParams&gt;,
+    ) -&gt; Result&lt;Json&lt;SpatialNeighborhoodReport&gt;, String&gt; {
+        let guard = self
+            .board
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard
+            .query_spatial_neighborhood(&amp;params)
+            .map(Json)
+            .map_err(|e| e.to_string())
+    }
+
+    #[tool(
+        name = "pcb_run_custom_drc",
+        description = "Run parameterized clearance and trace width DRC on the active board"
+    )]
+    pub async fn pcb_run_custom_drc(
+        &amp;self,
+        Parameters(params): Parameters&lt;CustomDrcParams&gt;,
+    ) -&gt; Result&lt;Json&lt;CustomDrcReport&gt;, String&gt; {
+        let guard = self
+            .board
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard
+            .run_custom_drc(&amp;params)
+            .map(Json)
+            .map_err(|e| e.to_string())
+    }
+
+    #[tool(
+        name = "pcb_add_review_pin",
+        description = "Drop a review pin on the board at (x_mm, y_mm)"
+    )]
+    pub async fn pcb_add_review_pin(
+        &amp;self,
+        Parameters(params): Parameters&lt;AddPinToolParams&gt;,
+    ) -&gt; Result&lt;Json&lt;u32&gt;, String&gt; {
+        let mut guard = self
+            .board
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let id = guard.add_review_pin_at(
+            pos2(params.x_mm, params.y_mm),
+            "@mcp-agent",
+            "MCP automated review pin",
+            PinSeverity::Warning,
+        );
+        Ok(Json(id.0))
+    }
+}</code></pre>
+<ul>
+<li><strong><code>PcbMcpServer</code> &amp; <code>Arc&lt;std::sync::Mutex&lt;BoardModel&gt;&gt;</code></strong>: Wraps our Copy-on-Write <code>BoardModel</code> in an <code>Arc&lt;Mutex&lt;...&gt;&gt;</code> alongside <code>tool_router: ToolRouter&lt;Self&gt;</code> so async MCP tool handlers can safely read or mutate the board across tasks without <code>.unwrap()</code> (recovering gracefully via <code>PoisonError::into_inner</code>).</li>
+<li><strong><code>#[tool_router(router = tool_router)]</code></strong>: An <code>rmcp</code> procedural macro that scans the <code>impl PcbMcpServer</code> block for <code>#[tool(...)]</code> methods and generates <code>Self::tool_router()</code>, registering each tool's name, description, and <code>schemars</code> parameter schema.</li>
+<li><strong><code>Parameters&lt;T&gt;</code> &amp; <code>Json&lt;R&gt;</code> Wrappers</strong>: <code>Parameters(params)</code> automatically deserializes incoming JSON-RPC tool arguments into our strongly typed <code>SpatialQueryParams</code>, <code>CustomDrcParams</code>, and <code>AddPinToolParams</code> structs, while <code>Json(...)</code> serializes the typed Rust return value into an MCP tool result payload.</li>
+</ul>
+<h3 id="block-2-kicad-resources-review-prompts-amp-tokio-io-duplex-round-trip-crates-pcb-doc-src-lib-rs">Block 2: <code>kicad://</code> Resources, Review Prompts &amp; <code>tokio::io::duplex</code> Round-Trip (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">impl PcbMcpServer {
+    pub fn read_kicad_resource(&amp;self, uri: &amp;str) -&gt; Result&lt;String, McpServerError&gt; {
+        let guard = self
+            .board
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match uri.trim() {
+            "kicad://board/summary" =&gt; Ok(format!(
+                "Board [{}]: {} comps, {} pads, {} traces, {} pins",
+                self.board_id,
+                guard.components.len(),
+                guard.pads.len(),
+                guard.traces.len(),
+                guard.review_pins.len()
+            )),
+            "kicad://bom" =&gt; {
+                let refs: Vec&lt;&amp;str&gt; = guard
+                    .components
+                    .iter()
+                    .map(|c| c.ref_des.as_str())
+                    .collect();
+                Ok(format!("BOM [{}]: {}", self.board_id, refs.join(", ")))
+            }
+            other =&gt; Err(McpServerError::UnknownResource(other.to_owned())),
+        }
+    }
+
+    pub fn build_review_prompt(&amp;self, prompt_name: &amp;str) -&gt; Result&lt;String, McpServerError&gt; {
+        let summary = self
+            .read_kicad_resource("kicad://board/summary")
+            .unwrap_or_default();
+        match prompt_name.trim() {
+            "review_power_integrity" =&gt; {
+                Ok(format!("Prompt [review_power_integrity] -&gt; {summary}"))
+            }
+            "triage_open_drc" =&gt; Ok(format!("Prompt [triage_open_drc] -&gt; {summary}")),
+            other =&gt; Err(McpServerError::UnknownPrompt(other.to_owned())),
+        }
+    }
+}
+
 #[tool_handler(router = self.tool_router)]
-impl ServerHandler for PcbMcpServer {}</code></pre>
+impl ServerHandler for PcbMcpServer {}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MockMcpClient;
+
+impl ClientHandler for MockMcpClient {}
+
+pub async fn run_duplex_mcp_roundtrip() -&gt; Result&lt;usize, String&gt; {
+    let (server_io, client_io) = tokio::io::duplex(4096);
+    let server = PcbMcpServer::new("pwr-stage-rev-b", BoardModel::default());
+    let server_task = tokio::spawn(async move {
+        if let Ok(running) = server.serve(server_io).await {
+            let _ = running.waiting().await;
+        }
+    });
+    let client = MockMcpClient
+        .serve(client_io)
+        .await
+        .map_err(|e| e.to_string())?;
+    let tools = client.list_all_tools().await.map_err(|e| e.to_string())?;
+    let count = tools.len();
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    Ok(count)
+}</code></pre>
+<ul>
+<li><strong><code>read_kicad_resource</code> &amp; <code>build_review_prompt</code></strong>: Serves read-only <code>&quot;kicad://board/summary&quot;</code> and <code>&quot;kicad://bom&quot;</code> resource URIs plus <code>&quot;review_power_integrity&quot;</code> and <code>&quot;triage_open_drc&quot;</code> review prompt templates, returning typed <code>McpServerError::UnknownResource</code> or <code>UnknownPrompt</code> errors on unrecognized inputs.</li>
+<li><strong><code>#[tool_handler(router = self.tool_router)] impl ServerHandler for PcbMcpServer {}</code></strong>: Connects <code>self.tool_router</code> to <code>rmcp::ServerHandler</code>, automatically implementing JSON-RPC <code>tools/list</code> and <code>tools/call</code> dispatch.</li>
+<li><strong><code>MockMcpClient</code> &amp; <code>run_duplex_mcp_roundtrip()</code></strong>: Uses <code>tokio::io::duplex(4096)</code> to create a 4 KB in-memory bidirectional pipe, spawns <code>server.serve(server_io)</code> on a background task, connects <code>MockMcpClient.serve(client_io)</code>, and calls <code>client.list_all_tools().await</code> to verify the full MCP handshake without opening OS network sockets.</li>
+</ul>
+<h3 id="block-3-headless-mcp-preview-controls-in-egui-src-main-rs">Block 3: Headless MCP Preview Controls in <code>egui</code> (<code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">// In pub struct ViewState (and ViewState::default()):
+pub last_mcp_status_badge: String, // initialized to "MCP Server: Ready".to_owned()
+
+// In impl PcbReviewerApp:
+pub fn inspect_mcp_board_summary(&amp;mut self) -&gt; String {
+    let server = PcbMcpServer::new(&amp;self.view.active_board_id, self.board.clone());
+    let badge = server
+        .read_kicad_resource("kicad://board/summary")
+        .unwrap_or_default();
+    self.view.last_mcp_status_badge = badge.clone();
+    badge
+}
+
+pub fn run_mcp_power_prompt(&amp;mut self) -&gt; String {
+    let server = PcbMcpServer::new(&amp;self.view.active_board_id, self.board.clone());
+    let badge = server
+        .build_review_prompt("review_power_integrity")
+        .unwrap_or_default();
+    self.view.last_mcp_status_badge = badge.clone();
+    badge
+}
+
+// Inside PcbReviewerApp::render_session_panel(&amp;mut self, ui: &amp;mut egui::Ui):
+ui.label(&amp;self.view.last_mcp_status_badge);
+ui.horizontal(|ui| {
+    if ui.button("MCP Board Summary").clicked() {
+        self.inspect_mcp_board_summary();
+    }
+    if ui.button("MCP Power Prompt").clicked() {
+        self.run_mcp_power_prompt();
+    }
+});</code></pre>
+<ul>
+<li><strong><code>inspect_mcp_board_summary</code> &amp; <code>run_mcp_power_prompt</code></strong>: Instantiates <code>PcbMcpServer</code> over an <code>O(1)</code> <code>Arc</code> clone of <code>self.board</code>, queries <code>&quot;kicad://board/summary&quot;</code> or <code>&quot;review_power_integrity&quot;</code>, and updates <code>self.view.last_mcp_status_badge</code>.</li>
+<li><strong><code>&quot;MCP Board Summary&quot;</code> &amp; <code>&quot;MCP Power Prompt&quot;</code> UI Buttons</strong>: Exposes one-click MCP resource and prompt inspection directly inside <code>render_session_panel</code>.</li>
+</ul>
+<h3 id="block-4-async-duplex-round-trip-amp-egui-kittest-verification-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Block 4: Async Duplex Round-Trip &amp; <code>egui_kittest</code> Verification (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">// In crates/pcb-doc/src/lib.rs (#[cfg(test)] mod tests):
+#[tokio::test]
+async fn rmcp_headless_server_duplex_client_resources_and_prompts_work() {
+    let tool_count = run_duplex_mcp_roundtrip().await.unwrap();
+    assert_eq!(tool_count, 3);
+
+    let (server_io, client_io) = tokio::io::duplex(4096);
+    let server = PcbMcpServer::new("pwr-stage-rev-b", BoardModel::default());
+    let server_clone = server.clone();
+    let server_task = tokio::spawn(async move {
+        if let Ok(running) = server_clone.serve(server_io).await {
+            let _ = running.waiting().await;
+        }
+    });
+    let client = MockMcpClient.serve(client_io).await.unwrap();
+    let tools = client.list_all_tools().await.unwrap();
+    let names: Vec&lt;&amp;str&gt; = tools.iter().map(|t| t.name.as_ref()).collect();
+    assert!(names.contains(&amp;"pcb_query_spatial"));
+    assert!(names.contains(&amp;"pcb_run_custom_drc"));
+    assert!(names.contains(&amp;"pcb_add_review_pin"));
+
+    let spatial_res = server
+        .pcb_query_spatial(Parameters(SpatialQueryParams {
+            ref_des: "U1".to_owned(),
+            radius_mm: 15.0,
+        }))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(spatial_res.nearby_pads, 2);
+
+    let drc_res = server
+        .pcb_run_custom_drc(Parameters(CustomDrcParams {
+            min_clearance_mm: 8.0,
+            min_copper_width_mm: 0.5,
+        }))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(drc_res.clearance_violations, 1);
+
+    let pin_res = server
+        .pcb_add_review_pin(Parameters(AddPinToolParams {
+            x_mm: 42.0,
+            y_mm: 36.0,
+        }))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(pin_res, 3);
+
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+
+    assert_eq!(
+        server.read_kicad_resource("kicad://board/summary").unwrap(),
+        "Board [pwr-stage-rev-b]: 3 comps, 3 pads, 6 traces, 3 pins"
+    );
+    assert_eq!(
+        server.read_kicad_resource("kicad://bom").unwrap(),
+        "BOM [pwr-stage-rev-b]: U1, R12, J1"
+    );
+    assert_eq!(
+        server.read_kicad_resource("kicad://unknown"),
+        Err(McpServerError::UnknownResource(
+            "kicad://unknown".to_owned()
+        ))
+    );
+
+    assert_eq!(
+        server
+            .build_review_prompt("review_power_integrity")
+            .unwrap(),
+        "Prompt [review_power_integrity] -&gt; Board [pwr-stage-rev-b]: 3 comps, 3 pads, 6 traces, 3 pins"
+    );
+    assert_eq!(
+        server.build_review_prompt("triage_open_drc").unwrap(),
+        "Prompt [triage_open_drc] -&gt; Board [pwr-stage-rev-b]: 3 comps, 3 pads, 6 traces, 3 pins"
+    );
+    assert_eq!(
+        server.build_review_prompt("unknown_prompt"),
+        Err(McpServerError::UnknownPrompt("unknown_prompt".to_owned()))
+    );
+}
+
+// In src/main.rs (standalone_layer_swatch_and_headless_ui_workflows_pass):
+assert!(harness.query_by_label("MCP Server: Ready").is_some());
+harness.get_by_label("MCP Board Summary").click();
+harness.run();
+assert!(
+    harness
+        .query_by_label("Board [pwr-stage-rev-b]: 3 comps, 3 pads, 6 traces, 2 pins")
+        .is_some()
+);
+
+harness.get_by_label("MCP Power Prompt").click();
+harness.run();
+assert!(
+    harness
+        .query_by_label(
+            "Prompt [review_power_integrity] -&gt; Board [pwr-stage-rev-b]: 3 comps, 3 pads, 6 traces, 2 pins"
+        )
+        .is_some()
+);</code></pre>
+<ul>
+<li><strong><code>#[tokio::test]</code> Duplex Verification</strong>: Asserts that <code>run_duplex_mcp_roundtrip()</code> discovers all 3 <code>#[tool]</code> methods over <code>tokio::io::duplex(4096)</code>, verifies <code>pcb_query_spatial</code>, <code>pcb_run_custom_drc</code>, and <code>pcb_add_review_pin</code> mutations on the shared <code>Arc&lt;Mutex&lt;BoardModel&gt;&gt;</code>, and checks every resource and prompt match arm.</li>
+<li><strong>Headless UI Verification</strong>: Uses <code>egui_kittest::Harness</code> to click <code>&quot;MCP Board Summary&quot;</code> and <code>&quot;MCP Power Prompt&quot;</code> and verify the resulting status badges in the UI tree.</li>
+</ul>
+<h3 id="complete-lesson-0028-additions-listing-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Complete Lesson 0028 Additions Listing (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<p>Here are the complete assembled Lesson <code>0028</code> additions in context across <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code>:</p>
+<figure>
+  <figcaption>Complete Lesson 0028 additions in crates/pcb-doc/src/lib.rs and src/main.rs</figcaption>
+  <pre><code class="language-rust">// ============================================================================
+// crates/pcb-doc/src/lib.rs — PcbMcpServer, Resources, Prompts &amp; Duplex Client
+// ============================================================================
+pub use rmcp::{
+    ClientHandler, Json, ServerHandler, ServiceExt,
+    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
+    model::{CallToolRequestParams, Tool},
+    tool, tool_handler, tool_router,
+};
+
+#[derive(Debug, PartialEq, Eq, Error)]
+pub enum McpServerError {
+    #[error("unknown MCP resource URI: `{0}`")]
+    UnknownResource(String),
+    #[error("unknown MCP prompt name: `{0}`")]
+    UnknownPrompt(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AddPinToolParams {
+    pub x_mm: f32,
+    pub y_mm: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct PcbMcpServer {
+    pub board_id: String,
+    pub board: Arc&lt;std::sync::Mutex&lt;BoardModel&gt;&gt;,
+    tool_router: ToolRouter&lt;Self&gt;,
+}
+
+#[tool_router(router = tool_router)]
+impl PcbMcpServer {
+    pub fn new(board_id: &amp;str, board: BoardModel) -&gt; Self {
+        Self {
+            board_id: board_id.to_owned(),
+            board: Arc::new(std::sync::Mutex::new(board)),
+            tool_router: Self::tool_router(),
+        }
+    }
+
+    #[tool(
+        name = "pcb_query_spatial",
+        description = "Query pads and components within a radius of a target component"
+    )]
+    pub async fn pcb_query_spatial(
+        &amp;self,
+        Parameters(params): Parameters&lt;SpatialQueryParams&gt;,
+    ) -&gt; Result&lt;Json&lt;SpatialNeighborhoodReport&gt;, String&gt; {
+        let guard = self
+            .board
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard
+            .query_spatial_neighborhood(&amp;params)
+            .map(Json)
+            .map_err(|e| e.to_string())
+    }
+
+    #[tool(
+        name = "pcb_run_custom_drc",
+        description = "Run parameterized clearance and trace width DRC on the active board"
+    )]
+    pub async fn pcb_run_custom_drc(
+        &amp;self,
+        Parameters(params): Parameters&lt;CustomDrcParams&gt;,
+    ) -&gt; Result&lt;Json&lt;CustomDrcReport&gt;, String&gt; {
+        let guard = self
+            .board
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard
+            .run_custom_drc(&amp;params)
+            .map(Json)
+            .map_err(|e| e.to_string())
+    }
+
+    #[tool(
+        name = "pcb_add_review_pin",
+        description = "Drop a review pin on the board at (x_mm, y_mm)"
+    )]
+    pub async fn pcb_add_review_pin(
+        &amp;self,
+        Parameters(params): Parameters&lt;AddPinToolParams&gt;,
+    ) -&gt; Result&lt;Json&lt;u32&gt;, String&gt; {
+        let mut guard = self
+            .board
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let id = guard.add_review_pin_at(
+            pos2(params.x_mm, params.y_mm),
+            "@mcp-agent",
+            "MCP automated review pin",
+            PinSeverity::Warning,
+        );
+        Ok(Json(id.0))
+    }
+}
+
+impl PcbMcpServer {
+    pub fn read_kicad_resource(&amp;self, uri: &amp;str) -&gt; Result&lt;String, McpServerError&gt; {
+        let guard = self
+            .board
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match uri.trim() {
+            "kicad://board/summary" =&gt; Ok(format!(
+                "Board [{}]: {} comps, {} pads, {} traces, {} pins",
+                self.board_id,
+                guard.components.len(),
+                guard.pads.len(),
+                guard.traces.len(),
+                guard.review_pins.len()
+            )),
+            "kicad://bom" =&gt; {
+                let refs: Vec&lt;&amp;str&gt; = guard
+                    .components
+                    .iter()
+                    .map(|c| c.ref_des.as_str())
+                    .collect();
+                Ok(format!("BOM [{}]: {}", self.board_id, refs.join(", ")))
+            }
+            other =&gt; Err(McpServerError::UnknownResource(other.to_owned())),
+        }
+    }
+
+    pub fn build_review_prompt(&amp;self, prompt_name: &amp;str) -&gt; Result&lt;String, McpServerError&gt; {
+        let summary = self
+            .read_kicad_resource("kicad://board/summary")
+            .unwrap_or_default();
+        match prompt_name.trim() {
+            "review_power_integrity" =&gt; {
+                Ok(format!("Prompt [review_power_integrity] -&gt; {summary}"))
+            }
+            "triage_open_drc" =&gt; Ok(format!("Prompt [triage_open_drc] -&gt; {summary}")),
+            other =&gt; Err(McpServerError::UnknownPrompt(other.to_owned())),
+        }
+    }
+}
+
+#[tool_handler(router = self.tool_router)]
+impl ServerHandler for PcbMcpServer {}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MockMcpClient;
+
+impl ClientHandler for MockMcpClient {}
+
+pub async fn run_duplex_mcp_roundtrip() -&gt; Result&lt;usize, String&gt; {
+    let (server_io, client_io) = tokio::io::duplex(4096);
+    let server = PcbMcpServer::new("pwr-stage-rev-b", BoardModel::default());
+    let server_task = tokio::spawn(async move {
+        if let Ok(running) = server.serve(server_io).await {
+            let _ = running.waiting().await;
+        }
+    });
+    let client = MockMcpClient
+        .serve(client_io)
+        .await
+        .map_err(|e| e.to_string())?;
+    let tools = client.list_all_tools().await.map_err(|e| e.to_string())?;
+    let count = tools.len();
+    let _ = client.cancel().await;
+    let _ = server_task.await;
+    Ok(count)
+}
+
+// ============================================================================
+// src/main.rs — Headless MCP Server Preview Integration
+// ============================================================================
+impl PcbReviewerApp {
+    pub fn inspect_mcp_board_summary(&amp;mut self) -&gt; String {
+        let server = PcbMcpServer::new(&amp;self.view.active_board_id, self.board.clone());
+        let badge = server
+            .read_kicad_resource("kicad://board/summary")
+            .unwrap_or_default();
+        self.view.last_mcp_status_badge = badge.clone();
+        badge
+    }
+
+    pub fn run_mcp_power_prompt(&amp;mut self) -&gt; String {
+        let server = PcbMcpServer::new(&amp;self.view.active_board_id, self.board.clone());
+        let badge = server
+            .build_review_prompt("review_power_integrity")
+            .unwrap_or_default();
+        self.view.last_mcp_status_badge = badge.clone();
+        badge
+    }
+}</code></pre>
 </figure>
 </div>
 

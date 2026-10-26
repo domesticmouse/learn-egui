@@ -97,15 +97,45 @@ turso_parser = "=0.8.1"
 proptest = "1.11"
 tokio = { version = "1", features = ["rt", "macros"] }</code></pre>
 </figure>
-<p>By deriving <code>schemars::JsonSchema</code> alongside <code>Serialize</code> and <code>Deserialize</code>, Rust generates a standard JSON Schema 2020-12 specification via <code>schemars::schema_for!(SpatialQueryParams)</code> that MCP servers (<code>rmcp</code>) advertise directly to AI agents:</p>
-<figure>
-  <figcaption>Typed spatial, net-topology, and custom DRC queries in crates/pcb-doc/src/lib.rs</figcaption>
-  <pre><code class="language-rust">use schemars::{JsonSchema, schema_for};
+<p>By deriving <code>schemars::JsonSchema</code> alongside <code>Serialize</code> and <code>Deserialize</code>, Rust generates a standard JSON Schema 2020-12 specification via <code>schemars::schema_for!(SpatialQueryParams)</code> that MCP servers (<code>rmcp</code>) advertise directly to AI agents. Rather than reading all of the new <code>pcb-doc</code> and <code>src/main.rs</code> additions at once, let's unpack them block by block before viewing the complete assembled listings.</p>
+<h3 id="block-1-schemars-jsonschema-query-contracts-amp-error-types-crates-pcb-doc-src-lib-rs">Block 1: <code>schemars::JsonSchema</code> Query Contracts &amp; Error Types (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">pub use schemars::{self, JsonSchema, schema_for};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct NetId(pub u32);
+
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum AgentQueryError {
+    #[error("component ref_des must not be empty")]
+    EmptyRefDes,
+    #[error("unknown component `{0}`")]
+    UnknownComponent(String),
+    #[error("search radius_mm must be &gt; 0.0")]
+    NonPositiveRadius,
+    #[error("custom DRC thresholds must be &gt; 0.0")]
+    InvalidDrcThreshold,
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SpatialQueryParams {
     pub ref_des: String,
     pub radius_mm: f32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SpatialNeighborhoodReport {
+    pub ref_des: String,
+    pub nearby_pads: usize,
+    pub nearby_components: usize,
+}
+
+impl SpatialNeighborhoodReport {
+    pub fn summary_badge(&amp;self) -&gt; String {
+        format!(
+            "Spatial [{}]: {} pads, {} comps",
+            self.ref_des, self.nearby_pads, self.nearby_components
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -117,8 +147,584 @@ pub struct NetTopologyReport {
     pub connected_refs: Vec&lt;String&gt;,
 }
 
+impl NetTopologyReport {
+    pub fn summary_badge(&amp;self) -&gt; String {
+        format!(
+            "Topology [{}]: {} pads, {} traces ({} refs)",
+            self.signal_name,
+            self.pad_count,
+            self.trace_count,
+            self.connected_refs.len()
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CustomDrcParams {
+    pub min_clearance_mm: f32,
+    pub min_copper_width_mm: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CustomDrcReport {
+    pub clearance_violations: usize,
+    pub narrow_traces: usize,
+}
+
+impl CustomDrcReport {
+    pub fn is_clean(&amp;self) -&gt; bool {
+        self.clearance_violations == 0 &amp;&amp; self.narrow_traces == 0
+    }
+
+    pub fn summary_badge(&amp;self) -&gt; String {
+        let status = if self.is_clean() { "CLEAN" } else { "FAIL" };
+        format!(
+            "Custom DRC [{status}]: {} gap, {} width",
+            self.clearance_violations, self.narrow_traces
+        )
+    }
+}
+
 pub fn spatial_query_json_schema() -&gt; serde_json::Value {
     serde_json::to_value(schema_for!(SpatialQueryParams)).unwrap_or_default()
+}</code></pre>
+<ul>
+<li><strong><code>#[derive(JsonSchema)]</code> on <code>NetId</code>, <code>SpatialQueryParams</code>, <code>NetTopologyReport</code>, <code>CustomDrcParams</code>, and <code>CustomDrcReport</code></strong>: Instructs <a href="https://docs.rs/schemars/latest/schemars/"><code>schemars</code></a> to generate compile-time JSON Schema 2020-12 metadata for every parameter and report struct, including nested newtypes like <code>NetId(pub u32)</code>.</li>
+<li><strong><code>AgentQueryError</code> (<code>#[derive(Error)]</code>)</strong>: Provides panic-free, deterministic error variants (<code>EmptyRefDes</code>, <code>UnknownComponent</code>, <code>NonPositiveRadius</code>, <code>InvalidDrcThreshold</code>) whenever an LLM passes blank reference designators, non-existent components, or non-positive millimetre thresholds.</li>
+<li><strong><code>summary_badge(&amp;self)</code> &amp; <code>CustomDrcReport::is_clean(&amp;self)</code></strong>: Formats compact, deterministic telemetry strings (<code>&quot;Spatial [U1]: 2 pads, 0 comps&quot;</code>, <code>&quot;Topology [VCC_3V3]: 1 pads, 3 traces (2 refs)&quot;</code>, <code>&quot;Custom DRC [FAIL]: 1 gap, 0 width&quot;</code>) that both the <code>egui</code> inspector panel and <code>egui_kittest</code> assertions verify.</li>
+<li><strong><code>spatial_query_json_schema()</code></strong>: Calls <code>schema_for!(SpatialQueryParams)</code> and converts the resulting <code>Schema</code> into a <code>serde_json::Value</code> so unit tests and MCP tool registries can inspect <code>&quot;title&quot;</code>, <code>&quot;type&quot;: &quot;object&quot;</code>, and required <code>&quot;properties&quot;</code>.</li>
+</ul>
+<h3 id="block-2-spatial-neighborhood-net-topology-amp-custom-drc-engine-methods-crates-pcb-doc-src-lib-rs">Block 2: Spatial Neighborhood, Net Topology &amp; Custom DRC Engine Methods (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">impl BoardModel {
+    pub fn query_spatial_neighborhood(
+        &amp;self,
+        params: &amp;SpatialQueryParams,
+    ) -&gt; Result&lt;SpatialNeighborhoodReport, AgentQueryError&gt; {
+        let trimmed = params.ref_des.trim();
+        if trimmed.is_empty() {
+            return Err(AgentQueryError::EmptyRefDes);
+        }
+        if params.radius_mm &lt;= 0.0 {
+            return Err(AgentQueryError::NonPositiveRadius);
+        }
+        let Some(anchor) = self.find_component(trimmed) else {
+            return Err(AgentQueryError::UnknownComponent(trimmed.to_owned()));
+        };
+        let nearby_pads = self
+            .pads
+            .iter()
+            .filter(|p| (p.center_mm - anchor.center_mm).length() &lt;= params.radius_mm)
+            .count();
+        let nearby_components = self
+            .components
+            .iter()
+            .filter(|c| {
+                c.ref_des != anchor.ref_des
+                    &amp;&amp; (c.center_mm - anchor.center_mm).length() &lt;= params.radius_mm
+            })
+            .count();
+        Ok(SpatialNeighborhoodReport {
+            ref_des: anchor.ref_des.clone(),
+            nearby_pads,
+            nearby_components,
+        })
+    }
+
+    pub fn query_net_topology(&amp;self, net: NetId) -&gt; NetTopologyReport {
+        let pad_count = self.pads.iter().filter(|p| p.net == net).count();
+        let trace_count = self.traces.iter().filter(|t| t.net == Some(net)).count();
+        let mut connected_refs: Vec&lt;String&gt; = self
+            .components
+            .iter()
+            .filter(|c| c.primary_net == net)
+            .map(|c| c.ref_des.clone())
+            .collect();
+        connected_refs.sort();
+        NetTopologyReport {
+            net,
+            signal_name: net.signal_name().to_owned(),
+            pad_count,
+            trace_count,
+            connected_refs,
+        }
+    }
+
+    pub fn run_custom_drc(
+        &amp;self,
+        params: &amp;CustomDrcParams,
+    ) -&gt; Result&lt;CustomDrcReport, AgentQueryError&gt; {
+        if params.min_clearance_mm &lt;= 0.0 || params.min_copper_width_mm &lt;= 0.0 {
+            return Err(AgentQueryError::InvalidDrcThreshold);
+        }
+        let clearance_violations = self
+            .detect_pad_clearance_violations(params.min_clearance_mm)
+            .len();
+        let narrow_traces = self
+            .traces
+            .iter()
+            .filter(|t| {
+                matches!(t.layer, PcbLayer::TopCopper | PcbLayer::BottomCopper)
+                    &amp;&amp; t.width_mm &lt; params.min_copper_width_mm
+            })
+            .count();
+        Ok(CustomDrcReport {
+            clearance_violations,
+            narrow_traces,
+        })
+    }
+}</code></pre>
+<ul>
+<li><strong><code>query_spatial_neighborhood(&amp;self, params: &amp;SpatialQueryParams)</code></strong>: Trims <code>params.ref_des</code>, validates <code>radius_mm &gt; 0.0</code>, resolves the anchor component via <code>self.find_component(trimmed)</code>, and counts SMD pads and neighboring components (<code>c.ref_des != anchor.ref_des</code>) whose Euclidean center distance <code>(pos - anchor.center_mm).length()</code> is <code>&lt;= params.radius_mm</code>.</li>
+<li><strong><code>query_net_topology(&amp;self, net: NetId)</code></strong>: Aggregates the pad count, routed trace segment count (<code>t.net == Some(net)</code>), and lexicographically sorted <code>connected_refs</code> (<code>connected_refs.sort()</code>) for any <code>NetId</code>.</li>
+<li><strong><code>run_custom_drc(&amp;self, params: &amp;CustomDrcParams)</code></strong>: Rejects non-positive thresholds (<code>&lt;= 0.0</code>) with <code>AgentQueryError::InvalidDrcThreshold</code>, reuses <code>detect_pad_clearance_violations(params.min_clearance_mm)</code>, and filters physical copper layers (<code>matches!(t.layer, PcbLayer::TopCopper | PcbLayer::BottomCopper)</code>) for traces narrower than <code>params.min_copper_width_mm</code> without false-flagging silkscreen or ratsnest lines.</li>
+</ul>
+<h3 id="block-3-interactive-agent-query-preview-controls-in-egui-src-main-rs">Block 3: Interactive Agent Query Preview Controls in <code>egui</code> (<code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">// In pub struct ViewState (and ViewState::default()):
+pub last_agent_query_badge: String, // initialized to "Agent Query: Ready".to_owned()
+
+// In impl PcbReviewerApp:
+pub fn run_u1_spatial_query(&amp;mut self) -&gt; bool {
+    match self.board.query_spatial_neighborhood(&amp;SpatialQueryParams {
+        ref_des: "U1".to_owned(),
+        radius_mm: 15.0,
+    }) {
+        Ok(report) =&gt; {
+            self.view.last_agent_query_badge = report.summary_badge();
+            true
+        }
+        Err(err) =&gt; {
+            self.view.last_agent_query_badge = format!("Query Err: {err}");
+            false
+        }
+    }
+}
+
+pub fn run_vcc_net_query(&amp;mut self) {
+    self.view.last_agent_query_badge = self.board.query_net_topology(NetId(1)).summary_badge();
+}
+
+pub fn run_board_custom_drc(&amp;mut self) -&gt; bool {
+    match self.board.run_custom_drc(&amp;CustomDrcParams {
+        min_clearance_mm: self.view.min_clearance_mm,
+        min_copper_width_mm: 0.5,
+    }) {
+        Ok(report) =&gt; {
+            self.view.last_agent_query_badge = report.summary_badge();
+            true
+        }
+        Err(err) =&gt; {
+            self.view.last_agent_query_badge = format!("DRC Err: {err}");
+            false
+        }
+    }
+}
+
+// Inside PcbReviewerApp::render_session_panel(&amp;mut self, ui: &amp;mut egui::Ui):
+ui.label(&amp;self.view.last_agent_query_badge);
+ui.horizontal(|ui| {
+    if ui.button("Query U1 Neighborhood").clicked() {
+        self.run_u1_spatial_query();
+    }
+    if ui.button("Run Custom DRC").clicked() {
+        self.run_board_custom_drc();
+    }
+});
+if ui.button("Query VCC_3V3 Topology").clicked() {
+    self.run_vcc_net_query();
+}</code></pre>
+<ul>
+<li><strong><code>ViewState::last_agent_query_badge</code></strong>: Stores the latest agent query status string (<code>&quot;Agent Query: Ready&quot;</code> at startup) so the right-hand session panel can render live telemetry every frame.</li>
+<li><strong><code>run_u1_spatial_query</code>, <code>run_vcc_net_query</code>, and <code>run_board_custom_drc</code></strong>: Bridge <code>PcbReviewerApp</code> UI actions directly to <code>BoardModel</code>'s <code>L1</code> query methods, updating <code>last_agent_query_badge</code> on both <code>Ok</code> and <code>Err</code> outcomes.</li>
+<li><strong>Session Panel Query Buttons</strong>: Renders <code>&quot;Query U1 Neighborhood&quot;</code>, <code>&quot;Run Custom DRC&quot;</code>, and <code>&quot;Query VCC_3V3 Topology&quot;</code> in <code>render_session_panel</code>, letting engineers preview the exact query payloads an MCP agent receives.</li>
+</ul>
+<h3 id="block-4-unit-amp-headless-egui-kittest-verification-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Block 4: Unit &amp; Headless <code>egui_kittest</code> Verification (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">// In crates/pcb-doc/src/lib.rs (#[cfg(test)] mod tests):
+#[test]
+fn llm_spatial_topology_and_custom_drc_queries_preserve_invariants() {
+    let schema = spatial_query_json_schema();
+    assert_eq!(schema["title"], "SpatialQueryParams");
+    assert_eq!(schema["type"], "object");
+    assert!(schema["properties"]["ref_des"].is_object());
+    assert!(schema["properties"]["radius_mm"].is_object());
+
+    let board = BoardModel::default();
+    assert_eq!(
+        board.query_spatial_neighborhood(&amp;SpatialQueryParams {
+            ref_des: "   ".to_owned(),
+            radius_mm: 15.0,
+        }),
+        Err(AgentQueryError::EmptyRefDes)
+    );
+    assert_eq!(
+        board.query_spatial_neighborhood(&amp;SpatialQueryParams {
+            ref_des: "U1".to_owned(),
+            radius_mm: 0.0,
+        }),
+        Err(AgentQueryError::NonPositiveRadius)
+    );
+    assert_eq!(
+        board.query_spatial_neighborhood(&amp;SpatialQueryParams {
+            ref_des: "U1".to_owned(),
+            radius_mm: -2.0,
+        }),
+        Err(AgentQueryError::NonPositiveRadius)
+    );
+    assert_eq!(
+        board.query_spatial_neighborhood(&amp;SpatialQueryParams {
+            ref_des: "U999".to_owned(),
+            radius_mm: 15.0,
+        }),
+        Err(AgentQueryError::UnknownComponent("U999".to_owned()))
+    );
+
+    // U1 is at (20, 27); pads #0 and #1 are at (20, 22) and (20, 32) -&gt; exact distance 5.0 mm.
+    let tight = board
+        .query_spatial_neighborhood(&amp;SpatialQueryParams {
+            ref_des: "  U1  ".to_owned(),
+            radius_mm: 5.0,
+        })
+        .unwrap();
+    assert_eq!(
+        tight,
+        SpatialNeighborhoodReport {
+            ref_des: "U1".to_owned(),
+            nearby_pads: 2,
+            nearby_components: 0,
+        }
+    );
+    assert_eq!(tight.summary_badge(), "Spatial [U1]: 2 pads, 0 comps");
+
+    let sub_5 = board
+        .query_spatial_neighborhood(&amp;SpatialQueryParams {
+            ref_des: "U1".to_owned(),
+            radius_mm: 4.9,
+        })
+        .unwrap();
+    assert_eq!(sub_5.nearby_pads, 0);
+
+    // Exact component distance boundary: R12 is at (52, 35) from J1 at (68, 35) -&gt; exact distance 16.0 mm!
+    let j1_exact = board
+        .query_spatial_neighborhood(&amp;SpatialQueryParams {
+            ref_des: "J1".to_owned(),
+            radius_mm: 16.0,
+        })
+        .unwrap();
+    assert_eq!(j1_exact.nearby_components, 1);
+
+    let j1_under = board
+        .query_spatial_neighborhood(&amp;SpatialQueryParams {
+            ref_des: "J1".to_owned(),
+            radius_mm: 15.9,
+        })
+        .unwrap();
+    assert_eq!(j1_under.nearby_components, 0);
+
+    let vcc_topo = board.query_net_topology(NetId(1));
+    assert_eq!(
+        vcc_topo,
+        NetTopologyReport {
+            net: NetId(1),
+            signal_name: "VCC_3V3".to_owned(),
+            pad_count: 1,
+            trace_count: 3,
+            connected_refs: vec!["J1".to_owned(), "U1".to_owned()],
+        }
+    );
+    assert_eq!(
+        vcc_topo.summary_badge(),
+        "Topology [VCC_3V3]: 1 pads, 3 traces (2 refs)"
+    );
+
+    let spi_topo = board.query_net_topology(NetId(2));
+    assert_eq!(spi_topo.pad_count, 2);
+    assert_eq!(spi_topo.trace_count, 2);
+    assert_eq!(spi_topo.connected_refs, vec!["R12".to_owned()]);
+
+    for bad_drc in [
+        CustomDrcParams {
+            min_clearance_mm: 0.0,
+            min_copper_width_mm: 0.5,
+        },
+        CustomDrcParams {
+            min_clearance_mm: -1.0,
+            min_copper_width_mm: 0.5,
+        },
+        CustomDrcParams {
+            min_clearance_mm: 8.0,
+            min_copper_width_mm: 0.0,
+        },
+        CustomDrcParams {
+            min_clearance_mm: 8.0,
+            min_copper_width_mm: -0.5,
+        },
+    ] {
+        assert_eq!(
+            board.run_custom_drc(&amp;bad_drc),
+            Err(AgentQueryError::InvalidDrcThreshold)
+        );
+    }
+
+    let clean_drc = board
+        .run_custom_drc(&amp;CustomDrcParams {
+            min_clearance_mm: 7.6,
+            min_copper_width_mm: 0.8,
+        })
+        .unwrap();
+    assert!(clean_drc.is_clean());
+    assert_eq!(clean_drc.summary_badge(), "Custom DRC [CLEAN]: 0 gap, 0 width");
+
+    let fail_drc = board
+        .run_custom_drc(&amp;CustomDrcParams {
+            min_clearance_mm: 8.0,
+            min_copper_width_mm: 0.85,
+        })
+        .unwrap();
+    assert!(!fail_drc.is_clean());
+    assert_eq!(fail_drc.summary_badge(), "Custom DRC [FAIL]: 1 gap, 4 width");
+}
+
+// In src/main.rs (standalone_layer_swatch_and_headless_ui_workflows_pass):
+assert!(harness.query_by_label("Agent Query: Ready").is_some());
+harness.get_by_label("Query U1 Neighborhood").click();
+harness.run();
+assert!(
+    harness
+        .query_by_label("Spatial [U1]: 2 pads, 0 comps")
+        .is_some()
+);
+
+harness.get_by_label("Query VCC_3V3 Topology").click();
+harness.run();
+assert!(
+    harness
+        .query_by_label("Topology [VCC_3V3]: 1 pads, 3 traces (2 refs)")
+        .is_some()
+);
+
+harness.get_by_label("Run Custom DRC").click();
+harness.run();
+assert!(
+    harness
+        .query_by_label("Custom DRC [FAIL]: 1 gap, 0 width")
+        .is_some()
+);</code></pre>
+<ul>
+<li><strong>Exact Euclidean Boundary Assertions (<code>5.0</code> vs. <code>4.9</code> mm and <code>16.0</code> vs. <code>15.9</code> mm)</strong>: Pins the <code>&lt;=</code> boundary in <code>query_spatial_neighborhood</code> so <code>cargo-mutants</code> cannot flip <code>&lt;=</code> to <code>&lt;</code> without failing the test suite.</li>
+<li><strong>Copper Width Threshold Boundary (<code>0.8</code> vs. <code>0.85</code> mm)</strong>: Verifies that <code>width_mm &lt; params.min_copper_width_mm</code> treats <code>0.8 mm</code> copper traces as clean when <code>min_copper_width_mm == 0.8</code>, catching <code>&lt;</code> to <code>&lt;=</code> mutations.</li>
+<li><strong>Headless <code>egui_kittest</code> Button Clicks</strong>: Clicks <code>&quot;Query U1 Neighborhood&quot;</code>, <code>&quot;Query VCC_3V3 Topology&quot;</code>, and <code>&quot;Run Custom DRC&quot;</code> inside <code>Harness::new_eframe</code> and asserts that the rendered badge updates on screen.</li>
+</ul>
+<h3 id="complete-lesson-0027-additions-listing-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Complete Lesson 0027 Additions Listing (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<p>Here are the complete assembled Lesson <code>0027</code> additions in context across <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code>:</p>
+<figure>
+  <figcaption>Complete Lesson 0027 additions in crates/pcb-doc/src/lib.rs and src/main.rs</figcaption>
+  <pre><code class="language-rust">// ============================================================================
+// crates/pcb-doc/src/lib.rs — Spatial, Net Topology &amp; Custom DRC Queries
+// ============================================================================
+pub use schemars::{self, JsonSchema, schema_for};
+
+impl BoardModel {
+    pub fn query_spatial_neighborhood(
+        &amp;self,
+        params: &amp;SpatialQueryParams,
+    ) -&gt; Result&lt;SpatialNeighborhoodReport, AgentQueryError&gt; {
+        let trimmed = params.ref_des.trim();
+        if trimmed.is_empty() {
+            return Err(AgentQueryError::EmptyRefDes);
+        }
+        if params.radius_mm &lt;= 0.0 {
+            return Err(AgentQueryError::NonPositiveRadius);
+        }
+        let Some(anchor) = self.find_component(trimmed) else {
+            return Err(AgentQueryError::UnknownComponent(trimmed.to_owned()));
+        };
+        let nearby_pads = self
+            .pads
+            .iter()
+            .filter(|p| (p.center_mm - anchor.center_mm).length() &lt;= params.radius_mm)
+            .count();
+        let nearby_components = self
+            .components
+            .iter()
+            .filter(|c| {
+                c.ref_des != anchor.ref_des
+                    &amp;&amp; (c.center_mm - anchor.center_mm).length() &lt;= params.radius_mm
+            })
+            .count();
+        Ok(SpatialNeighborhoodReport {
+            ref_des: anchor.ref_des.clone(),
+            nearby_pads,
+            nearby_components,
+        })
+    }
+
+    pub fn query_net_topology(&amp;self, net: NetId) -&gt; NetTopologyReport {
+        let pad_count = self.pads.iter().filter(|p| p.net == net).count();
+        let trace_count = self.traces.iter().filter(|t| t.net == Some(net)).count();
+        let mut connected_refs: Vec&lt;String&gt; = self
+            .components
+            .iter()
+            .filter(|c| c.primary_net == net)
+            .map(|c| c.ref_des.clone())
+            .collect();
+        connected_refs.sort();
+        NetTopologyReport {
+            net,
+            signal_name: net.signal_name().to_owned(),
+            pad_count,
+            trace_count,
+            connected_refs,
+        }
+    }
+
+    pub fn run_custom_drc(
+        &amp;self,
+        params: &amp;CustomDrcParams,
+    ) -&gt; Result&lt;CustomDrcReport, AgentQueryError&gt; {
+        if params.min_clearance_mm &lt;= 0.0 || params.min_copper_width_mm &lt;= 0.0 {
+            return Err(AgentQueryError::InvalidDrcThreshold);
+        }
+        let clearance_violations = self
+            .detect_pad_clearance_violations(params.min_clearance_mm)
+            .len();
+        let narrow_traces = self
+            .traces
+            .iter()
+            .filter(|t| {
+                matches!(t.layer, PcbLayer::TopCopper | PcbLayer::BottomCopper)
+                    &amp;&amp; t.width_mm &lt; params.min_copper_width_mm
+            })
+            .count();
+        Ok(CustomDrcReport {
+            clearance_violations,
+            narrow_traces,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum AgentQueryError {
+    #[error("component ref_des must not be empty")]
+    EmptyRefDes,
+    #[error("unknown component `{0}`")]
+    UnknownComponent(String),
+    #[error("search radius_mm must be &gt; 0.0")]
+    NonPositiveRadius,
+    #[error("custom DRC thresholds must be &gt; 0.0")]
+    InvalidDrcThreshold,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SpatialQueryParams {
+    pub ref_des: String,
+    pub radius_mm: f32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SpatialNeighborhoodReport {
+    pub ref_des: String,
+    pub nearby_pads: usize,
+    pub nearby_components: usize,
+}
+
+impl SpatialNeighborhoodReport {
+    pub fn summary_badge(&amp;self) -&gt; String {
+        format!(
+            "Spatial [{}]: {} pads, {} comps",
+            self.ref_des, self.nearby_pads, self.nearby_components
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct NetTopologyReport {
+    pub net: NetId,
+    pub signal_name: String,
+    pub pad_count: usize,
+    pub trace_count: usize,
+    pub connected_refs: Vec&lt;String&gt;,
+}
+
+impl NetTopologyReport {
+    pub fn summary_badge(&amp;self) -&gt; String {
+        format!(
+            "Topology [{}]: {} pads, {} traces ({} refs)",
+            self.signal_name,
+            self.pad_count,
+            self.trace_count,
+            self.connected_refs.len()
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CustomDrcParams {
+    pub min_clearance_mm: f32,
+    pub min_copper_width_mm: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CustomDrcReport {
+    pub clearance_violations: usize,
+    pub narrow_traces: usize,
+}
+
+impl CustomDrcReport {
+    pub fn is_clean(&amp;self) -&gt; bool {
+        self.clearance_violations == 0 &amp;&amp; self.narrow_traces == 0
+    }
+
+    pub fn summary_badge(&amp;self) -&gt; String {
+        let status = if self.is_clean() { "CLEAN" } else { "FAIL" };
+        format!(
+            "Custom DRC [{status}]: {} gap, {} width",
+            self.clearance_violations, self.narrow_traces
+        )
+    }
+}
+
+pub fn spatial_query_json_schema() -&gt; serde_json::Value {
+    serde_json::to_value(schema_for!(SpatialQueryParams)).unwrap_or_default()
+}
+
+// ============================================================================
+// src/main.rs — Agent Query Preview Methods &amp; Session Panel Integration
+// ============================================================================
+impl PcbReviewerApp {
+    pub fn run_u1_spatial_query(&amp;mut self) -&gt; bool {
+        match self.board.query_spatial_neighborhood(&amp;SpatialQueryParams {
+            ref_des: "U1".to_owned(),
+            radius_mm: 15.0,
+        }) {
+            Ok(report) =&gt; {
+                self.view.last_agent_query_badge = report.summary_badge();
+                true
+            }
+            Err(err) =&gt; {
+                self.view.last_agent_query_badge = format!("Query Err: {err}");
+                false
+            }
+        }
+    }
+
+    pub fn run_vcc_net_query(&amp;mut self) {
+        self.view.last_agent_query_badge = self.board.query_net_topology(NetId(1)).summary_badge();
+    }
+
+    pub fn run_board_custom_drc(&amp;mut self) -&gt; bool {
+        match self.board.run_custom_drc(&amp;CustomDrcParams {
+            min_clearance_mm: self.view.min_clearance_mm,
+            min_copper_width_mm: 0.5,
+        }) {
+            Ok(report) =&gt; {
+                self.view.last_agent_query_badge = report.summary_badge();
+                true
+            }
+            Err(err) =&gt; {
+                self.view.last_agent_query_badge = format!("DRC Err: {err}");
+                false
+            }
+        }
+    }
 }</code></pre>
 </figure>
 </div>

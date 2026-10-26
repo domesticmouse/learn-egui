@@ -36,11 +36,15 @@ flowchart LR
     style Budget fill:#1c1c24,stroke:#f0e68c,color:#e6edf3
 ```
 
-## Pre-Allocating Visible Batches & `proptest` Equivalence
+## 2. Anatomy of Spatial Viewport Culling & Budgets: Block by Block
 
 To avoid repeated heap reallocations during per-frame culling, `culled_pads_in_rect` and `culled_traces_in_rect` pre-allocate with `Vec::with_capacity` and collect only primitives whose `bounds_mm().intersects(viewport_mm)` is `true`.
 
-```rust caption="Stroke-expanded TraceSegment::bounds_mm and viewport culling in crates/pcb-doc/src/lib.rs"
+Let's walk through the new code in `crates/pcb-doc/src/lib.rs` and `src/main.rs` across four logical blocks, then inspect the complete assembled listing in context.
+
+### Block 1: Stroke-Expanded Trace Bounds, `ViewportCullStats` & `check_cull_budget` (`crates/pcb-doc/src/lib.rs`)
+
+```rust
 impl TraceSegment {
     pub fn bounds_mm(&self) -> Rect {
         Rect::from_two_pos(self.start, self.end).expand(self.width_mm * 0.5)
@@ -72,6 +76,22 @@ impl ViewportCullStats {
     }
 }
 
+pub fn check_cull_budget(measured_us: u64, target_max_us: u64) -> Result<u64, u64> {
+    if measured_us <= target_max_us {
+        Ok(measured_us)
+    } else {
+        Err(measured_us)
+    }
+}
+```
+
+- **`Rect::from_two_pos(self.start, self.end).expand(self.width_mm * 0.5)`**: `Rect::from_two_pos` normalizes arbitrary diagonal or axis-aligned segment endpoints into `(min, max)` millimetre coordinates, and `.expand(self.width_mm * 0.5)` inflates all four edges by half the copper trace thickness so thick power traces touching the viewport border are never culled early.
+- **`ViewportCullStats::culled_count` & `summary_badge`**: Computes the exact number of skipped primitives across both SMD pads and trace segments and formats a deterministic telemetry string (`"Cull: X/Y pads, A/B traces (N skipped)"`) for the session panel and headless UI assertions.
+- **`check_cull_budget(measured_us, target_max_us)`**: A Tier 7 performance-budget gate returning `Ok(measured_us)` when `measured_us <= target_max_us` and `Err(measured_us)` when a spatial query exceeds its microsecond ceiling.
+
+### Block 2: Pre-Allocated Frustum Culling Queries on `BoardModel` (`crates/pcb-doc/src/lib.rs`)
+
+```rust
 impl BoardModel {
     pub fn culled_pads_in_rect(&self, viewport_mm: Rect) -> Vec<SmdPad> {
         let mut out = Vec::with_capacity(self.pads.len());
@@ -92,7 +112,242 @@ impl BoardModel {
         }
         out
     }
+
+    pub fn cull_stats_for_rect(&self, viewport_mm: Rect) -> ViewportCullStats {
+        ViewportCullStats {
+            visible_pads: self.culled_pads_in_rect(viewport_mm).len(),
+            total_pads: self.pads.len(),
+            visible_traces: self.culled_traces_in_rect(viewport_mm).len(),
+            total_traces: self.traces.len(),
+        }
+    }
 }
+```
+
+- **`Vec::with_capacity(self.pads.len())`**: Allocates a single contiguous buffer upfront so pushing visible `Copy` primitives (`*pad` and `*seg`) never triggers intermediate vector growth reallocations during the frame loop.
+- **`pad.bounds_mm().intersects(viewport_mm)`**: Uses `emath::Rect::intersects` to test 2D axis-aligned bounding-box overlap in `O(1)` time per primitive before any screen-space `TSTransform` math or `egui::Painter` stroke tessellation occurs.
+- **`cull_stats_for_rect(&self, viewport_mm: Rect)`**: Aggregates `visible_pads`, `total_pads`, `visible_traces`, and `total_traces` for any camera frustum rectangle.
+
+### Block 3: Viewport Culling Toggle & Live Telemetry Badge (`src/main.rs`)
+
+```rust
+// Added field on `pub struct ViewState` (defaults to `true` in `ViewState::default()`):
+pub enable_viewport_culling: bool,
+
+// Added method on `impl PcbReviewerApp`:
+/// Computes active viewport culling telemetry based on `self.view.enable_viewport_culling`.
+pub fn active_cull_stats(&self) -> ViewportCullStats {
+    if self.view.enable_viewport_culling {
+        self.board.cull_stats_for_rect(self.view.pcb_scene_rect)
+    } else {
+        ViewportCullStats {
+            visible_pads: self.board.pads.len(),
+            total_pads: self.board.pads.len(),
+            visible_traces: self.board.traces.len(),
+            total_traces: self.board.traces.len(),
+        }
+    }
+}
+
+// Inside `PcbReviewerApp::render_session_panel`:
+ui.checkbox(
+    &mut self.view.enable_viewport_culling,
+    "Enable Viewport Culling",
+);
+ui.label(self.active_cull_stats().summary_badge());
+```
+
+- **`enable_viewport_culling: bool`**: Stored in `ViewState` and enabled (`true`) by default so the reviewer culls off-screen geometry out of the box while still letting engineers toggle culling off to compare full-board vs. frustum-culled counts.
+- **`PcbReviewerApp::active_cull_stats(&self)`**: When `enable_viewport_culling` is `true`, queries `self.board.cull_stats_for_rect(self.view.pcb_scene_rect)`; when `false`, reports all pads and traces as visible (`0 skipped`).
+- **Session Panel Telemetry**: Binds `ui.checkbox(&mut self.view.enable_viewport_culling, "Enable Viewport Culling")` and renders `ui.label(self.active_cull_stats().summary_badge())` so camera pan/zoom or DRC jump-to-violation updates the skipped count immediately.
+
+### Block 4: `proptest!` Spatial-Query Equivalence & Budget Unit Tests (`crates/pcb-doc/src/lib.rs` & `src/main.rs`)
+
+```rust
+// Inside `proptest!` in `crates/pcb-doc/src/lib.rs`:
+#[test]
+fn prop_spatial_culling_matches_reference_and_preserves_counts(
+    min_x in 0.0_f32..80.0_f32,
+    min_y in 0.0_f32..50.0_f32,
+    w in 5.0_f32..60.0_f32,
+    h in 5.0_f32..40.0_f32,
+) {
+    let board = BoardModel::default();
+    let viewport = Rect::from_min_size(pos2(min_x, min_y), vec2(w, h));
+    let expected_pads: Vec<SmdPad> = board
+        .pads
+        .iter()
+        .copied()
+        .filter(|p| p.bounds_mm().intersects(viewport))
+        .collect();
+    let expected_traces: Vec<TraceSegment> = board
+        .traces
+        .iter()
+        .copied()
+        .filter(|t| t.bounds_mm().intersects(viewport))
+        .collect();
+
+    let culled_pads = board.culled_pads_in_rect(viewport);
+    let culled_traces = board.culled_traces_in_rect(viewport);
+    let stats = board.cull_stats_for_rect(viewport);
+
+    prop_assert_eq!(&culled_pads, &expected_pads);
+    prop_assert_eq!(&culled_traces, &expected_traces);
+    prop_assert_eq!(stats.visible_pads, expected_pads.len());
+    prop_assert_eq!(stats.visible_traces, expected_traces.len());
+    prop_assert_eq!(
+        stats.visible_pads + stats.visible_traces + stats.culled_count(),
+        board.pads.len() + board.traces.len()
+    );
+}
+
+#[test]
+fn viewport_culling_bounds_stats_and_perf_budget_are_exact() {
+    let seg = TraceSegment {
+        start: pos2(10.0, 20.0),
+        end: pos2(30.0, 24.0),
+        width_mm: 4.0,
+        layer: PcbLayer::TopCopper,
+        net: Some(NetId(1)),
+    };
+    assert_eq!(
+        seg.bounds_mm(),
+        Rect::from_min_max(pos2(8.0, 18.0), pos2(32.0, 26.0))
+    );
+
+    let board = BoardModel::default();
+    let tight_rect = Rect::from_min_max(pos2(12.0, 14.0), pos2(25.0, 24.0));
+    let stats = board.cull_stats_for_rect(tight_rect);
+    assert_eq!(stats.visible_pads, 1);
+    assert_eq!(stats.total_pads, 3);
+    assert_eq!(stats.visible_traces, 2);
+    assert_eq!(stats.total_traces, 6);
+    assert_eq!(stats.culled_count(), 6);
+    assert_eq!(
+        stats.summary_badge(),
+        "Cull: 1/3 pads, 2/6 traces (6 skipped)"
+    );
+
+    assert_eq!(check_cull_budget(180, 500), Ok(180));
+    assert_eq!(check_cull_budget(500, 500), Ok(500));
+    assert_eq!(check_cull_budget(501, 500), Err(501));
+}
+```
+
+- **`prop_spatial_culling_matches_reference_and_preserves_counts`**: Generates randomized `(min_x, min_y, w, h)` camera viewports and proves both exact element-for-element equivalence with a reference iterator filter and the conservation law `visible_pads + visible_traces + culled_count() == total_pads + total_traces`.
+- **Non-Zero Asymmetric Trace Geometry (`width_mm: 4.0`)**: Asserting `seg.bounds_mm() == Rect::from_min_max(pos2(8.0, 18.0), pos2(32.0, 26.0))` catches any mutant that replaces `* 0.5` with `/ 0.5` or `+ 0.5`, or skips `.expand(...)` altogether.
+- **Exact Budget Boundary (`500` vs. `501`)**: Testing `check_cull_budget(500, 500)` (`Ok(500)`) alongside `check_cull_budget(501, 500)` (`Err(501)`) kills the `<=` to `<` boundary mutant.
+
+### Complete Lesson 0020 Code Listing (In Context)
+
+Here are the complete spatial viewport culling, telemetry, and test additions in `crates/pcb-doc/src/lib.rs` and `src/main.rs` in full context:
+
+```rust caption="Complete TraceSegment::bounds_mm, ViewportCullStats, and culling queries in crates/pcb-doc/src/lib.rs"
+impl TraceSegment {
+    pub fn bounds_mm(&self) -> Rect {
+        Rect::from_two_pos(self.start, self.end).expand(self.width_mm * 0.5)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ViewportCullStats {
+    pub visible_pads: usize,
+    pub total_pads: usize,
+    pub visible_traces: usize,
+    pub total_traces: usize,
+}
+
+impl ViewportCullStats {
+    pub fn culled_count(&self) -> usize {
+        (self.total_pads - self.visible_pads) + (self.total_traces - self.visible_traces)
+    }
+
+    pub fn summary_badge(&self) -> String {
+        format!(
+            "Cull: {}/{} pads, {}/{} traces ({} skipped)",
+            self.visible_pads,
+            self.total_pads,
+            self.visible_traces,
+            self.total_traces,
+            self.culled_count()
+        )
+    }
+}
+
+pub fn check_cull_budget(measured_us: u64, target_max_us: u64) -> Result<u64, u64> {
+    if measured_us <= target_max_us {
+        Ok(measured_us)
+    } else {
+        Err(measured_us)
+    }
+}
+
+impl BoardModel {
+    pub fn culled_pads_in_rect(&self, viewport_mm: Rect) -> Vec<SmdPad> {
+        let mut out = Vec::with_capacity(self.pads.len());
+        for pad in self.pads.iter() {
+            if pad.bounds_mm().intersects(viewport_mm) {
+                out.push(*pad);
+            }
+        }
+        out
+    }
+
+    pub fn culled_traces_in_rect(&self, viewport_mm: Rect) -> Vec<TraceSegment> {
+        let mut out = Vec::with_capacity(self.traces.len());
+        for seg in self.traces.iter() {
+            if seg.bounds_mm().intersects(viewport_mm) {
+                out.push(*seg);
+            }
+        }
+        out
+    }
+
+    pub fn cull_stats_for_rect(&self, viewport_mm: Rect) -> ViewportCullStats {
+        ViewportCullStats {
+            visible_pads: self.culled_pads_in_rect(viewport_mm).len(),
+            total_pads: self.pads.len(),
+            visible_traces: self.culled_traces_in_rect(viewport_mm).len(),
+            total_traces: self.traces.len(),
+        }
+    }
+}
+```
+
+```rust caption="Complete viewport culling UI integration and tests in src/main.rs"
+impl PcbReviewerApp {
+    /// Computes active viewport culling telemetry based on `self.view.enable_viewport_culling`.
+    pub fn active_cull_stats(&self) -> ViewportCullStats {
+        if self.view.enable_viewport_culling {
+            self.board.cull_stats_for_rect(self.view.pcb_scene_rect)
+        } else {
+            ViewportCullStats {
+                visible_pads: self.board.pads.len(),
+                total_pads: self.board.pads.len(),
+                visible_traces: self.board.traces.len(),
+                total_traces: self.board.traces.len(),
+            }
+        }
+    }
+}
+
+// Inside `view_state_selection_focus_measurement_undo_coalescing_and_session_io_work` (`src/main.rs`):
+app.view.pcb_scene_rect = Rect::from_min_max(pos2(12.0, 14.0), pos2(25.0, 24.0));
+assert_eq!(app.active_cull_stats().visible_pads, 1);
+assert_eq!(app.active_cull_stats().culled_count(), 6);
+app.view.enable_viewport_culling = false;
+assert_eq!(app.active_cull_stats().visible_pads, 3);
+assert_eq!(app.active_cull_stats().culled_count(), 0);
+
+// Inside `standalone_layer_swatch_and_headless_ui_workflows_pass` (`src/main.rs`):
+assert!(
+    harness
+        .query_by_label("Cull: 3/3 pads, 6/6 traces (0 skipped)")
+        .is_some()
+);
+harness.get_by_label("Enable Viewport Culling").click();
+harness.run();
+assert!(!harness.state().view.enable_viewport_culling);
 ```
 
 {{widget:viewport-cull-sim}}

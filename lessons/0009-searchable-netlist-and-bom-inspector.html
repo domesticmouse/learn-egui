@@ -68,9 +68,18 @@ flowchart LR
   </pre>
 </figure>
 <p><em>Figure 9.1: <code>TextEdit::singleline</code> mutates the query string in place, <code>.filter()</code> selects matching components, and <code>show_rows</code> virtualises layout to only the visible slice <code>&amp;matching[row_range]</code>.</em></p>
-<h2 id="1-just-in-time-rust-iterator-adapters-filter-enumerate-amp-slices-amp-t">1. Just-in-Time Rust: Iterator Adapters (<code>.filter()</code>, <code>.enumerate()</code>) &amp; Slices (<code>&amp;[T]</code>)</h2>
-<p>To filter components case-insensitively across their reference designator (<code>U1</code>), value (<code>LDO_3V3</code>), package (<code>SOT-23</code>), or connected net name (<code>VCC_3V3</code>), we normalise the query with <code>.trim().to_ascii_lowercase()</code> and chain Rust's zero-cost iterator adapters (<a href="https://doc.rust-lang.org/book/ch13-02-iterators.html">Rust Book §13.2</a>):<span class="sidenote-number"></span><span class="sidenote">Why slice via <code>&amp;matching[row_range]</code>? A Rust slice <code>&amp;matching[row_range]</code> (<code>Range&lt;usize&gt;</code>) is a bounds-checked window into the contiguous vector that lets us iterate over just the visible viewport rows with <code>.enumerate()</code>.</span></p>
+<h2 id="1-just-in-time-rust-iterator-adapters-filter-amp-range-slices-amp-t">1. Just-in-Time Rust: Iterator Adapters (<code>.filter()</code>) &amp; Range Slices (<code>&amp;[T]</code>)</h2>
+<p>To filter components case-insensitively across their reference designator (<code>U1</code>), value (<code>LDO_3V3</code>), package (<code>SOT-23</code>), or connected net name (<code>VCC_3V3</code>), we normalise the query with <code>.trim().to_ascii_lowercase()</code> and chain Rust's zero-cost iterator adapters (<a href="https://doc.rust-lang.org/book/ch13-02-iterators.html">Rust Book §13.2</a>).<span class="sidenote-number"></span><span class="sidenote">Why slice via <code>&amp;matching[row_range]</code>? A Rust slice <code>&amp;matching[row_range]</code> (<code>Range&lt;usize&gt;</code>) is a bounds-checked window into the contiguous vector that lets us iterate over just the visible viewport rows without allocating a second vector.</span></p>
+<h2 id="2-anatomy-of-lesson-0009-s-additions-block-by-block">2. Anatomy of Lesson 0009's Additions: Block by Block</h2>
+<p>Let's inspect the new and modified code in <code>apps/0009-searchable-netlist-and-bom-inspector/src/main.rs</code> block by block, then put the full BOM &amp; Netlist Inspector together in context.</p>
+<h3 id="block-1-case-insensitive-matching-matches-query-amp-filter-components">Block 1: Case-Insensitive Matching (<code>matches_query</code>) &amp; <code>filter_components</code></h3>
 <pre><code class="language-rust">impl ComponentSymbol {
+    pub fn inspector_label(&amp;self) -&gt; String {
+        format!("{}: {} ({})", self.ref_des, self.value, self.package_name)
+    }
+
+    /// Case-insensitively matches `query` against `ref_des`, `value`, `package_name`,
+    /// or `primary_net.signal_name()`. An empty or whitespace-only query matches all components.
     pub fn matches_query(&amp;self, query: &amp;str) -&gt; bool {
         let needle = query.trim().to_ascii_lowercase();
         if needle.is_empty() {
@@ -88,6 +97,10 @@ flowchart LR
 }
 
 impl BoardModel {
+    pub fn find_component(&amp;self, ref_des: &amp;str) -&gt; Option&lt;&amp;ComponentSymbol&gt; {
+        self.components.iter().find(|c| c.ref_des == ref_des)
+    }
+
     pub fn filter_components(&amp;self, query: &amp;str) -&gt; Vec&lt;ComponentSymbol&gt; {
         self.components
             .iter()
@@ -96,10 +109,52 @@ impl BoardModel {
             .collect()
     }
 }</code></pre>
-<h2 id="2-virtualised-scrolling-with-scrollarea-show-rows-amp-grid">2. Virtualised Scrolling with <code>ScrollArea::show_rows</code> &amp; <code>Grid</code></h2>
+<ul>
+<li><strong><code>query.trim().to_ascii_lowercase()</code></strong>: <code>.trim()</code> returns a borrowed <code>&amp;str</code> stripped of leading/trailing whitespace, and <code>.to_ascii_lowercase()</code> allocates an owned lowercase <code>String</code> (<code>needle</code>). If <code>needle.is_empty()</code>, we short-circuit and return <code>true</code> so an empty search box shows the full BOM.</li>
+<li><strong>Four-Way Disjunction (<code>||</code>)</strong>: Checks whether <code>needle</code> is a substring (<code>.contains(&amp;needle)</code>) of the lowercased <code>ref_des</code>, <code>value</code>, <code>package_name</code>, or <code>primary_net.signal_name()</code>. Because <code>||</code> short-circuits in Rust, later branches only run if earlier ones return <code>false</code>.</li>
+<li><strong><code>.iter().filter(|c| c.matches_query(query)).cloned().collect()</code></strong>: Creates an iterator of <code>&amp;ComponentSymbol</code>, keeps only elements satisfying <code>matches_query</code>, clones the matching symbols via <code>.cloned()</code>, and collects them into a <code>Vec&lt;ComponentSymbol&gt;</code>.</li>
+</ul>
+<h3 id="block-2-storing-bom-search-query-amp-clear-bom-query-on-viewstate">Block 2: Storing <code>bom_search_query</code> &amp; <code>clear_bom_query</code> on <code>ViewState</code></h3>
+<pre><code class="language-rust">pub struct ViewState {
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
+    pub viewport: BoardViewport,
+    pub pcb_scene_rect: Rect,
+    pub selected_component: Option&lt;String&gt;,
+    pub hovered_net: Option&lt;NetId&gt;,
+    pub selected_net: Option&lt;NetId&gt;,
+    pub bom_search_query: String,
+}
+
+impl Default for ViewState {
+    fn default() -&gt; Self {
+        let mut view = Self {
+            // ...
+            bom_search_query: String::new(),
+        };
+        view.reset_layers();
+        view
+    }
+}
+
+impl ViewState {
+    // ...
+    pub fn clear_bom_query(&amp;mut self) {
+        self.bom_search_query.clear();
+    }
+}</code></pre>
+<ul>
+<li><strong><code>pub bom_search_query: String</code></strong>: Because <code>egui::Ui::text_edit_singleline</code> mutates a buffer in place on each keystroke, the search string must be an owned, growable <code>String</code> living inside <code>ViewState</code> (initialised via <code>String::new()</code>).</li>
+<li><strong><code>pub fn clear_bom_query(&amp;mut self)</code></strong>: Calls <code>self.bom_search_query.clear()</code>, which truncates the string's length to <code>0</code> in-place while reusing its existing heap capacity.</li>
+</ul>
+<h3 id="block-3-virtualised-bom-table-text-edit-singleline-scrollarea-show-rows-amp-grid">Block 3: Virtualised BOM Table (<code>text_edit_singleline</code>, <code>ScrollArea::show_rows</code> &amp; <code>Grid</code>)</h3>
 <p>Now, even in an immediate-mode GUI, laying out 10,000 offscreen table rows on every 60 Hz frame is a great way to warm up your laptop fan for no reason.</p>
 <p>Turns out, <a href="https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows"><code>ScrollArea::show_rows</code></a> makes virtualised scrolling almost ridiculously simple: it calculates the exact <code>row_range: Range&lt;usize&gt;</code> currently visible inside the scroll viewport based on <code>row_height_sans_spacing</code> and calls your closure for <em>only those visible rows</em>:<span class="sidenote-number"></span><span class="sidenote">Notice how we chain <code>.labelled_by(bom_label.id)</code> onto <code>ui.text_edit_singleline(...)</code>. In <code>egui_kittest 0.37</code>, <code>Harness::run()</code> automatically audits AccessKit nodes and panics if any interactive <code>TextInput</code> lacks an accessible name!</span></p>
-<pre><code class="language-rust">ui.horizontal(|ui| {
+<pre><code class="language-rust">ui.separator();
+ui.heading("BOM &amp; Netlist Inspector");
+ui.horizontal(|ui| {
     let bom_label = ui.label("Filter BOM:");
     ui.text_edit_singleline(&amp;mut self.view.bom_search_query)
         .labelled_by(bom_label.id);
@@ -108,23 +163,276 @@ impl BoardModel {
     }
 });
 
-let matching = self.board.filter_components(&amp;self.view.bom_search_query);
-egui::ScrollArea::vertical()
-    .max_height(180.0)
-    .show_rows(ui, 22.0, matching.len(), |ui, row_range| {
-        egui::Grid::new("bom_inspector_grid")
-            .striped(true)
-            .show(ui, |ui| {
-                for (offset, comp) in matching[row_range.clone()].iter().enumerate() {
-                    let row_idx = row_range.start + offset;
-                    ui.label(format!("#{}", row_idx + 1));
-                    if ui.button(comp.inspector_label()).clicked() {
-                        self.view.focus_component(&amp;self.board, &amp;comp.ref_des);
+if self.view.show_silkscreen {
+    let matching = self.board.filter_components(&amp;self.view.bom_search_query);
+    ui.label(format!("Matching Components: {}", matching.len()));
+    egui::ScrollArea::vertical()
+        .max_height(180.0)
+        .show_rows(ui, 22.0, matching.len(), |ui, row_range| {
+            egui::Grid::new("bom_inspector_grid")
+                .striped(true)
+                .show(ui, |ui| {
+                    for comp in &amp;matching[row_range] {
+                        ui.label(comp.primary_net.signal_name());
+                        if ui.button(comp.inspector_label()).clicked() {
+                            self.view.focus_component(&amp;self.board, &amp;comp.ref_des);
+                        }
+                        ui.end_row();
                     }
-                    ui.end_row();
-                }
-            });
-    });</code></pre>
+                });
+        });
+} else {
+    ui.label("Enable Silkscreen to inspect component RefDes.");
+}</code></pre>
+<ul>
+<li><strong><code>ui.text_edit_singleline(&amp;mut self.view.bom_search_query).labelled_by(bom_label.id)</code></strong>: Binds the single-line text box directly to <code>&amp;mut self.view.bom_search_query</code> and links its AccessKit accessibility node to <code>bom_label.id</code> (<code>&quot;Filter BOM:&quot;</code>).</li>
+<li><strong><code>ScrollArea::vertical().max_height(180.0).show_rows(ui, 22.0, matching.len(), |ui, row_range| { ... })</code></strong>: Caps the scroll container height at <code>180.0</code> logical points and passes <code>row_height_sans_spacing = 22.0</code> and <code>total_rows = matching.len()</code>. <code>egui</code> computes <code>row_range: std::ops::Range&lt;usize&gt;</code> for the currently visible rows.</li>
+<li><strong><code>egui::Grid::new(&quot;bom_inspector_grid&quot;).striped(true)</code></strong>: Renders a two-column striped table (<code>signal_name()</code> in column 1, a clickable <code>inspector_label()</code> cross-probe button in column 2), advancing to the next row via <code>ui.end_row()</code>.</li>
+<li><strong><code>for comp in &amp;matching[row_range]</code></strong>: Indexes <code>matching</code> with <code>row_range</code> (<code>Range&lt;usize&gt;</code>) to borrow a slice <code>&amp;[ComponentSymbol]</code> of only the visible rows, then cross-probes into <code>self.view.focus_component(&amp;self.board, &amp;comp.ref_des)</code> when clicked.</li>
+</ul>
+<h3 id="block-4-mutation-proof-filter-amp-headless-bom-tests-cfg-test">Block 4: Mutation-Proof Filter &amp; Headless BOM Tests (<code>#[cfg(test)]</code>)</h3>
+<pre><code class="language-rust">#[test]
+fn matches_query_checks_ref_des_value_package_and_net_case_insensitively() {
+    let board = BoardModel::default();
+
+    assert_eq!(board.filter_components("   ").len(), 3);
+
+    let by_ref = board.filter_components("r12");
+    assert_eq!(by_ref.len(), 1);
+    assert_eq!(by_ref[0].ref_des, "R12");
+
+    let by_val = board.filter_components("ldo_3v3");
+    assert_eq!(by_val.len(), 1);
+    assert_eq!(by_val[0].ref_des, "U1");
+
+    let by_pkg = board.filter_components("header");
+    assert_eq!(by_pkg.len(), 1);
+    assert_eq!(by_pkg[0].ref_des, "J1");
+
+    let by_net = board.filter_components("spi_clk");
+    assert_eq!(by_net.len(), 1);
+    assert_eq!(by_net[0].ref_des, "R12");
+
+    assert!(board.filter_components("zz_missing").is_empty());
+}
+
+#[test]
+fn clicking_schematic_probe_and_bom_filter_buttons_synchronizes_view() {
+    let mut harness = Harness::new_eframe(|_cc| PcbReviewerApp::default());
+
+    harness.get_by_label("Probe R12 (10k)").click();
+    harness.run();
+    assert_eq!(
+        harness.state().view.selected_component.as_deref(),
+        Some("R12")
+    );
+
+    harness.state_mut().view.bom_search_query = "j1".to_owned();
+    harness.run();
+    assert!(harness.query_by_label("Matching Components: 1").is_some());
+    assert!(harness.query_by_label("U1: LDO_3V3 (SOT-23)").is_none());
+
+    harness.get_by_label("J1: CONN_2P (Header)").click();
+    harness.run();
+    assert_eq!(
+        harness.state().view.selected_component.as_deref(),
+        Some("J1")
+    );
+
+    harness.get_by_label("Clear Filter").click();
+    harness.run();
+    assert_eq!(harness.state().view.bom_search_query, "");
+    assert!(harness.query_by_label("Matching Components: 3").is_some());
+
+    harness.get_by_label("Clear Selection").click();
+    harness.run();
+    assert_eq!(harness.state().view.selected_net, None);
+    assert_eq!(harness.state().view.selected_component, None);
+}</code></pre>
+<ul>
+<li><strong>Isolating Every <code>||</code> Branch in <code>matches_query</code></strong>: Testing <code>&quot;r12&quot;</code> (matches only <code>ref_des</code>), <code>&quot;ldo_3v3&quot;</code> (matches only <code>value</code>), <code>&quot;header&quot;</code> (matches only <code>package_name</code>), and <code>&quot;spi_clk&quot;</code> (matches only <code>primary_net.signal_name()</code>) guarantees that if <code>cargo-mutants</code> flips any <code>||</code> into <code>&amp;&amp;</code> or negates <code>needle.is_empty()</code>, at least one assertion fails.</li>
+<li><strong>Driving BOM Filtering &amp; Row Cross-Probing in <code>egui_kittest</code></strong>: Setting <code>harness.state_mut().view.bom_search_query = &quot;j1&quot;.to_owned()</code> and calling <code>harness.run()</code> verifies that <code>&quot;Matching Components: 1&quot;</code> appears, <code>&quot;U1: LDO_3V3 (SOT-23)&quot;</code> is filtered out of the virtualised <code>ScrollArea</code>, clicking the remaining <code>&quot;J1: CONN_2P (Header)&quot;</code> row focuses <code>&quot;J1&quot;</code>, and clicking <code>&quot;Clear Filter&quot;</code> restores all 3 rows.</li>
+</ul>
+<h3 id="complete-lesson-0009-listing-in-context">Complete Lesson 0009 Listing (In Context)</h3>
+<p>Here is how <code>matches_query</code>, <code>filter_components</code>, <code>ViewState</code>, and the virtualised <code>ScrollArea::show_rows</code> BOM inspector fit together in <code>apps/0009-searchable-netlist-and-bom-inspector/src/main.rs</code>:</p>
+<pre><code class="language-rust">// ... [Imports, MIN_ZOOM, MAX_ZOOM, main(), NetId, PcbLayer, TraceSegment, SmdPad unchanged] ...
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ComponentSymbol {
+    pub ref_des: String,
+    pub value: String,
+    pub package_name: String,
+    pub center_mm: Pos2,
+    pub body_size_mm: Vec2,
+    pub primary_net: NetId,
+}
+
+impl ComponentSymbol {
+    pub fn inspector_label(&amp;self) -&gt; String {
+        format!("{}: {} ({})", self.ref_des, self.value, self.package_name)
+    }
+
+    /// Case-insensitively matches `query` against `ref_des`, `value`, `package_name`,
+    /// or `primary_net.signal_name()`. An empty or whitespace-only query matches all components.
+    pub fn matches_query(&amp;self, query: &amp;str) -&gt; bool {
+        let needle = query.trim().to_ascii_lowercase();
+        if needle.is_empty() {
+            return true;
+        }
+        self.ref_des.to_ascii_lowercase().contains(&amp;needle)
+            || self.value.to_ascii_lowercase().contains(&amp;needle)
+            || self.package_name.to_ascii_lowercase().contains(&amp;needle)
+            || self
+                .primary_net
+                .signal_name()
+                .to_ascii_lowercase()
+                .contains(&amp;needle)
+    }
+}
+
+// ... [BoardViewport, sample_traces(), sample_pads(), sample_components()] ...
+
+pub struct BoardModel {
+    pub traces: Vec&lt;TraceSegment&gt;,
+    pub pads: Vec&lt;SmdPad&gt;,
+    pub components: Vec&lt;ComponentSymbol&gt;,
+}
+
+impl Default for BoardModel {
+    fn default() -&gt; Self {
+        Self {
+            traces: sample_traces(),
+            pads: sample_pads(),
+            components: sample_components(),
+        }
+    }
+}
+
+impl BoardModel {
+    pub fn find_component(&amp;self, ref_des: &amp;str) -&gt; Option&lt;&amp;ComponentSymbol&gt; {
+        self.components.iter().find(|c| c.ref_des == ref_des)
+    }
+
+    pub fn filter_components(&amp;self, query: &amp;str) -&gt; Vec&lt;ComponentSymbol&gt; {
+        self.components
+            .iter()
+            .filter(|c| c.matches_query(query))
+            .cloned()
+            .collect()
+    }
+}
+
+pub struct ViewState {
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
+    pub viewport: BoardViewport,
+    pub pcb_scene_rect: Rect,
+    pub selected_component: Option&lt;String&gt;,
+    pub hovered_net: Option&lt;NetId&gt;,
+    pub selected_net: Option&lt;NetId&gt;,
+    pub bom_search_query: String,
+}
+
+impl Default for ViewState {
+    fn default() -&gt; Self {
+        let mut view = Self {
+            show_top_copper: false,
+            show_bottom_copper: false,
+            show_silkscreen: false,
+            show_ratsnest: false,
+            viewport: BoardViewport::default(),
+            pcb_scene_rect: Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0)),
+            selected_component: None,
+            hovered_net: None,
+            selected_net: None,
+            bom_search_query: String::new(),
+        };
+        view.reset_layers();
+        view
+    }
+}
+
+impl ViewState {
+    // ... [reset_layers, isolate_top_copper, show_all_layers, reset_viewport,
+    //      is_layer_visible, active_net, focus_component] ...
+
+    pub fn clear_bom_query(&amp;mut self) {
+        self.bom_search_query.clear();
+    }
+}
+
+#[derive(Default)]
+pub struct PcbReviewerApp {
+    pub board: BoardModel,
+    pub view: ViewState,
+}
+
+impl PcbReviewerApp {
+    // ... [visible_traces_in_z_order, hit_test_net_at_mm, render_schematic_bar, render_canvas, paint_board] ...
+
+    pub fn render_side_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        ui.heading("PCB Layers");
+        ui.checkbox(&amp;mut self.view.show_top_copper, "Top Copper (F.Cu)");
+        ui.checkbox(&amp;mut self.view.show_bottom_copper, "Bottom Copper (B.Cu)");
+        ui.checkbox(&amp;mut self.view.show_silkscreen, "Silkscreen (F.SilkS)");
+        ui.checkbox(&amp;mut self.view.show_ratsnest, "Ratsnest (Unrouted)");
+
+        ui.separator();
+        if ui.button("Isolate Top Copper").clicked() {
+            self.view.isolate_top_copper();
+        }
+        if ui.button("Show All Layers").clicked() {
+            self.view.show_all_layers();
+        }
+
+        ui.separator();
+        ui.heading("BOM &amp; Netlist Inspector");
+        ui.horizontal(|ui| {
+            let bom_label = ui.label("Filter BOM:");
+            ui.text_edit_singleline(&amp;mut self.view.bom_search_query)
+                .labelled_by(bom_label.id);
+            if ui.button("Clear Filter").clicked() {
+                self.view.clear_bom_query();
+            }
+        });
+
+        if self.view.show_silkscreen {
+            let matching = self.board.filter_components(&amp;self.view.bom_search_query);
+            ui.label(format!("Matching Components: {}", matching.len()));
+            egui::ScrollArea::vertical()
+                .max_height(180.0)
+                .show_rows(ui, 22.0, matching.len(), |ui, row_range| {
+                    egui::Grid::new("bom_inspector_grid")
+                        .striped(true)
+                        .show(ui, |ui| {
+                            for comp in &amp;matching[row_range] {
+                                ui.label(comp.primary_net.signal_name());
+                                if ui.button(comp.inspector_label()).clicked() {
+                                    self.view.focus_component(&amp;self.board, &amp;comp.ref_des);
+                                }
+                                ui.end_row();
+                            }
+                        });
+                });
+        } else {
+            ui.label("Enable Silkscreen to inspect component RefDes.");
+        }
+
+        ui.separator();
+        ui.heading("Net Inspector");
+        if let Some(net) = self.view.active_net() {
+            ui.label(format!("Active Net: {} ({})", net.code(), net.signal_name()));
+            if ui.button("Clear Selection").clicked() {
+                self.view.selected_net = None;
+                self.view.selected_component = None;
+            }
+        } else {
+            ui.label("Hover or click a pad to cross-probe its net.");
+        }
+    }
+}</code></pre>
 </div>
 
 <section class="full-width-panel" id="bom-scroll-sim">

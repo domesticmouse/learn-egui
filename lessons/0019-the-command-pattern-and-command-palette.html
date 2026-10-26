@@ -81,17 +81,32 @@ flowchart LR
     style BadParams fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2 id="tier-5-panic-hunt-fuzzing-amp-command-parity-floor">Tier 5 <code>panic_hunt</code> Fuzzing &amp; <code>COMMAND_PARITY_FLOOR</code></h2>
+<h2 id="2-anatomy-of-the-commandspec-engine-amp-palette-block-by-block">2. Anatomy of the <code>CommandSpec</code> Engine &amp; Palette: Block by Block</h2>
 <p>Because <code>CommandSpec::run</code> accepts dynamic <code>&amp;serde_json::Value</code> payloads (which can originate from a UI dialog, a CLI flag, or an MCP automation client), it must <strong>never</strong> panic when handed <code>null</code>, negative coordinates, out-of-bounds numbers, or whitespace-only strings.<span class="sidenote-number"></span><span class="sidenote"><strong>Ratchets Only Move Up (<code>COMMAND_PARITY_FLOOR</code>):</strong> Asserting <code>COMMAND_SPECS.len() &gt;= COMMAND_PARITY_FLOOR</code> ensures that refactoring command modules never silently drops a registered command from the palette.</span></p>
-<figure>
-  <figcaption>CommandSpec registry and execute_command dispatcher in crates/pcb-doc/src/lib.rs</figcaption>
-  <pre><code class="language-rust">pub type EnabledFn = fn(&amp;BoardModel, &amp;BoardHistory) -&gt; Result&lt;(), String&gt;;
+<p>Rather than reading all 220 lines of command registry, parameter validation, UI windowing, and adversarial fuzzing code at once, let's unpack the new code in <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code> across four logical blocks before viewing the complete listing in context.</p>
+<h3 id="block-1-typed-engine-errors-function-pointers-amp-precondition-guards-crates-pcb-doc-src-lib-rs">Block 1: Typed Engine Errors, Function Pointers &amp; Precondition Guards (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">/// Minimum number of registered `CommandSpec`s enforced by our Tier 6 parity ratchet.
+pub const COMMAND_PARITY_FLOOR: usize = 4;
+
+/// Typed, panic-free errors returned by the `CommandSpec` execution engine.
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum EngineError {
+    #[error("unknown command `{0}`")]
+    UnknownCommand(String),
+    #[error("command `{id}` is disabled: {reason}")]
+    DisabledCommand { id: String, reason: String },
+    #[error("invalid parameters for `{id}`: {reason}")]
+    BadParams { id: String, reason: String },
+}
+
+pub type EnabledFn = fn(&amp;BoardModel, &amp;BoardHistory) -&gt; Result&lt;(), String&gt;;
 pub type RunFn = fn(
     &amp;mut BoardModel,
     &amp;mut BoardHistory,
     &amp;serde_json::Value,
 ) -&gt; Result&lt;serde_json::Value, EngineError&gt;;
 
+/// Metadata, precondition guard, and execution function pointer for a single engine command.
 #[derive(Clone, Copy, Debug)]
 pub struct CommandSpec {
     pub id: &amp;'static str,
@@ -102,7 +117,169 @@ pub struct CommandSpec {
     pub run: RunFn,
 }
 
+fn always_enabled(_board: &amp;BoardModel, _history: &amp;BoardHistory) -&gt; Result&lt;(), String&gt; {
+    Ok(())
+}
+
+fn has_review_pins(board: &amp;BoardModel, _history: &amp;BoardHistory) -&gt; Result&lt;(), String&gt; {
+    if board.review_pins.is_empty() {
+        Err("board has no review pins to clear".to_owned())
+    } else {
+        Ok(())
+    }
+}
+
+fn can_undo_history(_board: &amp;BoardModel, history: &amp;BoardHistory) -&gt; Result&lt;(), String&gt; {
+    if history.can_undo() {
+        Ok(())
+    } else {
+        Err("undo stack is empty".to_owned())
+    }
+}</code></pre>
+<ul>
+<li><strong><code>COMMAND_PARITY_FLOOR: usize = 4</code></strong>: A monotonic ratchet constant used by our test suite to guarantee that refactoring never accidentally removes a registered command from the table.</li>
+<li><strong><code>#[derive(Clone, Debug, Error, PartialEq, Eq)] pub enum EngineError</code></strong>: Uses <code>thiserror::Error</code> to classify every command failure into one of three structured variants—<code>UnknownCommand</code>, <code>DisabledCommand { id, reason }</code>, or <code>BadParams { id, reason }</code>—so <code>#[deny(clippy::unwrap_used, clippy::panic)]</code> stays 100% satisfied.</li>
+<li><strong><code>pub type EnabledFn</code> &amp; <code>pub type RunFn</code></strong>: Plain Rust function pointer types (<code>fn(...) -&gt; ...</code>). Because stateless <code>fn</code> pointers have a fixed pointer size and capture no environment, <code>CommandSpec</code> can derive <code>Copy</code> and live in a compile-time <code>static</code> slice without <code>Box&lt;dyn Fn&gt;</code> heap allocations.</li>
+<li><strong><code>has_review_pins</code> &amp; <code>can_undo_history</code></strong>: Precondition guards that inspect <code>&amp;BoardModel</code> and <code>&amp;BoardHistory</code> immutably and return <code>Err(String)</code> with a human-readable explanation whenever an action cannot run.</li>
+</ul>
+<h3 id="block-2-validated-command-handlers-command-specs-amp-execute-command-crates-pcb-doc-src-lib-rs">Block 2: Validated Command Handlers, <code>COMMAND_SPECS</code> &amp; <code>execute_command</code> (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">fn run_add_pin(
+    board: &amp;mut BoardModel,
+    history: &amp;mut BoardHistory,
+    params: &amp;serde_json::Value,
+) -&gt; Result&lt;serde_json::Value, EngineError&gt; {
+    let x_mm = params
+        .get("x_mm")
+        .and_then(serde_json::Value::as_f64)
+        .ok_or_else(|| EngineError::BadParams {
+            id: "review.addPin".to_owned(),
+            reason: "missing numeric x_mm".to_owned(),
+        })? as f32;
+    let y_mm = params
+        .get("y_mm")
+        .and_then(serde_json::Value::as_f64)
+        .ok_or_else(|| EngineError::BadParams {
+            id: "review.addPin".to_owned(),
+            reason: "missing numeric y_mm".to_owned(),
+        })? as f32;
+    if !(0.0..=100.0).contains(&amp;x_mm) || !(0.0..=70.0).contains(&amp;y_mm) {
+        return Err(EngineError::BadParams {
+            id: "review.addPin".to_owned(),
+            reason: "coordinates out of board bounds".to_owned(),
+        });
+    }
+    let comment = params
+        .get("comment")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| EngineError::BadParams {
+            id: "review.addPin".to_owned(),
+            reason: "comment must not be empty".to_owned(),
+        })?;
+    let before = board.clone();
+    let id = board.add_review_pin_at(pos2(x_mm, y_mm), "cmd", comment, PinSeverity::Warning);
+    history.record_edit("Place Review Pin", before, None);
+    Ok(serde_json::json!({
+        "added_pin_id": id.0,
+        "pin_count": board.review_pins.len(),
+    }))
+}
+
+fn run_clear_pins(
+    board: &amp;mut BoardModel,
+    history: &amp;mut BoardHistory,
+    _params: &amp;serde_json::Value,
+) -&gt; Result&lt;serde_json::Value, EngineError&gt; {
+    let cleared = board.review_pins.len();
+    let before = board.clone();
+    board.clear_review_pins();
+    history.record_edit("Clear Review Pins", before, None);
+    Ok(serde_json::json!({
+        "cleared_count": cleared,
+        "pin_count": board.review_pins.len(),
+    }))
+}
+
+fn run_history_undo(
+    board: &amp;mut BoardModel,
+    history: &amp;mut BoardHistory,
+    _params: &amp;serde_json::Value,
+) -&gt; Result&lt;serde_json::Value, EngineError&gt; {
+    let label = history.undo(board).unwrap_or_default();
+    Ok(serde_json::json!({
+        "undone_label": label,
+        "undo_len": history.undo_len(),
+    }))
+}
+
+fn run_session_inspect(
+    board: &amp;mut BoardModel,
+    history: &amp;mut BoardHistory,
+    _params: &amp;serde_json::Value,
+) -&gt; Result&lt;serde_json::Value, EngineError&gt; {
+    Ok(serde_json::json!({
+        "pin_count": board.review_pins.len(),
+        "pad_count": board.pads.len(),
+        "revision": history.revision(),
+    }))
+}
+
+pub static COMMAND_SPECS: &amp;[CommandSpec] = &amp;[
+    CommandSpec {
+        id: "review.addPin",
+        label: "Place Review Pin",
+        shortcut: Some("P"),
+        journal: true,
+        enabled: always_enabled,
+        run: run_add_pin,
+    },
+    CommandSpec {
+        id: "review.clearPins",
+        label: "Clear Review Pins",
+        shortcut: None,
+        journal: true,
+        enabled: has_review_pins,
+        run: run_clear_pins,
+    },
+    CommandSpec {
+        id: "history.undo",
+        label: "Undo Last Edit",
+        shortcut: Some("Z"),
+        journal: false,
+        enabled: can_undo_history,
+        run: run_history_undo,
+    },
+    CommandSpec {
+        id: "session.inspect",
+        label: "Inspect Session Telemetry",
+        shortcut: Some("I"),
+        journal: false,
+        enabled: always_enabled,
+        run: run_session_inspect,
+    },
+];
+
+pub fn find_command_spec(id: &amp;str) -&gt; Option&lt;&amp;'static CommandSpec&gt; {
+    COMMAND_SPECS.iter().find(|spec| spec.id == id)
+}
+
+pub fn filter_command_specs(query: &amp;str) -&gt; Vec&lt;&amp;'static CommandSpec&gt; {
+    let needle = query.trim().to_ascii_lowercase();
+    if needle.is_empty() {
+        return COMMAND_SPECS.iter().collect();
+    }
+    COMMAND_SPECS
+        .iter()
+        .filter(|spec| {
+            spec.id.to_ascii_lowercase().contains(&amp;needle)
+                || spec.label.to_ascii_lowercase().contains(&amp;needle)
+        })
+        .collect()
+}
+
 impl BoardModel {
+    /// Validates and executes a registered `CommandSpec` by `id` against `self` and `history`.
     pub fn execute_command(
         &amp;mut self,
         history: &amp;mut BoardHistory,
@@ -118,6 +295,469 @@ impl BoardModel {
         (spec.run)(self, history, params)
     }
 }</code></pre>
+<ul>
+<li><strong>Untrusted JSON Validation (<code>run_add_pin</code>)</strong>: Extracts <code>x_mm</code> and <code>y_mm</code> via <code>.get(...).and_then(Value::as_f64)</code>, checks board bounds with <code>!(0.0..=100.0).contains(&amp;x_mm) || !(0.0..=70.0).contains(&amp;y_mm)</code>, and trims <code>comment</code> with <code>.map(str::trim).filter(|s| !s.is_empty())</code> before cloning an <code>O(1)</code> <code>Arc</code> snapshot (<code>let before = board.clone();</code>) and recording an undo entry.</li>
+<li><strong><code>pub static COMMAND_SPECS: &amp;[CommandSpec]</code></strong>: A compile-time static slice registering all four engine commands (<code>&quot;review.addPin&quot;</code>, <code>&quot;review.clearPins&quot;</code>, <code>&quot;history.undo&quot;</code>, <code>&quot;session.inspect&quot;</code>), their UI labels, optional shortcut badges, journal flags, and <code>enabled</code>/<code>run</code> function pointers.</li>
+<li><strong><code>find_command_spec</code> &amp; <code>filter_command_specs</code></strong>: Lookup and case-insensitive substring search helpers over <code>COMMAND_SPECS</code> matching both <code>spec.id</code> and <code>spec.label</code>.</li>
+<li><strong><code>BoardModel::execute_command</code></strong>: Resolves <code>find_command_spec(id)</code> into <code>EngineError::UnknownCommand</code>, invokes <code>(spec.enabled)(self, history)</code> (notice the parentheses around <code>spec.enabled</code> required in Rust to call a function pointer stored in a struct field!), and finally invokes <code>(spec.run)(self, history, params)</code>.</li>
+</ul>
+<h3 id="block-3-command-palette-state-key-k-shortcut-amp-floating-egui-window-src-main-rs">Block 3: Command Palette State, <code>Key::K</code> Shortcut &amp; Floating <code>egui::Window</code> (<code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">// Added fields on `pub struct ViewState`:
+pub show_command_palette: bool,
+pub command_palette_query: String,
+pub last_command_status: String,
+
+// Added method on `impl ViewState`:
+pub fn toggle_command_palette(&amp;mut self) {
+    self.show_command_palette = !self.show_command_palette;
+}
+
+// Added methods on `impl PcbReviewerApp`:
+/// Dispatches a registered `CommandSpec` by `id` and updates `self.view.last_command_status`.
+pub fn dispatch_ui_command(&amp;mut self, id: &amp;str, params: serde_json::Value) -&gt; bool {
+    match self.board.execute_command(&amp;mut self.history, id, &amp;params) {
+        Ok(_) =&gt; {
+            self.view.last_command_status = format!("OK: {id}");
+            true
+        }
+        Err(err) =&gt; {
+            self.view.last_command_status = format!("ERR: {err}");
+            false
+        }
+    }
+}
+
+pub fn render_command_palette_window(&amp;mut self, ctx: &amp;egui::Context) {
+    if !self.view.show_command_palette {
+        return;
+    }
+    egui::Window::new("Command Palette")
+        .id(egui::Id::unique("command_palette_window"))
+        .collapsible(false)
+        .resizable(false)
+        .show(ctx, |ui| {
+            let cmd_label = ui.label("Filter Commands:");
+            ui.text_edit_singleline(&amp;mut self.view.command_palette_query)
+                .labelled_by(cmd_label.id);
+            let matching = filter_command_specs(&amp;self.view.command_palette_query);
+            ui.label(format!("Matching Commands: {}", matching.len()));
+            if ui.button("Run: Inspect Session").clicked() {
+                self.dispatch_ui_command("session.inspect", serde_json::json!({}));
+            }
+            if ui.button("Run: Clear Review Pins").clicked() {
+                self.dispatch_ui_command("review.clearPins", serde_json::json!({}));
+            }
+            if ui.button("Close Palette").clicked() {
+                self.view.show_command_palette = false;
+            }
+        });
+}</code></pre>
+<ul>
+<li><strong><code>ViewState</code> Palette Fields &amp; <code>toggle_command_palette</code></strong>: Stores <code>show_command_palette</code> (<code>false</code> by default), <code>command_palette_query</code>, and <code>last_command_status</code> (<code>&quot;Ready (4 specs)&quot;</code>), toggled either by pressing <code>Key::K</code> in <code>handle_hotkeys</code> (<code>ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::K))</code>) or clicking <code>&quot;Command Palette (K)&quot;</code> in <code>render_session_panel</code>.</li>
+<li><strong><code>PcbReviewerApp::dispatch_ui_command</code></strong>: Bridges <code>egui</code> button clicks to <code>self.board.execute_command(&amp;mut self.history, id, &amp;params)</code>, formatting either <code>&quot;OK: {id}&quot;</code> or <code>&quot;ERR: {err}&quot;</code> into <code>self.view.last_command_status</code> for immediate status feedback.</li>
+<li><strong><code>render_command_palette_window</code></strong>: Renders a floating <code>egui::Window::new(&quot;Command Palette&quot;)</code> with a deterministic <code>.id(egui::Id::unique(&quot;command_palette_window&quot;))</code>, an accessible search box (<code>labelled_by(cmd_label.id)</code>), a live count of <code>filter_command_specs(&amp;self.view.command_palette_query)</code>, and quick-dispatch buttons.</li>
+</ul>
+<h3 id="block-4-tier-5-panic-hunt-fuzzer-amp-headless-palette-tests-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Block 4: Tier 5 <code>panic_hunt</code> Fuzzer &amp; Headless Palette Tests (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">// In `crates/pcb-doc/src/lib.rs` (`#[cfg(test)] mod tests`):
+#[test]
+fn command_registry_dispatch_and_panic_hunt_fuzzer_preserve_invariants() {
+    assert!(COMMAND_SPECS.len() &gt;= COMMAND_PARITY_FLOOR);
+    assert_eq!(filter_command_specs("   ").len(), 4);
+    assert_eq!(filter_command_specs("addpin")[0].id, "review.addPin");
+    assert_eq!(filter_command_specs("telemetry")[0].id, "session.inspect");
+    assert!(filter_command_specs("nonexistent_xyz").is_empty());
+
+    let mut board = BoardModel::default();
+    let mut history = BoardHistory::default();
+
+    assert_eq!(
+        board.execute_command(&amp;mut history, "unknown.cmd", &amp;serde_json::Value::Null),
+        Err(EngineError::UnknownCommand("unknown.cmd".to_owned()))
+    );
+    assert_eq!(
+        board.execute_command(&amp;mut history, "history.undo", &amp;serde_json::Value::Null),
+        Err(EngineError::DisabledCommand {
+            id: "history.undo".to_owned(),
+            reason: "undo stack is empty".to_owned(),
+        })
+    );
+
+    let inspect_out = board
+        .execute_command(&amp;mut history, "session.inspect", &amp;serde_json::json!({}))
+        .unwrap();
+    assert_eq!(
+        inspect_out,
+        serde_json::json!({ "pin_count": 2, "pad_count": 3, "revision": 0 })
+    );
+
+    // Adversarial validation on review.addPin (Tier 5 panic_hunt)
+    for (bad_payload, expected_reason) in [
+        (serde_json::json!({ "y_mm": 20.0, "comment": "ok" }), "missing numeric x_mm"),
+        (serde_json::json!({ "x_mm": 20.0, "comment": "ok" }), "missing numeric y_mm"),
+        (
+            serde_json::json!({ "x_mm": -1.0, "y_mm": 20.0, "comment": "ok" }),
+            "coordinates out of board bounds",
+        ),
+        (
+            serde_json::json!({ "x_mm": 105.0, "y_mm": 20.0, "comment": "ok" }),
+            "coordinates out of board bounds",
+        ),
+        (
+            serde_json::json!({ "x_mm": 20.0, "y_mm": -2.0, "comment": "ok" }),
+            "coordinates out of board bounds",
+        ),
+        (
+            serde_json::json!({ "x_mm": 20.0, "y_mm": 75.0, "comment": "ok" }),
+            "coordinates out of board bounds",
+        ),
+        (
+            serde_json::json!({ "x_mm": 20.0, "y_mm": 30.0, "comment": "   " }),
+            "comment must not be empty",
+        ),
+    ] {
+        assert_eq!(
+            board.execute_command(&amp;mut history, "review.addPin", &amp;bad_payload),
+            Err(EngineError::BadParams {
+                id: "review.addPin".to_owned(),
+                reason: expected_reason.to_owned(),
+            })
+        );
+    }
+
+    // Exact boundary checks (0.0, 100.0, 70.0)
+    let added = board
+        .execute_command(
+            &amp;mut history,
+            "review.addPin",
+            &amp;serde_json::json!({ "x_mm": 0.0, "y_mm": 70.0, "comment": "  Edge check  " }),
+        )
+        .unwrap();
+    assert_eq!(added, serde_json::json!({ "added_pin_id": 3, "pin_count": 3 }));
+    assert_eq!(board.review_pins[&amp;PinId(3)].position_mm, pos2(0.0, 70.0));
+    assert_eq!(board.review_pins[&amp;PinId(3)].comment, "Edge check");
+    assert_eq!(history.undo_len(), 1);
+
+    let added_max = board
+        .execute_command(
+            &amp;mut history,
+            "review.addPin",
+            &amp;serde_json::json!({ "x_mm": 100.0, "y_mm": 0.0, "comment": "Corner" }),
+        )
+        .unwrap();
+    assert_eq!(added_max, serde_json::json!({ "added_pin_id": 4, "pin_count": 4 }));
+
+    let undone = board
+        .execute_command(&amp;mut history, "history.undo", &amp;serde_json::json!({}))
+        .unwrap();
+    assert_eq!(
+        undone,
+        serde_json::json!({ "undone_label": "Place Review Pin", "undo_len": 1 })
+    );
+    assert_eq!(board.review_pins.len(), 3);
+
+    let cleared = board
+        .execute_command(&amp;mut history, "review.clearPins", &amp;serde_json::json!({}))
+        .unwrap();
+    assert_eq!(
+        cleared,
+        serde_json::json!({ "cleared_count": 3, "pin_count": 0 })
+    );
+    assert_eq!(
+        board.execute_command(&amp;mut history, "review.clearPins", &amp;serde_json::json!({})),
+        Err(EngineError::DisabledCommand {
+            id: "review.clearPins".to_owned(),
+            reason: "board has no review pins to clear".to_owned(),
+        })
+    );
+}</code></pre>
+<ul>
+<li><strong>Tier 5 <code>panic_hunt</code> Table</strong>: Iterates over seven adversarial JSON payloads (missing <code>x_mm</code>/<code>y_mm</code>, negative and out-of-range coordinates <code>-1.0</code>, <code>105.0</code>, <code>-2.0</code>, <code>75.0</code>, and whitespace-only comments) and asserts that every single one returns <code>Err(EngineError::BadParams)</code> without panicking.</li>
+<li><strong>Boundary-Value Mutation Catching (<code>0.0</code>, <code>100.0</code>, <code>70.0</code>)</strong>: Testing pins placed directly on <code>(0.0, 70.0)</code> and <code>(100.0, 0.0)</code> kills <code>&lt;</code> vs. <code>&lt;=</code> boundary mutants inside <code>(0.0..=100.0).contains(&amp;x_mm)</code> and <code>(0.0..=70.0).contains(&amp;y_mm)</code>.</li>
+<li><strong>Headless <code>egui_kittest</code> Palette Workflow (<code>src/main.rs</code>)</strong>: Presses <code>harness.key_press(egui::Key::K)</code>, queries <code>&quot;Matching Commands: 4&quot;</code>, clicks <code>&quot;Run: Inspect Session&quot;</code> and <code>&quot;Run: Clear Review Pins&quot;</code>, and verifies <code>&quot;Cmd Engine: OK: review.clearPins&quot;</code>.</li>
+</ul>
+<h3 id="complete-lesson-0019-code-listing-in-context">Complete Lesson 0019 Code Listing (In Context)</h3>
+<p>Putting all four blocks together, here are the complete updated sections of <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code> in context:</p>
+<figure>
+  <figcaption>Complete CommandSpec registry and execute_command engine in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">/// Minimum number of registered `CommandSpec`s enforced by our Tier 6 parity ratchet.
+pub const COMMAND_PARITY_FLOOR: usize = 4;
+
+/// Typed, panic-free errors returned by the `CommandSpec` execution engine.
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum EngineError {
+    #[error("unknown command `{0}`")]
+    UnknownCommand(String),
+    #[error("command `{id}` is disabled: {reason}")]
+    DisabledCommand { id: String, reason: String },
+    #[error("invalid parameters for `{id}`: {reason}")]
+    BadParams { id: String, reason: String },
+}
+
+pub type EnabledFn = fn(&amp;BoardModel, &amp;BoardHistory) -&gt; Result&lt;(), String&gt;;
+pub type RunFn = fn(
+    &amp;mut BoardModel,
+    &amp;mut BoardHistory,
+    &amp;serde_json::Value,
+) -&gt; Result&lt;serde_json::Value, EngineError&gt;;
+
+/// Metadata, precondition guard, and execution function pointer for a single engine command.
+#[derive(Clone, Copy, Debug)]
+pub struct CommandSpec {
+    pub id: &amp;'static str,
+    pub label: &amp;'static str,
+    pub shortcut: Option&lt;&amp;'static str&gt;,
+    pub journal: bool,
+    pub enabled: EnabledFn,
+    pub run: RunFn,
+}
+
+fn always_enabled(_board: &amp;BoardModel, _history: &amp;BoardHistory) -&gt; Result&lt;(), String&gt; {
+    Ok(())
+}
+
+fn has_review_pins(board: &amp;BoardModel, _history: &amp;BoardHistory) -&gt; Result&lt;(), String&gt; {
+    if board.review_pins.is_empty() {
+        Err("board has no review pins to clear".to_owned())
+    } else {
+        Ok(())
+    }
+}
+
+fn can_undo_history(_board: &amp;BoardModel, history: &amp;BoardHistory) -&gt; Result&lt;(), String&gt; {
+    if history.can_undo() {
+        Ok(())
+    } else {
+        Err("undo stack is empty".to_owned())
+    }
+}
+
+fn run_add_pin(
+    board: &amp;mut BoardModel,
+    history: &amp;mut BoardHistory,
+    params: &amp;serde_json::Value,
+) -&gt; Result&lt;serde_json::Value, EngineError&gt; {
+    let x_mm = params
+        .get("x_mm")
+        .and_then(serde_json::Value::as_f64)
+        .ok_or_else(|| EngineError::BadParams {
+            id: "review.addPin".to_owned(),
+            reason: "missing numeric x_mm".to_owned(),
+        })? as f32;
+    let y_mm = params
+        .get("y_mm")
+        .and_then(serde_json::Value::as_f64)
+        .ok_or_else(|| EngineError::BadParams {
+            id: "review.addPin".to_owned(),
+            reason: "missing numeric y_mm".to_owned(),
+        })? as f32;
+    if !(0.0..=100.0).contains(&amp;x_mm) || !(0.0..=70.0).contains(&amp;y_mm) {
+        return Err(EngineError::BadParams {
+            id: "review.addPin".to_owned(),
+            reason: "coordinates out of board bounds".to_owned(),
+        });
+    }
+    let comment = params
+        .get("comment")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| EngineError::BadParams {
+            id: "review.addPin".to_owned(),
+            reason: "comment must not be empty".to_owned(),
+        })?;
+    let before = board.clone();
+    let id = board.add_review_pin_at(pos2(x_mm, y_mm), "cmd", comment, PinSeverity::Warning);
+    history.record_edit("Place Review Pin", before, None);
+    Ok(serde_json::json!({
+        "added_pin_id": id.0,
+        "pin_count": board.review_pins.len(),
+    }))
+}
+
+fn run_clear_pins(
+    board: &amp;mut BoardModel,
+    history: &amp;mut BoardHistory,
+    _params: &amp;serde_json::Value,
+) -&gt; Result&lt;serde_json::Value, EngineError&gt; {
+    let cleared = board.review_pins.len();
+    let before = board.clone();
+    board.clear_review_pins();
+    history.record_edit("Clear Review Pins", before, None);
+    Ok(serde_json::json!({
+        "cleared_count": cleared,
+        "pin_count": board.review_pins.len(),
+    }))
+}
+
+fn run_history_undo(
+    board: &amp;mut BoardModel,
+    history: &amp;mut BoardHistory,
+    _params: &amp;serde_json::Value,
+) -&gt; Result&lt;serde_json::Value, EngineError&gt; {
+    let label = history.undo(board).unwrap_or_default();
+    Ok(serde_json::json!({
+        "undone_label": label,
+        "undo_len": history.undo_len(),
+    }))
+}
+
+fn run_session_inspect(
+    board: &amp;mut BoardModel,
+    history: &amp;mut BoardHistory,
+    _params: &amp;serde_json::Value,
+) -&gt; Result&lt;serde_json::Value, EngineError&gt; {
+    Ok(serde_json::json!({
+        "pin_count": board.review_pins.len(),
+        "pad_count": board.pads.len(),
+        "revision": history.revision(),
+    }))
+}
+
+pub static COMMAND_SPECS: &amp;[CommandSpec] = &amp;[
+    CommandSpec {
+        id: "review.addPin",
+        label: "Place Review Pin",
+        shortcut: Some("P"),
+        journal: true,
+        enabled: always_enabled,
+        run: run_add_pin,
+    },
+    CommandSpec {
+        id: "review.clearPins",
+        label: "Clear Review Pins",
+        shortcut: None,
+        journal: true,
+        enabled: has_review_pins,
+        run: run_clear_pins,
+    },
+    CommandSpec {
+        id: "history.undo",
+        label: "Undo Last Edit",
+        shortcut: Some("Z"),
+        journal: false,
+        enabled: can_undo_history,
+        run: run_history_undo,
+    },
+    CommandSpec {
+        id: "session.inspect",
+        label: "Inspect Session Telemetry",
+        shortcut: Some("I"),
+        journal: false,
+        enabled: always_enabled,
+        run: run_session_inspect,
+    },
+];
+
+pub fn find_command_spec(id: &amp;str) -&gt; Option&lt;&amp;'static CommandSpec&gt; {
+    COMMAND_SPECS.iter().find(|spec| spec.id == id)
+}
+
+pub fn filter_command_specs(query: &amp;str) -&gt; Vec&lt;&amp;'static CommandSpec&gt; {
+    let needle = query.trim().to_ascii_lowercase();
+    if needle.is_empty() {
+        return COMMAND_SPECS.iter().collect();
+    }
+    COMMAND_SPECS
+        .iter()
+        .filter(|spec| {
+            spec.id.to_ascii_lowercase().contains(&amp;needle)
+                || spec.label.to_ascii_lowercase().contains(&amp;needle)
+        })
+        .collect()
+}
+
+impl BoardModel {
+    /// Validates and executes a registered `CommandSpec` by `id` against `self` and `history`.
+    pub fn execute_command(
+        &amp;mut self,
+        history: &amp;mut BoardHistory,
+        id: &amp;str,
+        params: &amp;serde_json::Value,
+    ) -&gt; Result&lt;serde_json::Value, EngineError&gt; {
+        let spec =
+            find_command_spec(id).ok_or_else(|| EngineError::UnknownCommand(id.to_owned()))?;
+        (spec.enabled)(self, history).map_err(|reason| EngineError::DisabledCommand {
+            id: spec.id.to_owned(),
+            reason,
+        })?;
+        (spec.run)(self, history, params)
+    }
+}</code></pre>
+</figure>
+<figure>
+  <figcaption>Complete Command Palette UI integration and headless test in src/main.rs</figcaption>
+  <pre><code class="language-rust">impl PcbReviewerApp {
+    /// Dispatches a registered `CommandSpec` by `id` and updates `self.view.last_command_status`.
+    pub fn dispatch_ui_command(&amp;mut self, id: &amp;str, params: serde_json::Value) -&gt; bool {
+        match self.board.execute_command(&amp;mut self.history, id, &amp;params) {
+            Ok(_) =&gt; {
+                self.view.last_command_status = format!("OK: {id}");
+                true
+            }
+            Err(err) =&gt; {
+                self.view.last_command_status = format!("ERR: {err}");
+                false
+            }
+        }
+    }
+
+    pub fn render_command_palette_window(&amp;mut self, ctx: &amp;egui::Context) {
+        if !self.view.show_command_palette {
+            return;
+        }
+        egui::Window::new("Command Palette")
+            .id(egui::Id::unique("command_palette_window"))
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                let cmd_label = ui.label("Filter Commands:");
+                ui.text_edit_singleline(&amp;mut self.view.command_palette_query)
+                    .labelled_by(cmd_label.id);
+                let matching = filter_command_specs(&amp;self.view.command_palette_query);
+                ui.label(format!("Matching Commands: {}", matching.len()));
+                if ui.button("Run: Inspect Session").clicked() {
+                    self.dispatch_ui_command("session.inspect", serde_json::json!({}));
+                }
+                if ui.button("Run: Clear Review Pins").clicked() {
+                    self.dispatch_ui_command("review.clearPins", serde_json::json!({}));
+                }
+                if ui.button("Close Palette").clicked() {
+                    self.view.show_command_palette = false;
+                }
+            });
+    }
+}
+
+// Inside `standalone_layer_swatch_and_headless_ui_workflows_pass` (`src/main.rs`):
+harness.key_press(egui::Key::K);
+harness.run();
+assert!(harness.state().view.show_command_palette);
+assert!(harness.query_by_label("Matching Commands: 4").is_some());
+
+harness.get_by_label("Run: Inspect Session").click();
+harness.run();
+assert!(
+    harness
+        .query_by_label("Cmd Engine: OK: session.inspect")
+        .is_some()
+);
+
+harness.get_by_label("Run: Clear Review Pins").click();
+harness.run();
+assert_eq!(harness.state().board.review_pins.len(), 0);
+assert!(
+    harness
+        .query_by_label("Cmd Engine: OK: review.clearPins")
+        .is_some()
+);
+
+harness.get_by_label("Close Palette").click();
+harness.run();
+assert!(!harness.state().view.show_command_palette);
+
+harness.get_by_label("Command Palette (K)").click();
+harness.run();
+assert!(harness.state().view.show_command_palette);</code></pre>
 </figure>
 </div>
 

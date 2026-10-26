@@ -71,10 +71,32 @@ flowchart LR
     style Rollback fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2 id="atomic-sign-off-batches-auditlogentry-hash-chains-amp-replica-sync">Atomic Sign-Off Batches, <code>AuditLogEntry</code> Hash Chains &amp; Replica Sync</h2>
+<h2 id="anatomy-of-atomic-sign-off-batches-auditlogentry-hash-chains-amp-replica-sync-block-by-block">Anatomy of Atomic Sign-Off Batches, <code>AuditLogEntry</code> Hash Chains &amp; Replica Sync: Block by Block</h2>
+<p>Let's examine each block of code added to <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code> in Lesson 0026 before viewing the complete assembled listings in context.</p>
+<h3 id="block-1-transaction-errors-auditlogentry-amp-64-bit-hash-chaining-crates-pcb-doc-src-lib-rs">Block 1: Transaction Errors, <code>AuditLogEntry</code> &amp; 64-Bit Hash Chaining (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
 <figure>
-  <figcaption>Atomic transactions, hash-chained audit logs, and replica sync in crates/pcb-doc/src/lib.rs</figcaption>
-  <pre><code class="language-rust">#[derive(Clone, Debug, PartialEq, Eq)]
+  <figcaption>Defining transactional SqlStoreError variants, AuditLogEntry, and compute_audit_entry_hash</figcaption>
+  <pre><code class="language-rust">#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum SqlStoreError {
+    #[error("SQL statement must not be empty")]
+    EmptySql,
+    #[error("invalid Turso SQL syntax: {0}")]
+    InvalidSql(String),
+    #[error("review store schema has not been migrated")]
+    NotMigrated,
+    #[error("foreign key violation: unregistered board_id `{0}`")]
+    ForeignKeyViolation(String),
+    #[error("missing review pin #{0:?}")]
+    MissingPin(PinId),
+    #[error("invalid status transition on pin #{pin_id:?}: {from:?} -&gt; {to:?}")]
+    InvalidStatusTransition {
+        pin_id: PinId,
+        from: ReviewStatus,
+        to: ReviewStatus,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuditLogEntry {
     pub seq: u64,
     pub pin_id: PinId,
@@ -99,6 +121,666 @@ pub fn compute_audit_entry_hash(
         .wrapping_add(u64::from(from_status as u8 + 1) * 13)
         .wrapping_add(u64::from(to_status as u8 + 1) * 7)
 }</code></pre>
+</figure>
+<ul>
+<li><strong><code>MissingPin</code> &amp; <code>InvalidStatusTransition</code> on <code>SqlStoreError</code></strong>: Extend <code>SqlStoreError</code> so transactional sign-off batches can report exact failure causes when a requested <code>PinId</code> does not exist or violates <code>ReviewStatus::can_transition_to(next_status)</code>.</li>
+<li><strong><code>AuditLogEntry</code></strong>: Records an immutable sign-off event with a 1-based <code>seq</code> number, <code>pin_id</code>, <code>actor</code>, <code>from_status</code>, <code>to_status</code>, the predecessor entry's <code>prev_hash</code>, and the chained <code>entry_hash</code>.</li>
+<li><strong><code>compute_audit_entry_hash</code></strong>: Uses deterministic 64-bit wrapping arithmetic (<code>wrapping_mul</code> and <code>wrapping_add</code> with distinct prime weights <code>1_000_003</code>, <code>97</code>, <code>31</code>, <code>13</code>, and <code>7</code>) so altering any field—or reordering any entry in the chain—changes <code>entry_hash</code> and invalidates every subsequent link.</li>
+</ul>
+<h3 id="block-2-verifying-the-hash-chained-audit-trail-verify-audit-chain-amp-replica-status-badge">Block 2: Verifying the Hash-Chained Audit Trail (<code>verify_audit_chain</code> &amp; <code>replica_status_badge</code>)</h3>
+<figure>
+  <figcaption>Verifying audit chain integrity and formatting replica telemetry on TursoReviewStore</figcaption>
+  <pre><code class="language-rust">#[derive(Clone, Debug, Default)]
+pub struct TursoReviewStore {
+    schema_version: u32,
+    registered_boards: HashSet&lt;String&gt;,
+    pub rows: HashMap&lt;PinId, SqlReviewRecord&gt;,
+    next_revision: u64,
+    pub audit_log: Vec&lt;AuditLogEntry&gt;,
+    pub pending_local_writes: usize,
+}
+
+impl TursoReviewStore {
+    // ...
+    pub fn verify_audit_chain(&amp;self) -&gt; bool {
+        let mut expected_prev = 0_u64;
+        for (idx, entry) in self.audit_log.iter().enumerate() {
+            let expected_seq = (idx + 1) as u64;
+            let expected_hash = compute_audit_entry_hash(
+                expected_seq,
+                entry.pin_id,
+                entry.from_status,
+                entry.to_status,
+                expected_prev,
+            );
+            if entry.seq != expected_seq
+                || entry.prev_hash != expected_prev
+                || entry.entry_hash != expected_hash
+            {
+                return false;
+            }
+            expected_prev = entry.entry_hash;
+        }
+        true
+    }
+
+    pub fn replica_status_badge(&amp;self) -&gt; String {
+        let chain = if self.verify_audit_chain() {
+            "VALID"
+        } else {
+            "TAMPERED"
+        };
+        format!(
+            "Replica: {} pending, {} audit [{chain}]",
+            self.pending_local_writes,
+            self.audit_log.len()
+        )
+    }
+}</code></pre>
+</figure>
+<ul>
+<li><strong><code>audit_log</code> &amp; <code>pending_local_writes</code></strong>: Track the append-only vector of <code>AuditLogEntry</code> records and the count of uncommitted local writes waiting to be synced to a remote replica.</li>
+<li><strong><code>verify_audit_chain(&amp;self) -&gt; bool</code></strong>: Walks <code>self.audit_log</code> from genesis (<code>expected_prev = 0_u64</code>), recomputing <code>expected_seq</code> and <code>expected_hash</code> at each step. If <code>entry.seq</code>, <code>entry.prev_hash</code>, or <code>entry.entry_hash</code> diverges, it immediately returns <code>false</code>.</li>
+<li><strong><code>replica_status_badge(&amp;self) -&gt; String</code></strong>: Formats <code>&quot;Replica: 2 pending, 0 audit [VALID]&quot;</code> (or <code>[TAMPERED]</code> if <code>verify_audit_chain()</code> fails) for live display in the <code>egui</code> session panel.</li>
+</ul>
+<h3 id="block-3-all-or-nothing-sign-off-transactions-amp-local-first-replica-merging-impl-tursoreviewstore">Block 3: All-or-Nothing Sign-Off Transactions &amp; Local-First Replica Merging (<code>impl TursoReviewStore</code>)</h3>
+<figure>
+  <figcaption>Implementing execute_atomic_signoff_batch and sync_with_remote_replica in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">impl TursoReviewStore {
+    // ...
+    pub fn execute_atomic_signoff_batch_sync(
+        &amp;mut self,
+        actor: &amp;str,
+        transitions: &amp;[(PinId, ReviewStatus)],
+    ) -&gt; Result&lt;usize, SqlStoreError&gt; {
+        if !self.is_migrated() {
+            return Err(SqlStoreError::NotMigrated);
+        }
+        validate_turso_sql("BEGIN; COMMIT; ROLLBACK;")?;
+        let mut staged_rows = self.rows.clone();
+        let mut staged_audit = self.audit_log.clone();
+        let mut staged_rev = self.next_revision;
+
+        for &amp;(pin_id, next_status) in transitions {
+            let Some(row) = staged_rows.get_mut(&amp;pin_id) else {
+                return Err(SqlStoreError::MissingPin(pin_id));
+            };
+            if !row.status.can_transition_to(next_status) {
+                return Err(SqlStoreError::InvalidStatusTransition {
+                    pin_id,
+                    from: row.status,
+                    to: next_status,
+                });
+            }
+            let from_status = row.status;
+            row.status = next_status;
+            staged_rev += 1;
+            row.revision = staged_rev;
+            let seq = (staged_audit.len() + 1) as u64;
+            let prev_hash = staged_audit.last().map_or(0, |e| e.entry_hash);
+            let entry_hash =
+                compute_audit_entry_hash(seq, pin_id, from_status, next_status, prev_hash);
+            staged_audit.push(AuditLogEntry {
+                seq,
+                pin_id,
+                actor: actor.to_owned(),
+                from_status,
+                to_status: next_status,
+                prev_hash,
+                entry_hash,
+            });
+        }
+
+        self.rows = staged_rows;
+        self.audit_log = staged_audit;
+        self.next_revision = staged_rev;
+        self.pending_local_writes += transitions.len();
+        Ok(transitions.len())
+    }
+
+    pub async fn execute_atomic_signoff_batch(
+        &amp;mut self,
+        actor: &amp;str,
+        transitions: &amp;[(PinId, ReviewStatus)],
+    ) -&gt; Result&lt;usize, SqlStoreError&gt; {
+        self.execute_atomic_signoff_batch_sync(actor, transitions)
+    }
+
+    pub fn sync_with_remote_replica_sync(
+        &amp;mut self,
+        remote_rows: &amp;[SqlReviewRecord],
+    ) -&gt; Result&lt;usize, SqlStoreError&gt; {
+        if !self.is_migrated() {
+            return Err(SqlStoreError::NotMigrated);
+        }
+        let mut merged = 0;
+        for remote in remote_rows {
+            let should_accept = match self.rows.get(&amp;remote.pin_id) {
+                Some(local) =&gt; remote.revision &gt; local.revision,
+                None =&gt; true,
+            };
+            if should_accept {
+                self.rows.insert(remote.pin_id, remote.clone());
+                merged += 1;
+            }
+        }
+        self.pending_local_writes = 0;
+        Ok(merged)
+    }
+
+    pub async fn sync_with_remote_replica(
+        &amp;mut self,
+        remote_rows: &amp;[SqlReviewRecord],
+    ) -&gt; Result&lt;usize, SqlStoreError&gt; {
+        self.sync_with_remote_replica_sync(remote_rows)
+    }
+}</code></pre>
+</figure>
+<ul>
+<li><strong>Transactional Working-Copy Rollback (<code>staged_rows</code>, <code>staged_audit</code>, <code>staged_rev</code>)</strong>: <code>execute_atomic_signoff_batch_sync</code> validates <code>BEGIN; COMMIT; ROLLBACK;</code> via <code>validate_turso_sql</code> and applies every <code>(pin_id, next_status)</code> transition to cloned staging buffers. If the 2nd or 3rd item in <code>transitions</code> returns <code>Err(SqlStoreError::MissingPin(...))</code> or <code>Err(SqlStoreError::InvalidStatusTransition { .. })</code>, the method returns early and leaves <code>self.rows</code>, <code>self.audit_log</code>, <code>self.next_revision</code>, and <code>self.pending_local_writes</code> completely untouched.</li>
+<li><strong>Atomic Commit</strong>: Only after every item in <code>transitions</code> succeeds does <code>self.rows = staged_rows; self.audit_log = staged_audit;</code> commit the batch and increment <code>self.pending_local_writes += transitions.len()</code>.</li>
+<li><strong>Monotonic Revision Conflict Resolution (<code>sync_with_remote_replica</code>)</strong>: Iterates over incoming <code>remote_rows</code>, accepting a remote record only if its <code>PinId</code> is new (<code>None =&gt; true</code>) or its revision is strictly newer than the local row (<code>remote.revision &gt; local.revision</code>), then resets <code>self.pending_local_writes = 0</code>.</li>
+</ul>
+<h3 id="block-4-wiring-sign-off-batching-amp-replica-sync-controls-into-src-main-rs">Block 4: Wiring Sign-Off Batching &amp; Replica Sync Controls into <code>src/main.rs</code></h3>
+<figure>
+  <figcaption>Adding commit_verified_signoff_batch, trigger_replica_sync, and UI buttons in src/main.rs</figcaption>
+  <pre><code class="language-rust">impl PcbReviewerApp {
+    // ...
+    pub fn commit_verified_signoff_batch(&amp;mut self) -&gt; bool {
+        self.sql_store
+            .execute_atomic_signoff_batch_sync("lead_eng", &amp;[(PinId(2), ReviewStatus::Verified)])
+            .is_ok()
+    }
+
+    pub fn trigger_replica_sync(&amp;mut self) -&gt; bool {
+        self.sql_store.sync_with_remote_replica_sync(&amp;[]).is_ok()
+    }
+
+    pub fn render_session_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        // ... inside the "Embedded SQL Store (Turso)" section:
+        ui.separator();
+        ui.heading("Embedded SQL Store (Turso)");
+        ui.label(self.sql_store.summary_badge());
+        ui.label(self.sql_store.replica_status_badge());
+        if ui.button("Sync Pins to SQL").clicked() {
+            self.sync_pins_to_sql_store();
+        }
+        ui.horizontal(|ui| {
+            if ui.button("Commit Sign-Off Batch").clicked() {
+                self.commit_verified_signoff_batch();
+            }
+            if ui.button("Sync Replica").clicked() {
+                self.trigger_replica_sync();
+            }
+        });
+    }
+}</code></pre>
+</figure>
+<ul>
+<li><strong><code>commit_verified_signoff_batch(&amp;mut self) -&gt; bool</code></strong>: Executes an atomic sign-off transition moving <code>PinId(2)</code> (<code>Resolved -&gt; Verified</code>) under actor <code>&quot;lead_eng&quot;</code>, appending a hash-chained <code>AuditLogEntry</code> and incrementing <code>pending_local_writes</code>.</li>
+<li><strong><code>trigger_replica_sync(&amp;mut self) -&gt; bool</code></strong>: Flushes <code>pending_local_writes</code> via <code>sync_with_remote_replica_sync(&amp;[])</code> and updates the live <code>replica_status_badge()</code> label in the right-hand session panel.</li>
+</ul>
+<h3 id="block-5-testing-atomic-rollback-tamper-detection-amp-replica-merging-crates-pcb-doc-src-lib-rs">Block 5: Testing Atomic Rollback, Tamper Detection &amp; Replica Merging (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<figure>
+  <figcaption>Verifying atomic rollback, audit chain tampering, and replica sync in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">    #[tokio::test]
+    async fn turso_transactions_audit_chain_and_replica_sync_preserve_invariants() {
+        let board = BoardModel::default();
+        let mut store = board.export_sql_review_store("pwr-stage-rev-b").unwrap();
+
+        // Atomic rollback: 1st item succeeds on staged copy, 2nd item fails (Open -&gt; Verified is invalid)
+        assert_eq!(
+            store
+                .execute_atomic_signoff_batch(
+                    "lead",
+                    &amp;[
+                        (PinId(2), ReviewStatus::Verified),
+                        (PinId(1), ReviewStatus::Verified),
+                    ],
+                )
+                .await,
+            Err(SqlStoreError::InvalidStatusTransition {
+                pin_id: PinId(1),
+                from: ReviewStatus::Open,
+                to: ReviewStatus::Verified,
+            })
+        );
+        // Verify Pin #2 was NOT modified and audit_log was NOT modified!
+        assert_eq!(store.rows[&amp;PinId(2)].status, ReviewStatus::Resolved);
+        assert!(store.audit_log.is_empty());
+
+        // Valid atomic sign-off batch across 2 pins
+        assert_eq!(
+            store
+                .execute_atomic_signoff_batch(
+                    "lead",
+                    &amp;[
+                        (PinId(1), ReviewStatus::Resolved),
+                        (PinId(2), ReviewStatus::Verified),
+                    ],
+                )
+                .await,
+            Ok(2)
+        );
+        assert!(store.verify_audit_chain());
+
+        // Tamper detection on seq, prev_hash, and entry_hash
+        store.audit_log[1].prev_hash = 999;
+        assert!(!store.verify_audit_chain());
+        store.audit_log[1].prev_hash = 155;
+        assert!(store.verify_audit_chain());
+    }</code></pre>
+</figure>
+<ul>
+<li><strong>Proving All-or-Nothing Rollback</strong>: The test deliberately puts a valid transition <code>(PinId(2), ReviewStatus::Verified)</code> <em>before</em> an invalid transition <code>(PinId(1), ReviewStatus::Verified)</code> in the same batch and asserts that <code>store.rows[&amp;PinId(2)].status</code> remains <code>ReviewStatus::Resolved</code> and <code>store.audit_log.is_empty()</code>.</li>
+<li><strong>Mutant-Proof Hash Chain &amp; Boundary Checks</strong>: The test perturbs <code>seq</code>, <code>prev_hash</code>, and <code>entry_hash</code> individually to verify <code>verify_audit_chain()</code> catches all three tamper modes, and tests <code>remote.revision == local.revision</code> (<code>3 == 3</code>) during <code>sync_with_remote_replica</code> so <code>cargo-mutants</code> cannot mutate <code>&gt;</code> into <code>&gt;=</code>.</li>
+</ul>
+<h3 id="complete-transaction-audit-trail-amp-replica-sync-context-listing">Complete Transaction, Audit Trail &amp; Replica Sync Context Listing</h3>
+<p>Here is the complete assembled code added to <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code> in Lesson 0026:</p>
+<figure>
+  <figcaption>Complete transactional sign-off, audit hash chain, replica sync, and tests in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum SqlStoreError {
+    #[error("SQL statement must not be empty")]
+    EmptySql,
+    #[error("invalid Turso SQL syntax: {0}")]
+    InvalidSql(String),
+    #[error("review store schema has not been migrated")]
+    NotMigrated,
+    #[error("foreign key violation: unregistered board_id `{0}`")]
+    ForeignKeyViolation(String),
+    #[error("missing review pin #{0:?}")]
+    MissingPin(PinId),
+    #[error("invalid status transition on pin #{pin_id:?}: {from:?} -&gt; {to:?}")]
+    InvalidStatusTransition {
+        pin_id: PinId,
+        from: ReviewStatus,
+        to: ReviewStatus,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuditLogEntry {
+    pub seq: u64,
+    pub pin_id: PinId,
+    pub actor: String,
+    pub from_status: ReviewStatus,
+    pub to_status: ReviewStatus,
+    pub prev_hash: u64,
+    pub entry_hash: u64,
+}
+
+pub fn compute_audit_entry_hash(
+    seq: u64,
+    pin_id: PinId,
+    from_status: ReviewStatus,
+    to_status: ReviewStatus,
+    prev_hash: u64,
+) -&gt; u64 {
+    prev_hash
+        .wrapping_mul(1_000_003)
+        .wrapping_add(seq * 97)
+        .wrapping_add(u64::from(pin_id.0) * 31)
+        .wrapping_add(u64::from(from_status as u8 + 1) * 13)
+        .wrapping_add(u64::from(to_status as u8 + 1) * 7)
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct TursoReviewStore {
+    schema_version: u32,
+    registered_boards: HashSet&lt;String&gt;,
+    pub rows: HashMap&lt;PinId, SqlReviewRecord&gt;,
+    next_revision: u64,
+    pub audit_log: Vec&lt;AuditLogEntry&gt;,
+    pub pending_local_writes: usize,
+}
+
+impl TursoReviewStore {
+    // ...
+    pub fn verify_audit_chain(&amp;self) -&gt; bool {
+        let mut expected_prev = 0_u64;
+        for (idx, entry) in self.audit_log.iter().enumerate() {
+            let expected_seq = (idx + 1) as u64;
+            let expected_hash = compute_audit_entry_hash(
+                expected_seq,
+                entry.pin_id,
+                entry.from_status,
+                entry.to_status,
+                expected_prev,
+            );
+            if entry.seq != expected_seq
+                || entry.prev_hash != expected_prev
+                || entry.entry_hash != expected_hash
+            {
+                return false;
+            }
+            expected_prev = entry.entry_hash;
+        }
+        true
+    }
+
+    pub fn replica_status_badge(&amp;self) -&gt; String {
+        let chain = if self.verify_audit_chain() {
+            "VALID"
+        } else {
+            "TAMPERED"
+        };
+        format!(
+            "Replica: {} pending, {} audit [{chain}]",
+            self.pending_local_writes,
+            self.audit_log.len()
+        )
+    }
+
+    pub fn execute_atomic_signoff_batch_sync(
+        &amp;mut self,
+        actor: &amp;str,
+        transitions: &amp;[(PinId, ReviewStatus)],
+    ) -&gt; Result&lt;usize, SqlStoreError&gt; {
+        if !self.is_migrated() {
+            return Err(SqlStoreError::NotMigrated);
+        }
+        validate_turso_sql("BEGIN; COMMIT; ROLLBACK;")?;
+        let mut staged_rows = self.rows.clone();
+        let mut staged_audit = self.audit_log.clone();
+        let mut staged_rev = self.next_revision;
+
+        for &amp;(pin_id, next_status) in transitions {
+            let Some(row) = staged_rows.get_mut(&amp;pin_id) else {
+                return Err(SqlStoreError::MissingPin(pin_id));
+            };
+            if !row.status.can_transition_to(next_status) {
+                return Err(SqlStoreError::InvalidStatusTransition {
+                    pin_id,
+                    from: row.status,
+                    to: next_status,
+                });
+            }
+            let from_status = row.status;
+            row.status = next_status;
+            staged_rev += 1;
+            row.revision = staged_rev;
+            let seq = (staged_audit.len() + 1) as u64;
+            let prev_hash = staged_audit.last().map_or(0, |e| e.entry_hash);
+            let entry_hash =
+                compute_audit_entry_hash(seq, pin_id, from_status, next_status, prev_hash);
+            staged_audit.push(AuditLogEntry {
+                seq,
+                pin_id,
+                actor: actor.to_owned(),
+                from_status,
+                to_status: next_status,
+                prev_hash,
+                entry_hash,
+            });
+        }
+
+        self.rows = staged_rows;
+        self.audit_log = staged_audit;
+        self.next_revision = staged_rev;
+        self.pending_local_writes += transitions.len();
+        Ok(transitions.len())
+    }
+
+    pub async fn execute_atomic_signoff_batch(
+        &amp;mut self,
+        actor: &amp;str,
+        transitions: &amp;[(PinId, ReviewStatus)],
+    ) -&gt; Result&lt;usize, SqlStoreError&gt; {
+        self.execute_atomic_signoff_batch_sync(actor, transitions)
+    }
+
+    pub fn sync_with_remote_replica_sync(
+        &amp;mut self,
+        remote_rows: &amp;[SqlReviewRecord],
+    ) -&gt; Result&lt;usize, SqlStoreError&gt; {
+        if !self.is_migrated() {
+            return Err(SqlStoreError::NotMigrated);
+        }
+        let mut merged = 0;
+        for remote in remote_rows {
+            let should_accept = match self.rows.get(&amp;remote.pin_id) {
+                Some(local) =&gt; remote.revision &gt; local.revision,
+                None =&gt; true,
+            };
+            if should_accept {
+                self.rows.insert(remote.pin_id, remote.clone());
+                merged += 1;
+            }
+        }
+        self.pending_local_writes = 0;
+        Ok(merged)
+    }
+
+    pub async fn sync_with_remote_replica(
+        &amp;mut self,
+        remote_rows: &amp;[SqlReviewRecord],
+    ) -&gt; Result&lt;usize, SqlStoreError&gt; {
+        self.sync_with_remote_replica_sync(remote_rows)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // ...
+    #[tokio::test]
+    async fn turso_transactions_audit_chain_and_replica_sync_preserve_invariants() {
+        let h1 = compute_audit_entry_hash(
+            1,
+            PinId(1),
+            ReviewStatus::Open,
+            ReviewStatus::Resolved,
+            0,
+        );
+        assert_eq!(h1, 155);
+        let h2 = compute_audit_entry_hash(
+            2,
+            PinId(2),
+            ReviewStatus::Resolved,
+            ReviewStatus::Verified,
+            h1,
+        );
+        assert_eq!(h2, 155_000_768);
+
+        let unmigrated = &amp;mut TursoReviewStore::default();
+        assert_eq!(
+            unmigrated
+                .execute_atomic_signoff_batch("lead", &amp;[(PinId(1), ReviewStatus::Resolved)])
+                .await,
+            Err(SqlStoreError::NotMigrated)
+        );
+        assert_eq!(
+            unmigrated.sync_with_remote_replica(&amp;[]).await,
+            Err(SqlStoreError::NotMigrated)
+        );
+
+        let board = BoardModel::default();
+        let mut store = board.export_sql_review_store("pwr-stage-rev-b").unwrap();
+        assert_eq!(store.pending_local_writes, 2);
+        assert!(store.verify_audit_chain());
+        assert_eq!(
+            store.replica_status_badge(),
+            "Replica: 2 pending, 0 audit [VALID]"
+        );
+
+        // Missing pin rolls back cleanly
+        assert_eq!(
+            store
+                .execute_atomic_signoff_batch("lead", &amp;[(PinId(999), ReviewStatus::Resolved)])
+                .await,
+            Err(SqlStoreError::MissingPin(PinId(999)))
+        );
+
+        // Atomic rollback: 1st item succeeds on staged copy, 2nd item fails (Open -&gt; Verified is invalid)
+        assert_eq!(
+            store
+                .execute_atomic_signoff_batch(
+                    "lead",
+                    &amp;[
+                        (PinId(2), ReviewStatus::Verified),
+                        (PinId(1), ReviewStatus::Verified),
+                    ],
+                )
+                .await,
+            Err(SqlStoreError::InvalidStatusTransition {
+                pin_id: PinId(1),
+                from: ReviewStatus::Open,
+                to: ReviewStatus::Verified,
+            })
+        );
+        // Verify Pin #2 was NOT modified and audit_log was NOT modified!
+        assert_eq!(store.rows[&amp;PinId(2)].status, ReviewStatus::Resolved);
+        assert!(store.audit_log.is_empty());
+        assert_eq!(store.pending_local_writes, 2);
+
+        store.pending_local_writes = 1;
+        // Valid atomic sign-off batch across 2 pins
+        assert_eq!(
+            store
+                .execute_atomic_signoff_batch(
+                    "lead",
+                    &amp;[
+                        (PinId(1), ReviewStatus::Resolved),
+                        (PinId(2), ReviewStatus::Verified),
+                    ],
+                )
+                .await,
+            Ok(2)
+        );
+        assert_eq!(store.rows[&amp;PinId(1)].status, ReviewStatus::Resolved);
+        assert_eq!(store.rows[&amp;PinId(1)].revision, 3);
+        assert_eq!(store.rows[&amp;PinId(2)].status, ReviewStatus::Verified);
+        assert_eq!(store.rows[&amp;PinId(2)].revision, 4);
+        assert_eq!(store.audit_log.len(), 2);
+        assert_eq!(store.audit_log[0].actor, "lead");
+        assert_eq!(store.audit_log[0].entry_hash, 155);
+        assert_eq!(store.audit_log[1].prev_hash, 155);
+        assert_eq!(store.audit_log[1].entry_hash, 155_000_768);
+        assert_eq!(store.pending_local_writes, 3);
+        assert!(store.verify_audit_chain());
+        assert_eq!(
+            store.replica_status_badge(),
+            "Replica: 3 pending, 2 audit [VALID]"
+        );
+
+        // Tamper detection on seq, prev_hash, and entry_hash
+        store.audit_log[1].seq = 99;
+        assert!(!store.verify_audit_chain());
+        assert_eq!(
+            store.replica_status_badge(),
+            "Replica: 3 pending, 2 audit [TAMPERED]"
+        );
+        store.audit_log[1].seq = 2;
+        assert!(store.verify_audit_chain());
+
+        store.audit_log[1].prev_hash = 999;
+        assert!(!store.verify_audit_chain());
+        store.audit_log[1].prev_hash = 155;
+        assert!(store.verify_audit_chain());
+
+        store.audit_log[1].entry_hash = 999;
+        assert!(!store.verify_audit_chain());
+        store.audit_log[1].entry_hash = 155_000_768;
+        assert!(store.verify_audit_chain());
+
+        // Local-first replica sync:
+        // - PinId(1) at equal revision 3 -&gt; ignored (tests &gt; vs &gt;=)
+        // - PinId(2) at newer revision 9 -&gt; merged
+        // - PinId(3) brand new -&gt; merged
+        let mut stale_pin1 = store.rows[&amp;PinId(1)].clone();
+        stale_pin1.revision = 3;
+        stale_pin1.comment = "Stale equal rev".to_owned();
+
+        let mut newer_pin2 = store.rows[&amp;PinId(2)].clone();
+        newer_pin2.revision = 9;
+        newer_pin2.comment = "Remote updated J1".to_owned();
+
+        let new_pin3 = SqlReviewRecord {
+            pin_id: PinId(3),
+            board_id: "pwr-stage-rev-b".to_owned(),
+            author: "carol".to_owned(),
+            comment: "Add test point TP4".to_owned(),
+            severity: PinSeverity::Info,
+            status: ReviewStatus::Open,
+            position_mm: pos2(40.0, 40.0),
+            revision: 1,
+        };
+
+        assert_eq!(
+            store
+                .sync_with_remote_replica(&amp;[stale_pin1, newer_pin2, new_pin3])
+                .await,
+            Ok(2)
+        );
+        assert_eq!(store.row_count(), 3);
+        assert_eq!(store.rows[&amp;PinId(1)].comment, "Check U1 thermal relief");
+        assert_eq!(store.rows[&amp;PinId(2)].comment, "Remote updated J1");
+        assert_eq!(store.rows[&amp;PinId(3)].author, "carol");
+        assert_eq!(store.pending_local_writes, 0);
+        assert_eq!(
+            store.replica_status_badge(),
+            "Replica: 0 pending, 2 audit [VALID]"
+        );
+    }
+}</code></pre>
+</figure>
+<figure>
+  <figcaption>Complete sign-off batch and replica sync UI handlers and egui_kittest checks in src/main.rs</figcaption>
+  <pre><code class="language-rust">impl PcbReviewerApp {
+    // ...
+    pub fn commit_verified_signoff_batch(&amp;mut self) -&gt; bool {
+        self.sql_store
+            .execute_atomic_signoff_batch_sync("lead_eng", &amp;[(PinId(2), ReviewStatus::Verified)])
+            .is_ok()
+    }
+
+    pub fn trigger_replica_sync(&amp;mut self) -&gt; bool {
+        self.sql_store.sync_with_remote_replica_sync(&amp;[]).is_ok()
+    }
+
+    pub fn render_session_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        // ...
+        ui.separator();
+        ui.heading("Embedded SQL Store (Turso)");
+        ui.label(self.sql_store.summary_badge());
+        ui.label(self.sql_store.replica_status_badge());
+        if ui.button("Sync Pins to SQL").clicked() {
+            self.sync_pins_to_sql_store();
+        }
+        ui.horizontal(|ui| {
+            if ui.button("Commit Sign-Off Batch").clicked() {
+                self.commit_verified_signoff_batch();
+            }
+            if ui.button("Sync Replica").clicked() {
+                self.trigger_replica_sync();
+            }
+        });
+    }
+}
+
+// Inside tests::standalone_layer_swatch_and_headless_ui_workflows_pass in src/main.rs:
+        assert!(
+            harness
+                .query_by_label("Replica: 2 pending, 0 audit [VALID]")
+                .is_some()
+        );
+
+        harness.get_by_label("Commit Sign-Off Batch").click();
+        harness.run();
+        assert!(
+            harness
+                .query_by_label("Replica: 3 pending, 1 audit [VALID]")
+                .is_some()
+        );
+        assert!(!harness.state_mut().commit_verified_signoff_batch());
+
+        harness.get_by_label("Sync Replica").click();
+        harness.run();
+        assert!(
+            harness
+                .query_by_label("Replica: 0 pending, 1 audit [VALID]")
+                .is_some()
+        );</code></pre>
 </figure>
 </div>
 

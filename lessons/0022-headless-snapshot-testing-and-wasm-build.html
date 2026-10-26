@@ -72,10 +72,213 @@ flowchart LR
     style Fail fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2 id="panic-free-gpu-lock-wasm32-target-gates-amp-qualityscorecard">Panic-Free <code>gpu_lock()</code>, <code>wasm32</code> Target Gates &amp; <code>QualityScorecard</code></h2>
+<h2 id="2-anatomy-of-gpu-lock-snapshot-digests-amp-wasm32-readiness-block-by-block">2. Anatomy of <code>gpu_lock()</code>, Snapshot Digests &amp; <code>wasm32</code> Readiness: Block by Block</h2>
 <p>Because <code>crates/pcb-doc</code> (<code>L1</code>) has zero native OS window dependencies, it compiles cleanly for both desktop targets and <code>wasm32-unknown-unknown</code> browser builds using <code>#[cfg(target_arch = &quot;wasm32&quot;)]</code>.</p>
+<p>Let's unpack the new code in <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code> across four logical blocks before inspecting the complete listing in context.</p>
+<h3 id="block-1-panic-free-gpu-lock-amp-wasm32-target-gates-crates-pcb-doc-src-lib-rs">Block 1: Panic-Free <code>gpu_lock()</code> &amp; <code>wasm32</code> Target Gates (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">static GPU_TEST_LOCK: std::sync::OnceLock&lt;std::sync::Mutex&lt;()&gt;&gt; = std::sync::OnceLock::new();
+
+pub fn gpu_lock() -&gt; std::sync::MutexGuard&lt;'static, ()&gt; {
+    GPU_TEST_LOCK
+        .get_or_init(|| std::sync::Mutex::new(()))
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+pub fn runtime_target_label() -&gt; &amp;'static str {
+    #[cfg(target_arch = "wasm32")]
+    {
+        "wasm32-unknown-unknown"
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        "native-desktop"
+    }
+}</code></pre>
+<ul>
+<li><strong><code>static GPU_TEST_LOCK: OnceLock&lt;Mutex&lt;()&gt;&gt;</code></strong>: A lazily initialized, process-wide synchronization primitive that serializes concurrent GPU/snapshot test threads inside <code>cargo test</code> so multi-threaded test runs never trigger driver access violations on Windows WARP, Mesa <code>llvmpipe</code>, or Vulkan ICDs.</li>
+<li><strong><code>.unwrap_or_else(std::sync::PoisonError::into_inner)</code></strong>: If an earlier test thread panics while holding <code>GPU_TEST_LOCK</code>, standard <code>.lock().unwrap()</code> would cascade panics across every remaining test (and violate <code>#![deny(clippy::unwrap_used)]</code>). Passing <code>PoisonError::into_inner</code> recovers the underlying <code>MutexGuard&lt;'static, ()&gt;</code> without panicking.</li>
+<li><strong><code>#[cfg(target_arch = &quot;wasm32&quot;)]</code> (<code>runtime_target_label</code>)</strong>: Uses compile-time conditional compilation attributes so <code>rustc</code> emits <code>&quot;wasm32-unknown-unknown&quot;</code> when targeting WebAssembly in the browser and <code>&quot;native-desktop&quot;</code> on macOS, Linux, and Windows.</li>
+</ul>
+<h3 id="block-2-deterministic-framesnapshotdigest-amp-qualityscorecard-crates-pcb-doc-src-lib-rs">Block 2: Deterministic <code>FrameSnapshotDigest</code> &amp; <code>QualityScorecard</code> (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameSnapshotDigest {
+    pub visible_layer_mask: u8,
+    pub visible_pad_count: usize,
+    pub visible_trace_count: usize,
+    pub drc_count: usize,
+    pub fnv1a_hash: u64,
+}
+
+impl FrameSnapshotDigest {
+    pub fn summary_badge(&amp;self) -&gt; String {
+        format!(
+            "Snapshot: 0x{:08x} (mask=0b{:04b}, drc={})",
+            self.fnv1a_hash as u32, self.visible_layer_mask, self.drc_count
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QualityScorecard {
+    pub tests_passed: usize,
+    pub mutants_caught: usize,
+    pub mutants_missed: usize,
+    pub registered_commands: usize,
+}
+
+impl QualityScorecard {
+    pub fn is_release_ready(&amp;self) -&gt; bool {
+        self.tests_passed &gt; 0
+            &amp;&amp; self.mutants_caught &gt; 0
+            &amp;&amp; self.mutants_missed == 0
+            &amp;&amp; self.registered_commands &gt;= COMMAND_PARITY_FLOOR
+    }
+
+    pub fn summary_badge(&amp;self) -&gt; String {
+        let status = if self.is_release_ready() {
+            "PASS"
+        } else {
+            "FAIL"
+        };
+        format!(
+            "Scorecard [{status}]: {} tests, {} caught, {} missed",
+            self.tests_passed, self.mutants_caught, self.mutants_missed
+        )
+    }
+}
+
+impl BoardModel {
+    pub fn compute_snapshot_digest(
+        &amp;self,
+        viewport_mm: Rect,
+        visible_layer_mask: u8,
+        min_clearance_mm: f32,
+    ) -&gt; FrameSnapshotDigest {
+        let stats = self.cull_stats_for_rect(viewport_mm);
+        let drc_count = self.detect_pad_clearance_violations(min_clearance_mm).len();
+        let fnv1a_hash = u64::from(visible_layer_mask) * 1_000_003
+            + (stats.visible_pads as u64) * 97
+            + (stats.visible_traces as u64) * 31
+            + (drc_count as u64) * 7;
+        FrameSnapshotDigest {
+            visible_layer_mask,
+            visible_pad_count: stats.visible_pads,
+            visible_trace_count: stats.visible_traces,
+            drc_count,
+            fnv1a_hash,
+        }
+    }
+}</code></pre>
+<ul>
+<li><strong><code>FrameSnapshotDigest</code> &amp; <code>compute_snapshot_digest</code></strong>: Combines the 4-bit <code>visible_layer_mask</code>, spatially culled <code>visible_pads</code> and <code>visible_traces</code>, and active <code>drc_count</code> using distinct prime weights (<code>1_000_003</code>, <code>97</code>, <code>31</code>, <code>7</code>) into a deterministic 64-bit <code>fnv1a_hash</code> and formats <code>&quot;Snapshot: 0x{:08x} (mask=0b{:04b}, drc={})&quot;</code>.</li>
+<li><strong><code>QualityScorecard::is_release_ready</code></strong>: Enforces all four release invariants simultaneously: <code>tests_passed &gt; 0</code>, <code>mutants_caught &gt; 0</code>, <code>mutants_missed == 0</code>, and <code>registered_commands &gt;= COMMAND_PARITY_FLOOR</code>.</li>
+</ul>
+<h3 id="block-3-bit-packed-visible-layer-mask-capture-frame-digest-amp-ui-badges-src-main-rs">Block 3: Bit-Packed <code>visible_layer_mask()</code>, <code>capture_frame_digest()</code> &amp; UI Badges (<code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">// Added method on `impl ViewState`:
+pub fn visible_layer_mask(&amp;self) -&gt; u8 {
+    const WEIGHTS: [(PcbLayer, u8); 4] = [
+        (PcbLayer::TopCopper, 1),
+        (PcbLayer::BottomCopper, 2),
+        (PcbLayer::Silkscreen, 4),
+        (PcbLayer::Ratsnest, 8),
+    ];
+    WEIGHTS
+        .iter()
+        .filter(|&amp;&amp;(layer, _)| self.is_layer_visible(layer))
+        .map(|&amp;(_, bit)| bit)
+        .sum()
+}
+
+// Added method on `impl PcbReviewerApp`:
+pub fn capture_frame_digest(&amp;self) -&gt; FrameSnapshotDigest {
+    self.board.compute_snapshot_digest(
+        self.view.pcb_scene_rect,
+        self.view.visible_layer_mask(),
+        self.view.min_clearance_mm,
+    )
+}
+
+// Inside `PcbReviewerApp::render_session_panel`:
+ui.separator();
+ui.label(format!("Target: {}", runtime_target_label()));
+ui.label(self.capture_frame_digest().summary_badge());</code></pre>
+<ul>
+<li><strong><code>ViewState::visible_layer_mask(&amp;self) -&gt; u8</code></strong>: Packs the four layer visibility booleans into a 4-bit mask (<code>0b0001</code> for <code>TopCopper</code>, <code>0b0010</code> for <code>BottomCopper</code>, <code>0b0100</code> for <code>Silkscreen</code>, <code>0b1000</code> for <code>Ratsnest</code>) by filtering <code>WEIGHTS</code> through <code>self.is_layer_visible(layer)</code> and summing the active bit weights.</li>
+<li><strong><code>PcbReviewerApp::capture_frame_digest(&amp;self)</code></strong>: Samples the current <code>pcb_scene_rect</code>, <code>visible_layer_mask()</code>, and <code>min_clearance_mm</code> to produce a live <code>FrameSnapshotDigest</code> rendered in <code>render_session_panel</code> alongside <code>&quot;Target: native-desktop&quot;</code>.</li>
+</ul>
+<h3 id="block-4-snapshot-digest-gpu-lock-amp-scorecard-verification-tests-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Block 4: Snapshot Digest, <code>gpu_lock()</code> &amp; Scorecard Verification Tests (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">// In `crates/pcb-doc/src/lib.rs` (`#[cfg(test)] mod tests`):
+#[test]
+fn snapshot_digest_gpu_lock_and_quality_scorecard_preserve_invariants() {
+    let _gpu = gpu_lock();
+    assert_eq!(runtime_target_label(), "native-desktop");
+
+    let mut board = BoardModel::default();
+    board.push_smd_pad(SmdPad {
+        center_mm: pos2(20.0, 26.0),
+        size_mm: vec2(4.0, 2.4),
+        layer: PcbLayer::TopCopper,
+        net: NetId(1),
+    });
+    let full_viewport = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0));
+    let digest = board.compute_snapshot_digest(full_viewport, 0b0111, 8.0);
+    assert_eq!(digest.visible_layer_mask, 7);
+    assert_eq!(digest.visible_pad_count, 4);
+    assert_eq!(digest.visible_trace_count, 6);
+    assert_eq!(digest.drc_count, 2);
+    assert_eq!(
+        digest.fnv1a_hash,
+        7 * 1_000_003 + 4 * 97 + 6 * 31 + 2 * 7
+    );
+    assert_eq!(
+        digest.summary_badge(),
+        "Snapshot: 0x006ad221 (mask=0b0111, drc=2)"
+    );
+
+    let ready = QualityScorecard {
+        tests_passed: 21,
+        mutants_caught: 285,
+        mutants_missed: 0,
+        registered_commands: 4,
+    };
+    assert!(ready.is_release_ready());
+    assert_eq!(
+        ready.summary_badge(),
+        "Scorecard [PASS]: 21 tests, 285 caught, 0 missed"
+    );
+
+    for invalid in [
+        QualityScorecard {
+            tests_passed: 0,
+            ..ready
+        },
+        QualityScorecard {
+            mutants_caught: 0,
+            ..ready
+        },
+        QualityScorecard {
+            mutants_missed: 1,
+            ..ready
+        },
+        QualityScorecard {
+            registered_commands: 3,
+            ..ready
+        },
+    ] {
+        assert!(!invalid.is_release_ready());
+        assert!(invalid.summary_badge().starts_with("Scorecard [FAIL]:"));
+    }
+}</code></pre>
+<ul>
+<li><strong>Acquiring <code>let _gpu = gpu_lock();</code> First</strong>: Follows Rule #1 of GPU and snapshot testing by holding the process-wide <code>MutexGuard</code> for the duration of the snapshot test.</li>
+<li><strong>Non-Zero DRC &amp; Asymmetric Counts (<code>visible_layer_mask = 7</code>, <code>pads = 4</code>, <code>traces = 6</code>, <code>drc = 2</code>)</strong>: Appending a pad at <code>(20.0, 26.0)</code> creates <code>drc_count = 2</code> so that every arithmetic term in <code>compute_snapshot_digest</code> is non-zero—catching any <code>+</code> vs. <code>*</code> or <code>-</code> mutation inside <code>fnv1a_hash</code>.</li>
+<li><strong>Single-Condition <code>QualityScorecard</code> Fault Injection</strong>: Uses struct update syntax (<code>..ready</code>) to falsify each of the four <code>&amp;&amp;</code> clauses one at a time, guaranteeing <code>cargo-mutants</code> catches every boolean operator or boundary mutation in <code>is_release_ready</code>.</li>
+</ul>
+<h3 id="complete-lesson-0022-code-listing-in-context">Complete Lesson 0022 Code Listing (In Context)</h3>
+<p>Here are the complete <code>gpu_lock()</code>, <code>FrameSnapshotDigest</code>, <code>QualityScorecard</code>, layer-mask bit packing, and test additions in <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code>:</p>
 <figure>
-  <figcaption>Process-wide gpu_lock, FrameSnapshotDigest, and QualityScorecard in crates/pcb-doc/src/lib.rs</figcaption>
+  <figcaption>Complete gpu_lock, FrameSnapshotDigest, and QualityScorecard in crates/pcb-doc/src/lib.rs</figcaption>
   <pre><code class="language-rust">static GPU_TEST_LOCK: std::sync::OnceLock&lt;std::sync::Mutex&lt;()&gt;&gt; = std::sync::OnceLock::new();
 
 pub fn gpu_lock() -&gt; std::sync::MutexGuard&lt;'static, ()&gt; {
@@ -105,6 +308,15 @@ pub struct FrameSnapshotDigest {
     pub fnv1a_hash: u64,
 }
 
+impl FrameSnapshotDigest {
+    pub fn summary_badge(&amp;self) -&gt; String {
+        format!(
+            "Snapshot: 0x{:08x} (mask=0b{:04b}, drc={})",
+            self.fnv1a_hash as u32, self.visible_layer_mask, self.drc_count
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QualityScorecard {
     pub tests_passed: usize,
@@ -120,7 +332,102 @@ impl QualityScorecard {
             &amp;&amp; self.mutants_missed == 0
             &amp;&amp; self.registered_commands &gt;= COMMAND_PARITY_FLOOR
     }
+
+    pub fn summary_badge(&amp;self) -&gt; String {
+        let status = if self.is_release_ready() {
+            "PASS"
+        } else {
+            "FAIL"
+        };
+        format!(
+            "Scorecard [{status}]: {} tests, {} caught, {} missed",
+            self.tests_passed, self.mutants_caught, self.mutants_missed
+        )
+    }
+}
+
+impl BoardModel {
+    pub fn compute_snapshot_digest(
+        &amp;self,
+        viewport_mm: Rect,
+        visible_layer_mask: u8,
+        min_clearance_mm: f32,
+    ) -&gt; FrameSnapshotDigest {
+        let stats = self.cull_stats_for_rect(viewport_mm);
+        let drc_count = self.detect_pad_clearance_violations(min_clearance_mm).len();
+        let fnv1a_hash = u64::from(visible_layer_mask) * 1_000_003
+            + (stats.visible_pads as u64) * 97
+            + (stats.visible_traces as u64) * 31
+            + (drc_count as u64) * 7;
+        FrameSnapshotDigest {
+            visible_layer_mask,
+            visible_pad_count: stats.visible_pads,
+            visible_trace_count: stats.visible_traces,
+            drc_count,
+            fnv1a_hash,
+        }
+    }
 }</code></pre>
+</figure>
+<figure>
+  <figcaption>Complete visible_layer_mask, capture_frame_digest, and UI tests in src/main.rs</figcaption>
+  <pre><code class="language-rust">impl ViewState {
+    pub fn visible_layer_mask(&amp;self) -&gt; u8 {
+        const WEIGHTS: [(PcbLayer, u8); 4] = [
+            (PcbLayer::TopCopper, 1),
+            (PcbLayer::BottomCopper, 2),
+            (PcbLayer::Silkscreen, 4),
+            (PcbLayer::Ratsnest, 8),
+        ];
+        WEIGHTS
+            .iter()
+            .filter(|&amp;&amp;(layer, _)| self.is_layer_visible(layer))
+            .map(|&amp;(_, bit)| bit)
+            .sum()
+    }
+}
+
+impl PcbReviewerApp {
+    pub fn capture_frame_digest(&amp;self) -&gt; FrameSnapshotDigest {
+        self.board.compute_snapshot_digest(
+            self.view.pcb_scene_rect,
+            self.view.visible_layer_mask(),
+            self.view.min_clearance_mm,
+        )
+    }
+}
+
+// Inside `view_state_selection_focus_measurement_undo_coalescing_and_session_io_work` (`src/main.rs`):
+app.view.show_all_layers();
+assert_eq!(app.view.visible_layer_mask(), 0b1111);
+app.view.isolate_top_copper();
+assert_eq!(app.view.visible_layer_mask(), 0b0001);
+app.view.show_top_copper = false;
+app.view.show_bottom_copper = true;
+assert_eq!(app.view.visible_layer_mask(), 0b0010);
+app.view.show_bottom_copper = false;
+app.view.show_silkscreen = true;
+assert_eq!(app.view.visible_layer_mask(), 0b0100);
+app.view.show_silkscreen = false;
+app.view.show_ratsnest = true;
+assert_eq!(app.view.visible_layer_mask(), 0b1000);
+app.view.show_ratsnest = false;
+assert_eq!(app.view.visible_layer_mask(), 0b0000);
+app.view.show_all_layers();
+
+app.view.pcb_scene_rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 70.0));
+let full_digest = app.capture_frame_digest();
+assert_eq!(full_digest.visible_pad_count, 3);
+assert_eq!(full_digest.visible_trace_count, 6);
+assert_eq!(full_digest.drc_count, 1);
+app.view.show_top_copper = false;
+assert_ne!(app.capture_frame_digest().fnv1a_hash, full_digest.fnv1a_hash);
+
+// Inside `standalone_layer_swatch_and_headless_ui_workflows_pass` (`src/main.rs`):
+let _gpu_guard = gpu_lock();
+assert!(harness.query_by_label("Target: native-desktop").is_some());
+let expected_snapshot_badge = harness.state().capture_frame_digest().summary_badge();
+assert!(harness.query_by_label(&amp;expected_snapshot_badge).is_some());</code></pre>
 </figure>
 </div>
 

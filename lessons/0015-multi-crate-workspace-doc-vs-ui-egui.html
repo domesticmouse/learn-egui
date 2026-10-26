@@ -127,17 +127,165 @@ flowchart TD
     style L0 fill:#1c1c24,stroke:#f0e68c,color:#e6edf3
   </pre>
 </figure>
-<h2 id="enforcing-layer-boundaries-and-panic-free-domain-code">Enforcing Layer Boundaries and Panic-Free Domain Code</h2>
-<p>A multi-crate workspace only stays clean if upward dependency leaks are caught automatically.<span class="sidenote-number"></span><span class="sidenote"><strong>Tier 1 Static &amp; Manifest Gates:</strong> Checking <code>include_str!(&quot;../Cargo.toml&quot;)</code> inside a unit test—or running an <code>xtask</code> workspace auditor—prevents an accidental <code>cargo add egui</code> inside <code>crates/pcb-doc</code> from silently coupling domain logic to UI rendering.</span> In <code>crates/pcb-doc/src/lib.rs</code>, we enforce two compile-time and Tier 1 invariants:</p>
-<ul>
-<li><strong>Panic-Free / Unsafe-Free Lints</strong>: <code>#![forbid(unsafe_code)]</code> and <code>#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]</code> at the top of <code>lib.rs</code> and <code>main.rs</code> guarantee that domain queries never crash the host process. Test modules opt in explicitly with <code>#[cfg(test)] #[allow(clippy::unwrap_used, ...)]</code>.</li>
-<li><strong>Tier 1 Manifest Gate (<code>validate_l1_manifest_no_ui_deps</code>)</strong>: Scans <code>crates/pcb-doc/Cargo.toml</code> against <code>FORBIDDEN_UI_DEPS_BELOW_L6</code> (<code>&amp;[&quot;egui&quot;, &quot;eframe&quot;, &quot;winit&quot;, &quot;egui_kittest&quot;, &quot;rfd&quot;]</code>) and fails immediately if any UI crate is present.</li>
-</ul>
-<figure>
-  <figcaption>Tier 1 manifest gate and UI-agnostic RGB domain tokens in crates/pcb-doc/src/lib.rs</figcaption>
-  <pre><code class="language-rust">pub const FORBIDDEN_UI_DEPS_BELOW_L6: &amp;[&amp;str] =
+<h2 id="enforcing-layer-boundaries-and-panic-free-domain-code-block-by-block">Enforcing Layer Boundaries and Panic-Free Domain Code: Block by Block</h2>
+<p>A multi-crate workspace only stays clean if upward dependency leaks are caught automatically.<span class="sidenote-number"></span><span class="sidenote"><strong>Tier 1 Static &amp; Manifest Gates:</strong> Checking <code>include_str!(&quot;../Cargo.toml&quot;)</code> inside a unit test—or running an <code>xtask</code> workspace auditor—prevents an accidental <code>cargo add egui</code> inside <code>crates/pcb-doc</code> from silently coupling domain logic to UI rendering.</span> Let's walk through the new workspace boundary code across <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code> one block at a time, then view the assembled listing in context.</p>
+<h3 id="block-1-crate-level-safety-lints-emath-re-exports-amp-tier-1-manifest-gate-crates-pcb-doc-src-lib-rs">Block 1: Crate-Level Safety Lints, <code>emath</code> Re-Exports &amp; Tier 1 Manifest Gate (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">#![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
+
+use std::collections::{HashMap, hash_map::Entry};
+
+pub use emath::{Pos2, Rect, TSTransform, Vec2, pos2, vec2};
+
+/// Layer L1 (`pcb-doc`) must never depend on UI or windowing crates (`L6+`).
+pub const FORBIDDEN_UI_DEPS_BELOW_L6: &amp;[&amp;str] =
     &amp;["egui", "eframe", "winit", "egui_kittest", "rfd"];
 
+/// Verifies that an `L1` domain crate's `Cargo.toml` does not depend on any `L6+` UI crate.
+pub fn validate_l1_manifest_no_ui_deps(cargo_toml: &amp;str) -&gt; Result&lt;(), &amp;'static str&gt; {
+    for &amp;forbidden in FORBIDDEN_UI_DEPS_BELOW_L6 {
+        let key_eq = format!("{forbidden} =");
+        let key_dot = format!("dependencies.{forbidden}");
+        if cargo_toml.contains(&amp;key_eq) || cargo_toml.contains(&amp;key_dot) {
+            return Err(forbidden);
+        }
+    }
+    Ok(())
+}</code></pre>
+<ul>
+<li><strong><code>#![forbid(unsafe_code)]</code> &amp; <code>#![deny(clippy::unwrap_used, ...)]</code></strong>: Inner attributes (<code>#![...]</code>) apply to the entire <code>pcb-doc</code> crate. Forbidding <code>unsafe</code> and denying <code>.unwrap()</code>, <code>.expect()</code>, <code>panic!()</code>, <code>todo!()</code>, <code>unimplemented!()</code>, and <code>unreachable!()</code> guarantees at compile time that no domain query can crash the host application.</li>
+<li><strong><code>pub use emath::{Pos2, Rect, TSTransform, Vec2, pos2, vec2};</code></strong>: Re-exports the foundational <code>L0</code> 2D geometry primitives directly from <code>pcb_doc</code> so downstream crates (<code>pcb-reviewer</code>) can import both domain structs and coordinate types from a single boundary.</li>
+<li><strong><code>FORBIDDEN_UI_DEPS_BELOW_L6: &amp;[&amp;str]</code></strong>: A compile-time slice of static string slices listing every <code>L6</code>/<code>L7</code> UI or windowing crate that must never appear in an <code>L1</code> manifest.</li>
+<li><strong><code>validate_l1_manifest_no_ui_deps(cargo_toml: &amp;str) -&gt; Result&lt;(), &amp;'static str&gt;</code></strong>: Iterates over <code>FORBIDDEN_UI_DEPS_BELOW_L6</code> (using pattern <code>&amp;forbidden</code> to copy each <code>&amp;'static str</code> out of the slice reference) and checks both inline (<code>egui = ...</code>) and table (<code>[dependencies.egui]</code>) TOML forms, returning <code>Err(forbidden)</code> immediately if a violation is detected.</li>
+</ul>
+<h3 id="block-2-ui-agnostic-layer-rgb-tokens-amp-pub-crate-sample-builders-crates-pcb-doc-src-lib-rs">Block 2: UI-Agnostic Layer RGB Tokens &amp; <code>pub(crate)</code> Sample Builders (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PcbLayer {
+    BottomCopper,
+    TopCopper,
+    Silkscreen,
+    Ratsnest,
+}
+
+impl PcbLayer {
+    pub fn z_rank(self) -&gt; u8 {
+        match self {
+            PcbLayer::BottomCopper =&gt; 0,
+            PcbLayer::TopCopper =&gt; 1,
+            PcbLayer::Silkscreen =&gt; 2,
+            PcbLayer::Ratsnest =&gt; 3,
+        }
+    }
+
+    /// UI-agnostic RGB triple `(r, g, b)` for each layer in `L1` domain state.
+    pub fn rgb(self) -&gt; (u8, u8, u8) {
+        match self {
+            PcbLayer::BottomCopper =&gt; (59, 142, 234),
+            PcbLayer::TopCopper =&gt; (224, 82, 67),
+            PcbLayer::Silkscreen =&gt; (240, 230, 140),
+            PcbLayer::Ratsnest =&gt; (111, 247, 255),
+        }
+    }
+}
+
+pub(crate) fn sample_traces() -&gt; Vec&lt;TraceSegment&gt; {
+    // ... builds the default 6 copper, silkscreen, and ratsnest segments ...
+}</code></pre>
+<ul>
+<li><strong><code>PcbLayer::rgb(self) -&gt; (u8, u8, u8)</code></strong>: Replaces the old <code>egui::Color32</code> return type in <code>L1</code> with a pure Rust 3-tuple of <code>u8</code> channels <code>(r, g, b)</code>. This preserves deterministic color metadata inside <code>pcb-doc</code> without depending on <code>egui</code>/<code>ecolor</code>.</li>
+<li><strong><code>pub(crate) fn sample_traces()</code> (and <code>sample_pads</code>, <code>sample_components</code>, <code>sample_review_pins</code>)</strong>: Restricts the internal sample fixture builders to <code>crates/pcb-doc</code> using <code>pub(crate)</code> visibility so external callers construct boards cleanly through <code>BoardModel::default()</code>.</li>
+</ul>
+<h3 id="block-3-bridging-pcb-doc-l1-into-pcb-reviewer-l6-l7-src-main-rs">Block 3: Bridging <code>pcb-doc</code> (<code>L1</code>) into <code>pcb-reviewer</code> (<code>L6</code> / <code>L7</code>) (<code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">use eframe::egui::{self, Align2, Color32, FontId, Sense, Stroke, StrokeKind};
+pub use pcb_doc::{
+    BoardModel, ComponentSymbol, DrcViolation, FORBIDDEN_UI_DEPS_BELOW_L6, NetId, PcbLayer, PinId,
+    PinSeverity, Pos2, Rect, ReviewNote, ReviewStatus, RulerMeasurement, SmdPad, TSTransform,
+    TraceSegment, Vec2, pad_edge_gap_mm, pos2, validate_l1_manifest_no_ui_deps, vec2,
+};
+
+/// Converts the UI-agnostic `L1` `PcbLayer::rgb()` tuple into an `egui::Color32` in `L6`.
+pub fn layer_color(layer: PcbLayer) -&gt; Color32 {
+    let (r, g, b) = layer.rgb();
+    Color32::from_rgb(r, g, b)
+}
+
+/// Scales the layer's base RGB color by `opacity` (clamped to `0.1..=1.0`).
+pub fn layer_color_with_opacity(layer: PcbLayer, opacity: f32) -&gt; Color32 {
+    let (r, g, b) = layer.rgb();
+    let alpha = (opacity.clamp(0.1, 1.0) * 255.0).round() as u8;
+    Color32::from_rgba_unmultiplied(r, g, b, alpha)
+}</code></pre>
+<ul>
+<li><strong><code>pub use pcb_doc::{ ... };</code></strong>: Imports the pure domain model (<code>BoardModel</code>, <code>SmdPad</code>, <code>ReviewNote</code>, <code>DrcViolation</code>, etc.) from <code>crates/pcb-doc</code> into the <code>pcb-reviewer</code> binary crate.</li>
+<li><strong><code>layer_color(layer: PcbLayer) -&gt; Color32</code></strong>: Unpacks <code>let (r, g, b) = layer.rgb();</code> from <code>L1</code> and converts it into an <code>egui::Color32</code> via <code>Color32::from_rgb(r, g, b)</code> right at the <code>L6</code> UI boundary.</li>
+<li><strong><code>layer_color_with_opacity(layer: PcbLayer, opacity: f32) -&gt; Color32</code></strong>: Combines <code>layer.rgb()</code> with a clamped alpha byte <code>(opacity.clamp(0.1, 1.0) * 255.0).round() as u8</code> using <code>Color32::from_rgba_unmultiplied(r, g, b, alpha)</code>.</li>
+<li><strong>Top Schematic Bar Badge (<code>render_schematic_bar</code>)</strong>: Appends <code>ui.separator();</code> and <code>ui.label(&quot;Architecture: pcb-doc (L1) -&gt; pcb-reviewer (L6)&quot;);</code> to <code>render_schematic_bar</code> so the workspace architecture is visible in the top bar and verifiable via <code>egui_kittest</code>.</li>
+</ul>
+<h3 id="block-4-tier-1-manifest-gate-amp-cross-crate-bridge-tests-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Block 4: Tier 1 Manifest Gate &amp; Cross-Crate Bridge Tests (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">// In crates/pcb-doc/src/lib.rs:
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn l1_manifest_gate_rejects_ui_dependencies_and_accepts_pcb_doc_manifest() {
+        let actual_manifest = include_str!("../Cargo.toml");
+        assert_eq!(validate_l1_manifest_no_ui_deps(actual_manifest), Ok(()));
+
+        assert_eq!(
+            validate_l1_manifest_no_ui_deps("[dependencies]\neframe = \"0.37\""),
+            Err("eframe")
+        );
+        assert_eq!(
+            validate_l1_manifest_no_ui_deps("[dependencies.egui]\nversion = \"0.37\""),
+            Err("egui")
+        );
+    }
+
+    #[test]
+    fn net_id_and_layer_metadata_are_deterministic() {
+        assert_eq!(PcbLayer::BottomCopper.rgb(), (59, 142, 234));
+        assert_eq!(PcbLayer::TopCopper.rgb(), (224, 82, 67));
+        assert_eq!(PcbLayer::Silkscreen.rgb(), (240, 230, 140));
+        assert_eq!(PcbLayer::Ratsnest.rgb(), (111, 247, 255));
+    }
+}</code></pre>
+<ul>
+<li><strong><code>#[cfg(test)] #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]</code></strong>: Scopes test-assertion ergonomics (<code>assert_eq!</code>, <code>.unwrap()</code>) strictly to the <code>#[cfg(test)]</code> module while keeping production code above it 100% panic-free.</li>
+<li><strong><code>include_str!(&quot;../Cargo.toml&quot;)</code></strong>: Embeds <code>crates/pcb-doc/Cargo.toml</code> as a <code>&amp;'static str</code> at compile time so <code>validate_l1_manifest_no_ui_deps(actual_manifest)</code> verifies the real <code>L1</code> manifest on every <code>cargo test</code> run, alongside synthetic <code>[dependencies]\neframe = &quot;0.37&quot;</code> and <code>[dependencies.egui]</code> negative tests.</li>
+</ul>
+<h3 id="complete-layer-boundary-amp-ui-bridge-listing-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Complete Layer Boundary &amp; UI Bridge Listing (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<p>Putting the <code>L1</code> domain boundary in <code>crates/pcb-doc/src/lib.rs</code> and the <code>L6</code> UI bridge in <code>src/main.rs</code> together in context:</p>
+<figure>
+  <figcaption>Assembled L1 boundary in crates/pcb-doc/src/lib.rs and L6 color bridge in src/main.rs</figcaption>
+  <pre><code class="language-rust">// === crates/pcb-doc/src/lib.rs (L1 Pure Domain Crate) ===
+#![forbid(unsafe_code)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unimplemented,
+    clippy::todo,
+    clippy::unreachable
+)]
+
+use std::collections::{HashMap, hash_map::Entry};
+
+pub use emath::{Pos2, Rect, TSTransform, Vec2, pos2, vec2};
+
+/// Layer L1 (`pcb-doc`) must never depend on UI or windowing crates (`L6+`).
+pub const FORBIDDEN_UI_DEPS_BELOW_L6: &amp;[&amp;str] =
+    &amp;["egui", "eframe", "winit", "egui_kittest", "rfd"];
+
+/// Verifies that an `L1` domain crate's `Cargo.toml` does not depend on any `L6+` UI crate.
 pub fn validate_l1_manifest_no_ui_deps(cargo_toml: &amp;str) -&gt; Result&lt;(), &amp;'static str&gt; {
     for &amp;forbidden in FORBIDDEN_UI_DEPS_BELOW_L6 {
         let key_eq = format!("{forbidden} =");
@@ -149,7 +297,24 @@ pub fn validate_l1_manifest_no_ui_deps(cargo_toml: &amp;str) -&gt; Result&lt;(),
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PcbLayer {
+    BottomCopper,
+    TopCopper,
+    Silkscreen,
+    Ratsnest,
+}
+
 impl PcbLayer {
+    pub fn z_rank(self) -&gt; u8 {
+        match self {
+            PcbLayer::BottomCopper =&gt; 0,
+            PcbLayer::TopCopper =&gt; 1,
+            PcbLayer::Silkscreen =&gt; 2,
+            PcbLayer::Ratsnest =&gt; 3,
+        }
+    }
+
     /// UI-agnostic RGB triple `(r, g, b)` for each layer in `L1` domain state.
     pub fn rgb(self) -&gt; (u8, u8, u8) {
         match self {
@@ -159,6 +324,30 @@ impl PcbLayer {
             PcbLayer::Ratsnest =&gt; (111, 247, 255),
         }
     }
+}
+
+// ... NetId, PinId, PinSeverity, ReviewStatus, ReviewNote, DrcViolation,
+//     TraceSegment, SmdPad, ComponentSymbol, RulerMeasurement, and BoardModel ...
+
+// === src/main.rs (L6 UI / L7 eframe Shell Crate) ===
+use eframe::egui::{self, Align2, Color32, FontId, Sense, Stroke, StrokeKind};
+pub use pcb_doc::{
+    BoardModel, ComponentSymbol, DrcViolation, FORBIDDEN_UI_DEPS_BELOW_L6, NetId, PcbLayer, PinId,
+    PinSeverity, Pos2, Rect, ReviewNote, ReviewStatus, RulerMeasurement, SmdPad, TSTransform,
+    TraceSegment, Vec2, pad_edge_gap_mm, pos2, validate_l1_manifest_no_ui_deps, vec2,
+};
+
+/// Converts the UI-agnostic `L1` `PcbLayer::rgb()` tuple into an `egui::Color32` in `L6`.
+pub fn layer_color(layer: PcbLayer) -&gt; Color32 {
+    let (r, g, b) = layer.rgb();
+    Color32::from_rgb(r, g, b)
+}
+
+/// Scales the layer's base RGB color by `opacity` (clamped to `0.1..=1.0`).
+pub fn layer_color_with_opacity(layer: PcbLayer, opacity: f32) -&gt; Color32 {
+    let (r, g, b) = layer.rgb();
+    let alpha = (opacity.clamp(0.1, 1.0) * 255.0).round() as u8;
+    Color32::from_rgba_unmultiplied(r, g, b, alpha)
 }</code></pre>
 </figure>
 </div>

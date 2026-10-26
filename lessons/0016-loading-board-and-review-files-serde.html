@@ -99,12 +99,16 @@ flowchart LR
     style EmptyId fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2 id="non-destructive-error-recovery-in-egui-panel-right">Non-Destructive Error Recovery in <code>egui::Panel::right</code></h2>
-<p>When a user attempts to load a corrupt or incompatible JSON file in <code>PcbReviewerApp::import_session_from_json(&amp;mut self, raw: &amp;str)</code>, the UI must <strong>never</strong> overwrite <code>self.board</code> with partial data or crash.<span class="sidenote-number"></span><span class="sidenote"><strong>Why <code>Panel::right(&quot;session_panel&quot;)</code>?</strong> Placing session persistence, snapshot controls, and error banners in a dedicated right-hand inspector panel keeps the left layer/BOM panel (<code>Panel::left</code>) and top cross-probe bar (<code>Panel::top</code>) within their vertical and horizontal layout budgets.</span> On <code>Err(err)</code>, <code>import_session_from_json</code> leaves <code>self.board</code> untouched, stores <code>Some(err.to_string())</code> in <code>self.view.last_io_error</code>, and renders a dismissible <code>&quot;I/O Error: ...&quot;</code> banner inside <code>Panel::right(&quot;session_panel&quot;)</code>.</p>
-<figure>
-  <figcaption>Typed SessionIoError and exhaustive envelope validation in crates/pcb-doc/src/lib.rs</figcaption>
-  <pre><code class="language-rust">pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+<h2 id="non-destructive-session-i-o-amp-error-recovery-block-by-block">Non-Destructive Session I/O &amp; Error Recovery: Block by Block</h2>
+<p>When a user attempts to load a corrupt or incompatible JSON file in <code>PcbReviewerApp::import_session_from_json(&amp;mut self, raw: &amp;str)</code>, the UI must <strong>never</strong> overwrite <code>self.board</code> with partial data or crash.<span class="sidenote-number"></span><span class="sidenote"><strong>Why <code>Panel::right(&quot;session_panel&quot;)</code>?</strong> Placing session persistence, snapshot controls, and error banners in a dedicated right-hand inspector panel keeps the left layer/BOM panel (<code>Panel::left</code>) and top cross-probe bar (<code>Panel::top</code>) within their vertical and horizontal layout budgets.</span> Let's walk through all the new persistence and UI recovery blocks added in Lesson <code>0016</code> across <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code>, then inspect the complete assembled listing.</p>
+<h3 id="block-1-typed-sessionioerror-reviewsessionenvelope-amp-serde-derives-crates-pcb-doc-src-lib-rs">Block 1: Typed <code>SessionIoError</code>, <code>ReviewSessionEnvelope</code> &amp; <code>serde</code> Derives (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
+/// Current schema version for serialized PCB review sessions.
+pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+
+/// Typed, panic-free persistence errors for PCB &amp; review session files.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum SessionIoError {
     #[error("board_id must not be empty")]
@@ -115,7 +119,42 @@ pub enum SessionIoError {
     MalformedJson(String),
 }
 
-impl BoardModel {
+/// Versioned envelope wrapping a serialized `BoardModel`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ReviewSessionEnvelope {
+    pub schema_version: u32,
+    pub board_id: String,
+    pub board: BoardModel,
+}</code></pre>
+<ul>
+<li><strong><code>use serde::{Deserialize, Serialize};</code> &amp; Domain Derives</strong>: With <code>serde = { version = &quot;1.0&quot;, features = [&quot;derive&quot;] }</code> and <code>emath = { version = &quot;0.37&quot;, features = [&quot;serde&quot;] }</code> enabled in <code>crates/pcb-doc/Cargo.toml</code>, we add <code>Serialize, Deserialize</code> to <code>NetId</code>, <code>PinId</code>, <code>PinSeverity</code>, <code>ReviewStatus</code>, <code>ReviewNote</code>, <code>PcbLayer</code>, <code>TraceSegment</code>, <code>SmdPad</code>, <code>ComponentSymbol</code>, <code>BoardModel</code>, and <code>ReviewSessionEnvelope</code>.</li>
+<li><strong><code>#[derive(Clone, Debug, Error, PartialEq, Eq)] pub enum SessionIoError</code></strong>: Uses <code>thiserror::Error</code> to generate <code>std::fmt::Display</code> and <code>std::error::Error</code> implementations automatically from <code>#[error(&quot;...&quot;)]</code> format strings:
+<ul>
+<li><code>EmptyBoardId</code>: Triggered when <code>board_id.trim()</code> is empty on export or import.</li>
+<li><code>UnsupportedSchemaVersion { found, expected }</code>: Interpolates named struct-variant fields (<code>{found}</code> and <code>{expected}</code>) into the error message when <code>schema_version != CURRENT_SCHEMA_VERSION</code>.</li>
+<li><code>MalformedJson(String)</code>: Interpolates tuple field <code>{0}</code> when <code>serde_json</code> encounters syntax or type errors.</li>
+</ul>
+</li>
+<li><strong><code>ReviewSessionEnvelope</code></strong>: Wraps <code>board: BoardModel</code> alongside <code>schema_version: u32</code> and <code>board_id: String</code> so every saved JSON payload carries self-describing header metadata.</li>
+</ul>
+<h3 id="block-2-exporting-amp-validating-session-json-to-session-json-amp-from-session-json-in-crates-pcb-doc-src-lib-rs">Block 2: Exporting &amp; Validating Session JSON (<code>to_session_json</code> &amp; <code>from_session_json</code> in <code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<pre><code class="language-rust">impl BoardModel {
+    /// Serializes the board and review pins into a versioned JSON session string.
+    pub fn to_session_json(&amp;self, board_id: &amp;str) -&gt; Result&lt;String, SessionIoError&gt; {
+        let trimmed = board_id.trim();
+        if trimmed.is_empty() {
+            return Err(SessionIoError::EmptyBoardId);
+        }
+        let envelope = ReviewSessionEnvelope {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            board_id: trimmed.to_owned(),
+            board: self.clone(),
+        };
+        serde_json::to_string_pretty(&amp;envelope)
+            .map_err(|e| SessionIoError::MalformedJson(e.to_string()))
+    }
+
+    /// Deserializes and validates a versioned JSON session string without panicking.
     pub fn from_session_json(raw: &amp;str) -&gt; Result&lt;(String, Self), SessionIoError&gt; {
         let ReviewSessionEnvelope {
             schema_version,
@@ -135,6 +174,336 @@ impl BoardModel {
             return Err(SessionIoError::EmptyBoardId);
         }
         Ok((trimmed.to_owned(), board))
+    }
+}</code></pre>
+<ul>
+<li><strong><code>to_session_json(&amp;self, board_id: &amp;str) -&gt; Result&lt;String, SessionIoError&gt;</code></strong>: Trims leading/trailing whitespace from <code>board_id</code>, rejects blank IDs with <code>Err(SessionIoError::EmptyBoardId)</code>, wraps <code>self.clone()</code> in a <code>ReviewSessionEnvelope</code> at <code>CURRENT_SCHEMA_VERSION</code>, and formats human-readable JSON via <code>serde_json::to_string_pretty(&amp;envelope)</code>.</li>
+<li><strong>Exhaustive Struct Destructuring (<code>let ReviewSessionEnvelope { schema_version, board_id, board } = ...</code>)</strong>: Unpacks all three fields without a <code>..</code> wildcard. If a future schema revision adds a field to <code>ReviewSessionEnvelope</code>, <code>rustc</code> refuses to compile <code>from_session_json</code> until that new field is explicitly handled.</li>
+<li><strong>Error Mapping (<code>map_err</code> + <code>?</code>)</strong>: Converts any <code>serde_json::Error</code> into <code>SessionIoError::MalformedJson(e.to_string())</code> and propagates it via the <code>?</code> operator before validating <code>schema_version</code> and <code>board_id.trim()</code>.</li>
+</ul>
+<h3 id="block-3-session-state-non-destructive-import-amp-panel-right-error-banner-src-main-rs">Block 3: Session State, Non-Destructive Import &amp; <code>Panel::right</code> Error Banner (<code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">// Added to ViewState (initialized to "pwr-stage-rev-b" and None in ViewState::default()):
+pub struct ViewState {
+    // ... existing layer, viewport, BOM, pin, and DRC fields ...
+    pub active_board_id: String,
+    pub last_io_error: Option&lt;String&gt;,
+}
+
+impl ViewState {
+    pub fn dismiss_io_error(&amp;mut self) {
+        self.last_io_error = None;
+    }
+}
+
+#[derive(Default)]
+pub struct PcbReviewerApp {
+    pub board: BoardModel,
+    pub view: ViewState,
+    pub saved_session_json: String,
+}
+
+impl PcbReviewerApp {
+    /// Serializes `self.board` into `self.saved_session_json`, recording any error in `view.last_io_error`.
+    pub fn export_session_snapshot(&amp;mut self) -&gt; bool {
+        match self.board.to_session_json(&amp;self.view.active_board_id) {
+            Ok(json) =&gt; {
+                self.saved_session_json = json;
+                self.view.last_io_error = None;
+                true
+            }
+            Err(err) =&gt; {
+                self.view.last_io_error = Some(err.to_string());
+                false
+            }
+        }
+    }
+
+    /// Loads `raw` JSON into `self.board`, or surfaces a clean error banner without panicking.
+    pub fn import_session_from_json(&amp;mut self, raw: &amp;str) -&gt; bool {
+        match BoardModel::from_session_json(raw) {
+            Ok((board_id, board)) =&gt; {
+                self.view.active_board_id = board_id;
+                self.board = board;
+                self.view.last_io_error = None;
+                true
+            }
+            Err(err) =&gt; {
+                self.view.last_io_error = Some(err.to_string());
+                false
+            }
+        }
+    }
+
+    pub fn render_session_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        ui.heading("Session Persistence (JSON)");
+        ui.label(format!("Board ID: {}", self.view.active_board_id));
+        if ui.button("Export JSON").clicked() {
+            self.export_session_snapshot();
+        }
+        if ui.button("Reload JSON").clicked() {
+            let raw = self.saved_session_json.clone();
+            self.import_session_from_json(&amp;raw);
+        }
+        if ui.button("Test Corrupt JSON").clicked() {
+            self.import_session_from_json("{corrupt");
+        }
+        if let Some(err) = self.view.last_io_error.clone() {
+            ui.label(format!("I/O Error: {err}"));
+            if ui.button("Dismiss Error").clicked() {
+                self.view.dismiss_io_error();
+            }
+        }
+    }
+}</code></pre>
+<ul>
+<li><strong><code>export_session_snapshot(&amp;mut self) -&gt; bool</code> &amp; <code>import_session_from_json(&amp;mut self, raw: &amp;str) -&gt; bool</code></strong>: Bridge <code>BoardModel</code>'s <code>Result&lt;..., SessionIoError&gt;</code> methods into UI state transitions. On <code>Ok(...)</code>, they update <code>saved_session_json</code> or <code>(active_board_id, board)</code> and clear <code>self.view.last_io_error = None</code>. On <code>Err(err)</code>, they leave <code>self.board</code> untouched and store <code>Some(err.to_string())</code> in <code>self.view.last_io_error</code>.</li>
+<li><strong>Borrowing Around <code>&amp;mut self</code> in <code>&quot;Reload JSON&quot;</code></strong>: Inside <code>render_session_panel</code>, <code>let raw = self.saved_session_json.clone();</code> clones the saved JSON string before calling <code>self.import_session_from_json(&amp;raw)</code> so we don't hold an immutable borrow of <code>self.saved_session_json</code> across a <code>&amp;mut self</code> method call.</li>
+<li><strong>Mounting <code>egui::Panel::right(&quot;session_panel&quot;)</code> in <code>eframe::App::ui</code></strong>: Inside <code>impl eframe::App for PcbReviewerApp</code>, we add <code>egui::Panel::right(&quot;session_panel&quot;).show(ui, |ui| { self.render_session_panel(ui); });</code> before <code>CentralPanel::default()</code> so <code>egui</code> docks the session inspector on the right edge of the viewport.</li>
+</ul>
+<h3 id="block-4-round-trip-persistence-amp-error-banner-tests-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Block 4: Round-Trip Persistence &amp; Error Banner Tests (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<pre><code class="language-rust">// In crates/pcb-doc/src/lib.rs (#[cfg(test)] mod tests):
+#[test]
+fn session_json_round_trip_and_typed_validation_errors_are_lossless() {
+    let mut original = BoardModel::default();
+    original.add_review_pin_at(
+        pos2(52.0, 35.0),
+        "carol",
+        "Verify R12 footprint",
+        PinSeverity::Warning,
+    );
+
+    assert_eq!(
+        original.to_session_json("   "),
+        Err(SessionIoError::EmptyBoardId)
+    );
+
+    let json = original
+        .to_session_json("  pwr-stage-rev-b  ")
+        .expect("valid board should serialize");
+    let (loaded_id, loaded_board) =
+        BoardModel::from_session_json(&amp;json).expect("valid JSON should deserialize");
+    assert_eq!(loaded_id, "pwr-stage-rev-b");
+    assert_eq!(loaded_board, original);
+
+    let bad_version = json.replace("\"schema_version\": 1", "\"schema_version\": 99");
+    assert_eq!(
+        BoardModel::from_session_json(&amp;bad_version),
+        Err(SessionIoError::UnsupportedSchemaVersion {
+            found: 99,
+            expected: CURRENT_SCHEMA_VERSION,
+        })
+    );
+
+    let empty_board_id =
+        json.replace("\"board_id\": \"pwr-stage-rev-b\"", "\"board_id\": \"   \"");
+    assert_eq!(
+        BoardModel::from_session_json(&amp;empty_board_id),
+        Err(SessionIoError::EmptyBoardId)
+    );
+
+    let err = BoardModel::from_session_json("{ truncated json").unwrap_err();
+    assert!(matches!(err, SessionIoError::MalformedJson(_)));
+    assert!(err.to_string().contains("malformed session JSON"));
+}
+
+// In src/main.rs (egui_kittest workflow inside standalone_layer_swatch_and_headless_ui_workflows_pass):
+harness.get_by_label("Export JSON").click();
+harness.run();
+assert!(!harness.state().saved_session_json.is_empty());
+
+harness.state_mut().board.review_pins.clear();
+harness.run();
+assert!(harness.query_by_label("Review Pins: 0").is_some());
+
+harness.get_by_label("Reload JSON").click();
+harness.run();
+assert!(harness.query_by_label("Review Pins: 2").is_some());
+
+harness.get_by_label("Test Corrupt JSON").click();
+harness.run();
+assert!(harness.state().view.last_io_error.is_some());
+
+harness.get_by_label("Dismiss Error").click();
+harness.run();
+assert!(harness.state().view.last_io_error.is_none());</code></pre>
+<ul>
+<li><strong><code>session_json_round_trip_and_typed_validation_errors_are_lossless</code></strong>: Exercises every persistence branch in <code>pcb-doc</code>: whitespace-only <code>board_id</code> rejection on export, full <code>BoardModel</code> + <code>ReviewNote</code> round-trip equality (<code>assert_eq!(loaded_board, original)</code>), <code>UnsupportedSchemaVersion { found: 99, expected: 1 }</code>, <code>EmptyBoardId</code> on import, and <code>MalformedJson</code> display formatting.</li>
+<li><strong>Headless <code>egui_kittest</code> Persistence Flow</strong>: Clicks <code>&quot;Export JSON&quot;</code>, wipes <code>review_pins</code> in memory (<code>Review Pins: 0</code>), clicks <code>&quot;Reload JSON&quot;</code> to prove the 2 pins are restored in the UI, triggers <code>&quot;Test Corrupt JSON&quot;</code> to verify the error banner appears without panicking, and clicks <code>&quot;Dismiss Error&quot;</code> to clear <code>last_io_error</code>.</li>
+</ul>
+<h3 id="complete-lesson-0016-session-persistence-listing-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Complete Lesson 0016 Session Persistence Listing (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<p>Here are all the new and updated Lesson <code>0016</code> sections across <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code> assembled in full context:</p>
+<figure>
+  <figcaption>Complete Lesson 0016 persistence additions in crates/pcb-doc/src/lib.rs and src/main.rs</figcaption>
+  <pre><code class="language-rust">// === crates/pcb-doc/src/lib.rs ===
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+/// Current schema version for serialized PCB review sessions.
+pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+
+/// Typed, panic-free persistence errors for PCB &amp; review session files.
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum SessionIoError {
+    #[error("board_id must not be empty")]
+    EmptyBoardId,
+    #[error("unsupported schema_version {found} (expected {expected})")]
+    UnsupportedSchemaVersion { found: u32, expected: u32 },
+    #[error("malformed session JSON: {0}")]
+    MalformedJson(String),
+}
+
+/// Versioned envelope wrapping a serialized `BoardModel`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ReviewSessionEnvelope {
+    pub schema_version: u32,
+    pub board_id: String,
+    pub board: BoardModel,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BoardModel {
+    pub traces: Vec&lt;TraceSegment&gt;,
+    pub pads: Vec&lt;SmdPad&gt;,
+    pub components: Vec&lt;ComponentSymbol&gt;,
+    pub review_pins: HashMap&lt;PinId, ReviewNote&gt;,
+    pub next_pin_id: u32,
+}
+
+impl BoardModel {
+    /// Serializes the board and review pins into a versioned JSON session string.
+    pub fn to_session_json(&amp;self, board_id: &amp;str) -&gt; Result&lt;String, SessionIoError&gt; {
+        let trimmed = board_id.trim();
+        if trimmed.is_empty() {
+            return Err(SessionIoError::EmptyBoardId);
+        }
+        let envelope = ReviewSessionEnvelope {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            board_id: trimmed.to_owned(),
+            board: self.clone(),
+        };
+        serde_json::to_string_pretty(&amp;envelope)
+            .map_err(|e| SessionIoError::MalformedJson(e.to_string()))
+    }
+
+    /// Deserializes and validates a versioned JSON session string without panicking.
+    pub fn from_session_json(raw: &amp;str) -&gt; Result&lt;(String, Self), SessionIoError&gt; {
+        let ReviewSessionEnvelope {
+            schema_version,
+            board_id,
+            board,
+        } = serde_json::from_str::&lt;ReviewSessionEnvelope&gt;(raw)
+            .map_err(|e| SessionIoError::MalformedJson(e.to_string()))?;
+
+        if schema_version != CURRENT_SCHEMA_VERSION {
+            return Err(SessionIoError::UnsupportedSchemaVersion {
+                found: schema_version,
+                expected: CURRENT_SCHEMA_VERSION,
+            });
+        }
+        let trimmed = board_id.trim();
+        if trimmed.is_empty() {
+            return Err(SessionIoError::EmptyBoardId);
+        }
+        Ok((trimmed.to_owned(), board))
+    }
+}
+
+// === src/main.rs ===
+pub use pcb_doc::{
+    BoardModel, CURRENT_SCHEMA_VERSION, ComponentSymbol, DrcViolation,
+    FORBIDDEN_UI_DEPS_BELOW_L6, NetId, PcbLayer, PinId, PinSeverity, Pos2, Rect, ReviewNote,
+    ReviewSessionEnvelope, ReviewStatus, RulerMeasurement, SessionIoError, SmdPad, TSTransform,
+    TraceSegment, Vec2, pad_edge_gap_mm, pos2, validate_l1_manifest_no_ui_deps, vec2,
+};
+
+impl ViewState {
+    pub fn dismiss_io_error(&amp;mut self) {
+        self.last_io_error = None;
+    }
+}
+
+#[derive(Default)]
+pub struct PcbReviewerApp {
+    pub board: BoardModel,
+    pub view: ViewState,
+    pub saved_session_json: String,
+}
+
+impl PcbReviewerApp {
+    /// Serializes `self.board` into `self.saved_session_json`, recording any error in `view.last_io_error`.
+    pub fn export_session_snapshot(&amp;mut self) -&gt; bool {
+        match self.board.to_session_json(&amp;self.view.active_board_id) {
+            Ok(json) =&gt; {
+                self.saved_session_json = json;
+                self.view.last_io_error = None;
+                true
+            }
+            Err(err) =&gt; {
+                self.view.last_io_error = Some(err.to_string());
+                false
+            }
+        }
+    }
+
+    /// Loads `raw` JSON into `self.board`, or surfaces a clean error banner without panicking.
+    pub fn import_session_from_json(&amp;mut self, raw: &amp;str) -&gt; bool {
+        match BoardModel::from_session_json(raw) {
+            Ok((board_id, board)) =&gt; {
+                self.view.active_board_id = board_id;
+                self.board = board;
+                self.view.last_io_error = None;
+                true
+            }
+            Err(err) =&gt; {
+                self.view.last_io_error = Some(err.to_string());
+                false
+            }
+        }
+    }
+
+    pub fn render_session_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        ui.heading("Session Persistence (JSON)");
+        ui.label(format!("Board ID: {}", self.view.active_board_id));
+        if ui.button("Export JSON").clicked() {
+            self.export_session_snapshot();
+        }
+        if ui.button("Reload JSON").clicked() {
+            let raw = self.saved_session_json.clone();
+            self.import_session_from_json(&amp;raw);
+        }
+        if ui.button("Test Corrupt JSON").clicked() {
+            self.import_session_from_json("{corrupt");
+        }
+        if let Some(err) = self.view.last_io_error.clone() {
+            ui.label(format!("I/O Error: {err}"));
+            if ui.button("Dismiss Error").clicked() {
+                self.view.dismiss_io_error();
+            }
+        }
+    }
+}
+
+impl eframe::App for PcbReviewerApp {
+    fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame) {
+        self.handle_hotkeys(ui.ctx());
+
+        egui::Panel::top("schematic_cross_probe_bar").show(ui, |ui| {
+            self.render_schematic_bar(ui);
+        });
+
+        egui::Panel::left("layer_panel").show(ui, |ui| {
+            self.render_side_panel(ui);
+        });
+
+        egui::Panel::right("session_panel").show(ui, |ui| {
+            self.render_session_panel(ui);
+        });
+
+        egui::CentralPanel::default().show(ui, |ui| {
+            self.render_canvas(ui);
+        });
+
+        self.render_active_pin_callout(ui.ctx());
     }
 }</code></pre>
 </figure>

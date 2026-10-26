@@ -56,7 +56,7 @@
 <h1>0024. Lowering KiCad <code>.kicad_pcb</code> &amp; <code>.kicad_sch</code> ASTs into the Domain Model &amp; Corpus Oracles</h1>
 <p class="subtitle">Lowering untyped <code>SexprNode</code> syntax trees into typed <code>ComponentSymbol</code>, <code>SmdPad</code>, and <code>TraceSegment</code> domain structs with <code>KicadLowerError</code>, exporting lossless <code>.kicad_pcb</code> S-expressions, and enforcing Tier 4 pinned corpus oracle ratchets (<code>CORPUS_PASS_FLOOR</code> &amp; <code>CORPUS_ROUNDTRIP_FLOOR</code>).</p>
 
-<h2 id="two-phase-parsing-untyped-sexprnode-l0-to-typed-boardmodel-l1-l4">Two-Phase Parsing: Untyped <code>SexprNode</code> (<code>L0</code>) $\to$ Typed <code>BoardModel</code> (<code>L1</code>/<code>L4</code>)</h2>
+<h2 id="two-phase-parsing-untyped-sexprnode-l0-gt-typed-boardmodel-l1-l4">Two-Phase Parsing: Untyped <code>SexprNode</code> (<code>L0</code>) -&gt; Typed <code>BoardModel</code> (<code>L1</code>/<code>L4</code>)</h2>
 <p>In Lesson 0023, our standalone <code>L0</code> <code>kicad-sexpr</code> crate turned raw KiCad text into an untyped <code>SexprNode</code> tree. However, a syntactically valid S-expression like <code>(pad &quot;1&quot; smd (at 20.0 &quot;not_a_float&quot;) (layer &quot;Unknown.Layer&quot;))</code> is still semantically invalid for a 2D PCB CAD engine.<span class="sidenote-number"></span><span class="sidenote"><strong>Tier 4 Pinned Corpus Oracles (<code>egui-testing-infrastructure</code>):</strong> Real-world file importers are verified against a pinned corpus of <code>.kicad_pcb</code> fixtures (<code>PINNED_KICAD_CORPUS</code>). Every fixture must pass both import (<code>CORPUS_PASS_FLOOR</code>) and <code>import -&gt; export -&gt; re-import</code> round-trip equivalence (<code>CORPUS_ROUNDTRIP_FLOOR</code>), and ratchets only move up!</span></p>
 <p>By separating <strong>Phase 1 (Syntax Tokenization &amp; AST)</strong> from <strong>Phase 2 (Semantic Lowering into <code>BoardModel</code>)</strong>, we get clean, granular error reporting via <code>KicadLowerError</code>:</p>
 <figure class="mermaid-figure">
@@ -72,12 +72,34 @@ flowchart LR
     style ErrRoot fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2 id="lowering-footprint-pad-and-segment-with-kicadlowererror">Lowering <code>(footprint ...)</code>, <code>(pad ...)</code>, and <code>(segment ...)</code> with <code>KicadLowerError</code></h2>
+<h2 id="anatomy-of-kicad-ast-lowering-amp-corpus-oracles-block-by-block">Anatomy of KiCad AST Lowering &amp; Corpus Oracles: Block by Block</h2>
+<p>Let's unpack all the new code added in <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code> block by block before viewing the complete assembled listings in context.</p>
+<h3 id="block-1-kicadlowererror-pinned-corpus-fixtures-amp-corpusoraclereport-crates-pcb-doc-src-lib-rs">Block 1: <code>KicadLowerError</code>, Pinned Corpus Fixtures &amp; <code>CorpusOracleReport</code> (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
 <figure>
-  <figcaption>Typed KiCad S-expression lowering and CorpusOracleReport in crates/pcb-doc/src/lib.rs</figcaption>
-  <pre><code class="language-rust">pub const CORPUS_PASS_FLOOR: usize = 3;
+  <figcaption>Typed KiCad S-expression lowering errors and CorpusOracleReport in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">/// Minimum number of pinned KiCad `.kicad_pcb` corpus fixtures that must parse cleanly.
+pub const CORPUS_PASS_FLOOR: usize = 3;
+
+/// Minimum number of pinned KiCad `.kicad_pcb` corpus fixtures that must round-trip losslessly.
 pub const CORPUS_ROUNDTRIP_FLOOR: usize = 3;
 
+/// Pinned real-structure KiCad `.kicad_pcb` corpus fixtures verified by our Tier 4 oracle harness.
+pub const PINNED_KICAD_CORPUS: &amp;[(&amp;str, &amp;str)] = &amp;[
+    (
+        "ldo-power-rev-a.kicad_pcb",
+        SAMPLE_KICAD_PCB_SNIPPET,
+    ),
+    (
+        "spi-sensor-rev-b.kicad_pcb",
+        "(kicad_pcb (version 20240108) (footprint \"0603\" (ref \"R12\") (val \"10k\") (at 52.0 35.0) (size 10.0 6.0) (net 2)) (pad \"1\" smd (at 20.0 48.0) (size 4.0 2.4) (layer \"B.Cu\") (net 2)) (segment (start 20.0 48.0) (end 55.0 48.0) (width 0.8) (layer \"B.Cu\") (net 2)))",
+    ),
+    (
+        "usb-header-rev-c.kicad_pcb",
+        "(kicad_pcb (version 20240108) (footprint \"Header\" (ref \"J1\") (val \"CONN_2P\") (at 68.0 35.0) (size 10.0 14.0) (net 1)) (segment (start 14.0 16.0) (end 28.0 16.0) (width 0.3) (layer \"F.SilkS\") (net 0)) (segment (start 20.0 32.0) (end 55.0 48.0) (width 0.25) (layer \"Ratsnest\") (net 2)))",
+    ),
+];
+
+/// Typed, panic-free errors returned when lowering a KiCad S-expression AST into `BoardModel`.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum KicadLowerError {
     #[error("S-expression parse error: {0}")]
@@ -92,6 +114,7 @@ pub enum KicadLowerError {
     UnknownLayer(String),
 }
 
+/// Tier 4 pinned KiCad corpus oracle report tracking pass and lossless round-trip counts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CorpusOracleReport {
     pub total_files: usize,
@@ -105,7 +128,844 @@ impl CorpusOracleReport {
             &amp;&amp; self.roundtrip_files &gt;= CORPUS_ROUNDTRIP_FLOOR
             &amp;&amp; self.passed_files == self.total_files
     }
+
+    pub fn summary_badge(&amp;self) -&gt; String {
+        let status = if self.meets_ratchet_floors() {
+            "PASS"
+        } else {
+            "FAIL"
+        };
+        format!(
+            "Corpus [{status}]: {}/{} pass, {}/{} round-trip",
+            self.passed_files, self.total_files, self.roundtrip_files, self.total_files
+        )
+    }
+}
+
+/// Runs the Tier 4 pinned KiCad `.kicad_pcb` corpus oracle across all `PINNED_KICAD_CORPUS` fixtures.
+pub fn run_pinned_kicad_corpus() -&gt; CorpusOracleReport {
+    let mut passed_files = 0;
+    let mut roundtrip_files = 0;
+    for &amp;(_name, raw_sexpr) in PINNED_KICAD_CORPUS {
+        if let Ok(board) = BoardModel::from_kicad_pcb_sexpr(raw_sexpr) {
+            passed_files += 1;
+            let exported = board.to_kicad_pcb_sexpr();
+            if let Ok(reloaded) = BoardModel::from_kicad_pcb_sexpr(&amp;exported)
+                &amp;&amp; reloaded == board
+            {
+                roundtrip_files += 1;
+            }
+        }
+    }
+    CorpusOracleReport {
+        total_files: PINNED_KICAD_CORPUS.len(),
+        passed_files,
+        roundtrip_files,
+    }
 }</code></pre>
+</figure>
+<ul>
+<li><strong><code>#[from] SexprParseError</code> Error Chaining</strong>: Decorating <code>Sexpr(#[from] SexprParseError)</code> with <code>thiserror</code>'s <code>#[from]</code> attribute generates <code>impl From&lt;SexprParseError&gt; for KicadLowerError</code>, allowing <code>BoardModel::from_kicad_pcb_sexpr</code> to call <code>parse_sexpr_str(raw)?</code> with the <code>?</code> operator and automatically promote syntax errors into <code>KicadLowerError::Sexpr</code>.</li>
+<li><strong>Granular Semantic Error Variants</strong>: <code>UnexpectedRootTag(String)</code> rejects non-PCB S-expressions like <code>(kicad_sch ...)</code>, <code>MissingField(&amp;'static str)</code> reports omitted child lists (<code>&quot;package&quot;</code>, <code>&quot;ref&quot;</code>, <code>&quot;at&quot;</code>, etc.), <code>InvalidNumber(String)</code> catches malformed floats/integers, and <code>UnknownLayer(String)</code> flags unrecognized layer names.</li>
+<li><strong><code>CorpusOracleReport</code> &amp; <code>run_pinned_kicad_corpus</code></strong>: Evaluates every fixture in <code>PINNED_KICAD_CORPUS</code>, counting both clean imports (<code>passed_files</code>) and lossless <code>to_kicad_pcb_sexpr() -&gt; from_kicad_pcb_sexpr()</code> round-trips (<code>roundtrip_files</code>), then enforces <code>CORPUS_PASS_FLOOR</code> and <code>CORPUS_ROUNDTRIP_FLOOR</code> in <code>meets_ratchet_floors()</code>.</li>
+</ul>
+<h3 id="block-2-layer-name-mapping-amp-ast-node-lowering-helpers-crates-pcb-doc-src-lib-rs">Block 2: Layer Name Mapping &amp; AST Node Lowering Helpers (<code>crates/pcb-doc/src/lib.rs</code>)</h3>
+<figure>
+  <figcaption>Mapping KiCad layer strings and lowering footprint, pad, and segment nodes</figcaption>
+  <pre><code class="language-rust">impl PcbLayer {
+    // ... existing z_rank() and rgb() methods ...
+
+    pub fn kicad_name(self) -&gt; &amp;'static str {
+        match self {
+            PcbLayer::BottomCopper =&gt; "B.Cu",
+            PcbLayer::TopCopper =&gt; "F.Cu",
+            PcbLayer::Silkscreen =&gt; "F.SilkS",
+            PcbLayer::Ratsnest =&gt; "Ratsnest",
+        }
+    }
+
+    pub fn from_kicad_name(name: &amp;str) -&gt; Result&lt;Self, KicadLowerError&gt; {
+        match name {
+            "B.Cu" =&gt; Ok(PcbLayer::BottomCopper),
+            "F.Cu" =&gt; Ok(PcbLayer::TopCopper),
+            "F.SilkS" =&gt; Ok(PcbLayer::Silkscreen),
+            "Ratsnest" =&gt; Ok(PcbLayer::Ratsnest),
+            other =&gt; Err(KicadLowerError::UnknownLayer(other.to_owned())),
+        }
+    }
+}
+
+fn parse_f32_token(raw: &amp;str) -&gt; Result&lt;f32, KicadLowerError&gt; {
+    raw.parse::&lt;f32&gt;()
+        .map_err(|_| KicadLowerError::InvalidNumber(raw.to_owned()))
+}
+
+fn parse_child_f32_pair(
+    parent: &amp;SexprNode,
+    tag: &amp;'static str,
+) -&gt; Result&lt;(f32, f32), KicadLowerError&gt; {
+    let list = parent
+        .find_child_list(tag)
+        .ok_or(KicadLowerError::MissingField(tag))?;
+    let children = list.children();
+    let x_str = children
+        .first()
+        .and_then(SexprNode::as_text)
+        .ok_or(KicadLowerError::MissingField(tag))?;
+    let y_str = children
+        .get(1)
+        .and_then(SexprNode::as_text)
+        .ok_or(KicadLowerError::MissingField(tag))?;
+    Ok((parse_f32_token(x_str)?, parse_f32_token(y_str)?))
+}
+
+fn parse_child_text&lt;'a&gt;(
+    parent: &amp;'a SexprNode,
+    tag: &amp;'static str,
+) -&gt; Result&lt;&amp;'a str, KicadLowerError&gt; {
+    parent
+        .find_child_list(tag)
+        .and_then(|n| n.children().first())
+        .and_then(SexprNode::as_text)
+        .ok_or(KicadLowerError::MissingField(tag))
+}
+
+fn parse_child_u32(parent: &amp;SexprNode, tag: &amp;'static str) -&gt; Result&lt;u32, KicadLowerError&gt; {
+    let raw = parse_child_text(parent, tag)?;
+    raw.parse::&lt;u32&gt;()
+        .map_err(|_| KicadLowerError::InvalidNumber(raw.to_owned()))
+}
+
+fn lower_footprint_node(node: &amp;SexprNode) -&gt; Result&lt;ComponentSymbol, KicadLowerError&gt; {
+    let package_name = node
+        .children()
+        .first()
+        .and_then(SexprNode::as_text)
+        .ok_or(KicadLowerError::MissingField("package"))?
+        .to_owned();
+    let ref_des = parse_child_text(node, "ref")?.to_owned();
+    let value = parse_child_text(node, "val")?.to_owned();
+    let (cx, cy) = parse_child_f32_pair(node, "at")?;
+    let (w, h) = parse_child_f32_pair(node, "size")?;
+    let net_num = parse_child_u32(node, "net")?;
+    Ok(ComponentSymbol {
+        ref_des,
+        value,
+        package_name,
+        center_mm: pos2(cx, cy),
+        body_size_mm: vec2(w, h),
+        primary_net: NetId(net_num),
+    })
+}
+
+fn lower_pad_node(node: &amp;SexprNode) -&gt; Result&lt;SmdPad, KicadLowerError&gt; {
+    let (cx, cy) = parse_child_f32_pair(node, "at")?;
+    let (w, h) = parse_child_f32_pair(node, "size")?;
+    let layer = PcbLayer::from_kicad_name(parse_child_text(node, "layer")?)?;
+    let net_num = parse_child_u32(node, "net")?;
+    Ok(SmdPad {
+        center_mm: pos2(cx, cy),
+        size_mm: vec2(w, h),
+        layer,
+        net: NetId(net_num),
+    })
+}
+
+fn lower_segment_node(node: &amp;SexprNode) -&gt; Result&lt;TraceSegment, KicadLowerError&gt; {
+    let (x0, y0) = parse_child_f32_pair(node, "start")?;
+    let (x1, y1) = parse_child_f32_pair(node, "end")?;
+    let width_mm = parse_f32_token(parse_child_text(node, "width")?)?;
+    let layer = PcbLayer::from_kicad_name(parse_child_text(node, "layer")?)?;
+    let net_num = parse_child_u32(node, "net")?;
+    let net = if net_num == 0 {
+        None
+    } else {
+        Some(NetId(net_num))
+    };
+    Ok(TraceSegment {
+        start: pos2(x0, y0),
+        end: pos2(x1, y1),
+        width_mm,
+        layer,
+        net,
+    })
+}</code></pre>
+</figure>
+<ul>
+<li><strong><code>PcbLayer::kicad_name</code> &amp; <code>from_kicad_name</code></strong>: Provides a bijection between KiCad's canonical layer strings (<code>&quot;B.Cu&quot;</code>, <code>&quot;F.Cu&quot;</code>, <code>&quot;F.SilkS&quot;</code>, <code>&quot;Ratsnest&quot;</code>) and our <code>PcbLayer</code> enum, returning <code>Err(KicadLowerError::UnknownLayer(...))</code> on unsupported layers like <code>&quot;In1.Cu&quot;</code>.</li>
+<li><strong>Composable Field Extractors (<code>parse_child_text</code>, <code>parse_child_f32_pair</code>, <code>parse_child_u32</code>)</strong>: Each helper chains <code>parent.find_child_list(tag)</code> with <code>.ok_or(KicadLowerError::MissingField(tag))?</code> and <code>.parse::&lt;T&gt;()</code> so missing or malformed attributes fail with exact diagnostics and zero <code>.unwrap()</code> calls.</li>
+<li><strong><code>lower_footprint_node</code>, <code>lower_pad_node</code>, <code>lower_segment_node</code></strong>: Translate each KiCad AST subtree into a typed <code>ComponentSymbol</code>, <code>SmdPad</code>, or <code>TraceSegment</code> (mapping KiCad's <code>net 0</code> unrouted/graphic convention to <code>None</code> on <code>TraceSegment::net</code>).</li>
+</ul>
+<h3 id="block-3-board-level-s-expression-import-amp-export-boardmodel-from-kicad-pcb-sexpr-amp-to-kicad-pcb-sexpr">Block 3: Board-Level S-Expression Import &amp; Export (<code>BoardModel::from_kicad_pcb_sexpr</code> &amp; <code>to_kicad_pcb_sexpr</code>)</h3>
+<figure>
+  <figcaption>Importing and exporting complete .kicad_pcb S-expressions on BoardModel</figcaption>
+  <pre><code class="language-rust">impl BoardModel {
+    /// Lowers a KiCad `(kicad_pcb ...)` S-expression string into a typed `BoardModel`.
+    pub fn from_kicad_pcb_sexpr(raw: &amp;str) -&gt; Result&lt;Self, KicadLowerError&gt; {
+        let root = parse_sexpr_str(raw)?;
+        let root_tag = root.tag_name().unwrap_or("atom");
+        if root_tag != "kicad_pcb" {
+            return Err(KicadLowerError::UnexpectedRootTag(root_tag.to_owned()));
+        }
+
+        let mut components = Vec::new();
+        let mut pads = Vec::new();
+        let mut traces = Vec::new();
+
+        for child in root.children() {
+            match child.tag_name() {
+                Some("footprint") =&gt; components.push(lower_footprint_node(child)?),
+                Some("pad") =&gt; pads.push(lower_pad_node(child)?),
+                Some("segment") =&gt; traces.push(lower_segment_node(child)?),
+                _ =&gt; {}
+            }
+        }
+
+        Ok(Self {
+            traces: Arc::new(traces),
+            pads: Arc::new(pads),
+            components: Arc::new(components),
+            review_pins: Arc::new(HashMap::new()),
+            next_pin_id: 1,
+        })
+    }
+
+    /// Exports the board's footprints, SMD pads, and trace segments to a canonical KiCad `.kicad_pcb` S-expression.
+    pub fn to_kicad_pcb_sexpr(&amp;self) -&gt; String {
+        let mut parts = vec!["(kicad_pcb (version 20240108)".to_owned()];
+        for comp in self.components.iter() {
+            parts.push(format!(
+                "(footprint \"{}\" (ref \"{}\") (val \"{}\") (at {:.1} {:.1}) (size {:.1} {:.1}) (net {}))",
+                comp.package_name,
+                comp.ref_des,
+                comp.value,
+                comp.center_mm.x,
+                comp.center_mm.y,
+                comp.body_size_mm.x,
+                comp.body_size_mm.y,
+                comp.primary_net.0
+            ));
+        }
+        for (idx, pad) in self.pads.iter().enumerate() {
+            parts.push(format!(
+                "(pad \"{}\" smd (at {:.1} {:.1}) (size {:.1} {:.1}) (layer \"{}\") (net {}))",
+                idx + 1,
+                pad.center_mm.x,
+                pad.center_mm.y,
+                pad.size_mm.x,
+                pad.size_mm.y,
+                pad.layer.kicad_name(),
+                pad.net.0
+            ));
+        }
+        for seg in self.traces.iter() {
+            let net_num = seg.net.map_or(0, |n| n.0);
+            parts.push(format!(
+                "(segment (start {:.1} {:.1}) (end {:.1} {:.1}) (width {:.2}) (layer \"{}\") (net {}))",
+                seg.start.x,
+                seg.start.y,
+                seg.end.x,
+                seg.end.y,
+                seg.width_mm,
+                seg.layer.kicad_name(),
+                net_num
+            ));
+        }
+        format!("{})", parts.join(" "))
+    }
+}</code></pre>
+</figure>
+<ul>
+<li><strong><code>from_kicad_pcb_sexpr</code></strong>: Validates that the root list tag is <code>&quot;kicad_pcb&quot;</code>, dispatches <code>&quot;footprint&quot;</code>, <code>&quot;pad&quot;</code>, and <code>&quot;segment&quot;</code> children to their respective lowering functions, ignores informational metadata tags like <code>(version ...)</code> or <code>(net ...)</code>, and wraps the resulting collections in <code>Arc::new(...)</code> for <code>BoardModel</code>.</li>
+<li><strong><code>to_kicad_pcb_sexpr</code></strong>: Serializes <code>self.components</code>, <code>self.pads</code>, and <code>self.traces</code> back into canonical <code>.kicad_pcb</code> S-expression syntax so <code>BoardModel::from_kicad_pcb_sexpr(&amp;board.to_kicad_pcb_sexpr())</code> round-trips losslessly.</li>
+</ul>
+<h3 id="block-4-wiring-kicad-board-import-export-amp-corpus-telemetry-into-src-main-rs">Block 4: Wiring KiCad Board Import/Export &amp; Corpus Telemetry into <code>src/main.rs</code></h3>
+<figure>
+  <figcaption>Adding import_kicad_sexpr_board, export_kicad_sexpr_board, and UI buttons in src/main.rs</figcaption>
+  <pre><code class="language-rust">impl PcbReviewerApp {
+    // ...
+    pub fn import_kicad_sexpr_board(&amp;mut self) -&gt; bool {
+        match BoardModel::from_kicad_pcb_sexpr(&amp;self.view.ast_source_text) {
+            Ok(board) =&gt; {
+                self.board = board;
+                self.view.parse_active_sexpr();
+                true
+            }
+            Err(err) =&gt; {
+                self.view.parsed_ast = None;
+                self.view.last_ast_error = Some(err.to_string());
+                false
+            }
+        }
+    }
+
+    pub fn export_kicad_sexpr_board(&amp;mut self) {
+        self.view.ast_source_text = self.board.to_kicad_pcb_sexpr();
+        self.view.parse_active_sexpr();
+    }
+
+    pub fn render_session_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        // ... inside the "KiCad S-Expr AST (nom)" section:
+        ui.separator();
+        ui.heading("KiCad S-Expr AST (nom)");
+        ui.label(self.view.ast_status_badge());
+        ui.label(run_pinned_kicad_corpus().summary_badge());
+        ui.horizontal(|ui| {
+            if ui.button("Parse Sample KiCad AST").clicked() {
+                self.view.ast_source_text = SAMPLE_KICAD_PCB_SNIPPET.to_owned();
+                self.view.parse_active_sexpr();
+            }
+            if ui.button("Test Unclosed S-Expr").clicked() {
+                self.view.ast_source_text = "(kicad_pcb (net 1".to_owned();
+                self.view.parse_active_sexpr();
+            }
+        });
+        ui.horizontal(|ui| {
+            if ui.button("Import KiCad Board").clicked() {
+                self.import_kicad_sexpr_board();
+            }
+            if ui.button("Export KiCad S-Expr").clicked() {
+                self.export_kicad_sexpr_board();
+            }
+        });
+        // ... CollapsingHeader tree inspector ...
+    }
+}</code></pre>
+</figure>
+<ul>
+<li><strong><code>import_kicad_sexpr_board(&amp;mut self) -&gt; bool</code></strong>: Lowers <code>self.view.ast_source_text</code> into <code>self.board</code> and refreshes the <code>CollapsingHeader</code> AST tree on success, or records <code>AST Error: ...</code> in <code>self.view.last_ast_error</code> on failure.</li>
+<li><strong><code>export_kicad_sexpr_board(&amp;mut self)</code></strong>: Formats the active <code>self.board</code> via <code>to_kicad_pcb_sexpr()</code>, stores it in <code>self.view.ast_source_text</code>, and re-parses the live AST tree.</li>
+<li><strong>Corpus Status Badge &amp; Action Row</strong>: Displays <code>run_pinned_kicad_corpus().summary_badge()</code> (<code>Corpus [PASS]: 3/3 pass, 3/3 round-trip</code>) alongside <code>&quot;Import KiCad Board&quot;</code> and <code>&quot;Export KiCad S-Expr&quot;</code> buttons in the right-hand session panel.</li>
+</ul>
+<h3 id="block-5-corpus-oracle-amp-synthetic-crash-regression-tests-crates-pcb-doc-src-lib-rs-amp-src-main-rs">Block 5: Corpus Oracle &amp; Synthetic Crash-Regression Tests (<code>crates/pcb-doc/src/lib.rs</code> &amp; <code>src/main.rs</code>)</h3>
+<figure>
+  <figcaption>Tier 4 corpus oracle and synthetic regression tests in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">    #[test]
+    fn kicad_pcb_lowering_roundtrip_and_corpus_oracle_ratchets_work() {
+        for (layer, name) in [
+            (PcbLayer::BottomCopper, "B.Cu"),
+            (PcbLayer::TopCopper, "F.Cu"),
+            (PcbLayer::Silkscreen, "F.SilkS"),
+            (PcbLayer::Ratsnest, "Ratsnest"),
+        ] {
+            assert_eq!(layer.kicad_name(), name);
+            assert_eq!(PcbLayer::from_kicad_name(name), Ok(layer));
+        }
+        assert_eq!(
+            PcbLayer::from_kicad_name("In1.Cu"),
+            Err(KicadLowerError::UnknownLayer("In1.Cu".to_owned()))
+        );
+
+        let report = run_pinned_kicad_corpus();
+        assert_eq!(report.total_files, 3);
+        assert_eq!(report.passed_files, 3);
+        assert_eq!(report.roundtrip_files, 3);
+        assert!(report.meets_ratchet_floors());
+        assert_eq!(
+            report.summary_badge(),
+            "Corpus [PASS]: 3/3 pass, 3/3 round-trip"
+        );
+
+        // Synthetic crash-regression &amp; validation error coverage
+        assert_eq!(
+            BoardModel::from_kicad_pcb_sexpr("(kicad_sch (version 1))"),
+            Err(KicadLowerError::UnexpectedRootTag("kicad_sch".to_owned()))
+        );
+        assert_eq!(
+            BoardModel::from_kicad_pcb_sexpr("(kicad_pcb (footprint))"),
+            Err(KicadLowerError::MissingField("package"))
+        );
+        assert_eq!(
+            BoardModel::from_kicad_pcb_sexpr(
+                "(kicad_pcb (footprint \"SOT-23\" (ref \"U1\") (val \"LDO\") (at 20.0 bad_y) (size 12.0 16.0) (net 1)))"
+            ),
+            Err(KicadLowerError::InvalidNumber("bad_y".to_owned()))
+        );
+    }</code></pre>
+</figure>
+<ul>
+<li><strong>Tier 4 Corpus Ratchet Assertions</strong>: Verifies that all 3 pinned boards pass <code>run_pinned_kicad_corpus()</code> and also tests each failure condition of <code>CorpusOracleReport::meets_ratchet_floors()</code> (<code>passed_files &lt; CORPUS_PASS_FLOOR</code>, <code>passed_files != total_files</code>, and <code>roundtrip_files &lt; CORPUS_ROUNDTRIP_FLOOR</code>) so <code>cargo-mutants</code> cannot flip <code>&amp;&amp;</code> or <code>&gt;=</code> operators.</li>
+<li><strong>Deterministic Synthetic Regression Tests</strong>: Follows Critical Rule #4 of our testing architecture by asserting exact <code>KicadLowerError</code> variants on malformed root tags, missing fields, and non-numeric coordinates.</li>
+</ul>
+<h3 id="complete-kicad-lowering-amp-ui-integration-context-listing">Complete KiCad Lowering &amp; UI Integration Context Listing</h3>
+<p>Here is the complete assembled code added to <code>crates/pcb-doc/src/lib.rs</code> and <code>src/main.rs</code> in Lesson 0024:</p>
+<figure>
+  <figcaption>Complete KiCad lowering, corpus oracle, and tests in crates/pcb-doc/src/lib.rs</figcaption>
+  <pre><code class="language-rust">/// Minimum number of pinned KiCad `.kicad_pcb` corpus fixtures that must parse cleanly.
+pub const CORPUS_PASS_FLOOR: usize = 3;
+
+/// Minimum number of pinned KiCad `.kicad_pcb` corpus fixtures that must round-trip losslessly.
+pub const CORPUS_ROUNDTRIP_FLOOR: usize = 3;
+
+/// Pinned real-structure KiCad `.kicad_pcb` corpus fixtures verified by our Tier 4 oracle harness.
+pub const PINNED_KICAD_CORPUS: &amp;[(&amp;str, &amp;str)] = &amp;[
+    (
+        "ldo-power-rev-a.kicad_pcb",
+        SAMPLE_KICAD_PCB_SNIPPET,
+    ),
+    (
+        "spi-sensor-rev-b.kicad_pcb",
+        "(kicad_pcb (version 20240108) (footprint \"0603\" (ref \"R12\") (val \"10k\") (at 52.0 35.0) (size 10.0 6.0) (net 2)) (pad \"1\" smd (at 20.0 48.0) (size 4.0 2.4) (layer \"B.Cu\") (net 2)) (segment (start 20.0 48.0) (end 55.0 48.0) (width 0.8) (layer \"B.Cu\") (net 2)))",
+    ),
+    (
+        "usb-header-rev-c.kicad_pcb",
+        "(kicad_pcb (version 20240108) (footprint \"Header\" (ref \"J1\") (val \"CONN_2P\") (at 68.0 35.0) (size 10.0 14.0) (net 1)) (segment (start 14.0 16.0) (end 28.0 16.0) (width 0.3) (layer \"F.SilkS\") (net 0)) (segment (start 20.0 32.0) (end 55.0 48.0) (width 0.25) (layer \"Ratsnest\") (net 2)))",
+    ),
+];
+
+/// Typed, panic-free errors returned when lowering a KiCad S-expression AST into `BoardModel`.
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum KicadLowerError {
+    #[error("S-expression parse error: {0}")]
+    Sexpr(#[from] SexprParseError),
+    #[error("expected `(kicad_pcb ...)` root node, found `{0}`")]
+    UnexpectedRootTag(String),
+    #[error("missing required field `{0}`")]
+    MissingField(&amp;'static str),
+    #[error("invalid numeric coordinate `{0}`")]
+    InvalidNumber(String),
+    #[error("unknown KiCad layer `{0}`")]
+    UnknownLayer(String),
+}
+
+/// Tier 4 pinned KiCad corpus oracle report tracking pass and lossless round-trip counts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CorpusOracleReport {
+    pub total_files: usize,
+    pub passed_files: usize,
+    pub roundtrip_files: usize,
+}
+
+impl CorpusOracleReport {
+    pub fn meets_ratchet_floors(&amp;self) -&gt; bool {
+        self.passed_files &gt;= CORPUS_PASS_FLOOR
+            &amp;&amp; self.roundtrip_files &gt;= CORPUS_ROUNDTRIP_FLOOR
+            &amp;&amp; self.passed_files == self.total_files
+    }
+
+    pub fn summary_badge(&amp;self) -&gt; String {
+        let status = if self.meets_ratchet_floors() {
+            "PASS"
+        } else {
+            "FAIL"
+        };
+        format!(
+            "Corpus [{status}]: {}/{} pass, {}/{} round-trip",
+            self.passed_files, self.total_files, self.roundtrip_files, self.total_files
+        )
+    }
+}
+
+/// Runs the Tier 4 pinned KiCad `.kicad_pcb` corpus oracle across all `PINNED_KICAD_CORPUS` fixtures.
+pub fn run_pinned_kicad_corpus() -&gt; CorpusOracleReport {
+    let mut passed_files = 0;
+    let mut roundtrip_files = 0;
+    for &amp;(_name, raw_sexpr) in PINNED_KICAD_CORPUS {
+        if let Ok(board) = BoardModel::from_kicad_pcb_sexpr(raw_sexpr) {
+            passed_files += 1;
+            let exported = board.to_kicad_pcb_sexpr();
+            if let Ok(reloaded) = BoardModel::from_kicad_pcb_sexpr(&amp;exported)
+                &amp;&amp; reloaded == board
+            {
+                roundtrip_files += 1;
+            }
+        }
+    }
+    CorpusOracleReport {
+        total_files: PINNED_KICAD_CORPUS.len(),
+        passed_files,
+        roundtrip_files,
+    }
+}
+
+impl PcbLayer {
+    // ...
+    pub fn kicad_name(self) -&gt; &amp;'static str {
+        match self {
+            PcbLayer::BottomCopper =&gt; "B.Cu",
+            PcbLayer::TopCopper =&gt; "F.Cu",
+            PcbLayer::Silkscreen =&gt; "F.SilkS",
+            PcbLayer::Ratsnest =&gt; "Ratsnest",
+        }
+    }
+
+    pub fn from_kicad_name(name: &amp;str) -&gt; Result&lt;Self, KicadLowerError&gt; {
+        match name {
+            "B.Cu" =&gt; Ok(PcbLayer::BottomCopper),
+            "F.Cu" =&gt; Ok(PcbLayer::TopCopper),
+            "F.SilkS" =&gt; Ok(PcbLayer::Silkscreen),
+            "Ratsnest" =&gt; Ok(PcbLayer::Ratsnest),
+            other =&gt; Err(KicadLowerError::UnknownLayer(other.to_owned())),
+        }
+    }
+}
+
+fn parse_f32_token(raw: &amp;str) -&gt; Result&lt;f32, KicadLowerError&gt; {
+    raw.parse::&lt;f32&gt;()
+        .map_err(|_| KicadLowerError::InvalidNumber(raw.to_owned()))
+}
+
+fn parse_child_f32_pair(
+    parent: &amp;SexprNode,
+    tag: &amp;'static str,
+) -&gt; Result&lt;(f32, f32), KicadLowerError&gt; {
+    let list = parent
+        .find_child_list(tag)
+        .ok_or(KicadLowerError::MissingField(tag))?;
+    let children = list.children();
+    let x_str = children
+        .first()
+        .and_then(SexprNode::as_text)
+        .ok_or(KicadLowerError::MissingField(tag))?;
+    let y_str = children
+        .get(1)
+        .and_then(SexprNode::as_text)
+        .ok_or(KicadLowerError::MissingField(tag))?;
+    Ok((parse_f32_token(x_str)?, parse_f32_token(y_str)?))
+}
+
+fn parse_child_text&lt;'a&gt;(
+    parent: &amp;'a SexprNode,
+    tag: &amp;'static str,
+) -&gt; Result&lt;&amp;'a str, KicadLowerError&gt; {
+    parent
+        .find_child_list(tag)
+        .and_then(|n| n.children().first())
+        .and_then(SexprNode::as_text)
+        .ok_or(KicadLowerError::MissingField(tag))
+}
+
+fn parse_child_u32(parent: &amp;SexprNode, tag: &amp;'static str) -&gt; Result&lt;u32, KicadLowerError&gt; {
+    let raw = parse_child_text(parent, tag)?;
+    raw.parse::&lt;u32&gt;()
+        .map_err(|_| KicadLowerError::InvalidNumber(raw.to_owned()))
+}
+
+fn lower_footprint_node(node: &amp;SexprNode) -&gt; Result&lt;ComponentSymbol, KicadLowerError&gt; {
+    let package_name = node
+        .children()
+        .first()
+        .and_then(SexprNode::as_text)
+        .ok_or(KicadLowerError::MissingField("package"))?
+        .to_owned();
+    let ref_des = parse_child_text(node, "ref")?.to_owned();
+    let value = parse_child_text(node, "val")?.to_owned();
+    let (cx, cy) = parse_child_f32_pair(node, "at")?;
+    let (w, h) = parse_child_f32_pair(node, "size")?;
+    let net_num = parse_child_u32(node, "net")?;
+    Ok(ComponentSymbol {
+        ref_des,
+        value,
+        package_name,
+        center_mm: pos2(cx, cy),
+        body_size_mm: vec2(w, h),
+        primary_net: NetId(net_num),
+    })
+}
+
+fn lower_pad_node(node: &amp;SexprNode) -&gt; Result&lt;SmdPad, KicadLowerError&gt; {
+    let (cx, cy) = parse_child_f32_pair(node, "at")?;
+    let (w, h) = parse_child_f32_pair(node, "size")?;
+    let layer = PcbLayer::from_kicad_name(parse_child_text(node, "layer")?)?;
+    let net_num = parse_child_u32(node, "net")?;
+    Ok(SmdPad {
+        center_mm: pos2(cx, cy),
+        size_mm: vec2(w, h),
+        layer,
+        net: NetId(net_num),
+    })
+}
+
+fn lower_segment_node(node: &amp;SexprNode) -&gt; Result&lt;TraceSegment, KicadLowerError&gt; {
+    let (x0, y0) = parse_child_f32_pair(node, "start")?;
+    let (x1, y1) = parse_child_f32_pair(node, "end")?;
+    let width_mm = parse_f32_token(parse_child_text(node, "width")?)?;
+    let layer = PcbLayer::from_kicad_name(parse_child_text(node, "layer")?)?;
+    let net_num = parse_child_u32(node, "net")?;
+    let net = if net_num == 0 {
+        None
+    } else {
+        Some(NetId(net_num))
+    };
+    Ok(TraceSegment {
+        start: pos2(x0, y0),
+        end: pos2(x1, y1),
+        width_mm,
+        layer,
+        net,
+    })
+}
+
+impl BoardModel {
+    // ...
+    /// Lowers a KiCad `(kicad_pcb ...)` S-expression string into a typed `BoardModel`.
+    pub fn from_kicad_pcb_sexpr(raw: &amp;str) -&gt; Result&lt;Self, KicadLowerError&gt; {
+        let root = parse_sexpr_str(raw)?;
+        let root_tag = root.tag_name().unwrap_or("atom");
+        if root_tag != "kicad_pcb" {
+            return Err(KicadLowerError::UnexpectedRootTag(root_tag.to_owned()));
+        }
+
+        let mut components = Vec::new();
+        let mut pads = Vec::new();
+        let mut traces = Vec::new();
+
+        for child in root.children() {
+            match child.tag_name() {
+                Some("footprint") =&gt; components.push(lower_footprint_node(child)?),
+                Some("pad") =&gt; pads.push(lower_pad_node(child)?),
+                Some("segment") =&gt; traces.push(lower_segment_node(child)?),
+                _ =&gt; {}
+            }
+        }
+
+        Ok(Self {
+            traces: Arc::new(traces),
+            pads: Arc::new(pads),
+            components: Arc::new(components),
+            review_pins: Arc::new(HashMap::new()),
+            next_pin_id: 1,
+        })
+    }
+
+    /// Exports the board's footprints, SMD pads, and trace segments to a canonical KiCad `.kicad_pcb` S-expression.
+    pub fn to_kicad_pcb_sexpr(&amp;self) -&gt; String {
+        let mut parts = vec!["(kicad_pcb (version 20240108)".to_owned()];
+        for comp in self.components.iter() {
+            parts.push(format!(
+                "(footprint \"{}\" (ref \"{}\") (val \"{}\") (at {:.1} {:.1}) (size {:.1} {:.1}) (net {}))",
+                comp.package_name,
+                comp.ref_des,
+                comp.value,
+                comp.center_mm.x,
+                comp.center_mm.y,
+                comp.body_size_mm.x,
+                comp.body_size_mm.y,
+                comp.primary_net.0
+            ));
+        }
+        for (idx, pad) in self.pads.iter().enumerate() {
+            parts.push(format!(
+                "(pad \"{}\" smd (at {:.1} {:.1}) (size {:.1} {:.1}) (layer \"{}\") (net {}))",
+                idx + 1,
+                pad.center_mm.x,
+                pad.center_mm.y,
+                pad.size_mm.x,
+                pad.size_mm.y,
+                pad.layer.kicad_name(),
+                pad.net.0
+            ));
+        }
+        for seg in self.traces.iter() {
+            let net_num = seg.net.map_or(0, |n| n.0);
+            parts.push(format!(
+                "(segment (start {:.1} {:.1}) (end {:.1} {:.1}) (width {:.2}) (layer \"{}\") (net {}))",
+                seg.start.x,
+                seg.start.y,
+                seg.end.x,
+                seg.end.y,
+                seg.width_mm,
+                seg.layer.kicad_name(),
+                net_num
+            ));
+        }
+        format!("{})", parts.join(" "))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // ...
+    #[test]
+    fn kicad_pcb_lowering_roundtrip_and_corpus_oracle_ratchets_work() {
+        for (layer, name) in [
+            (PcbLayer::BottomCopper, "B.Cu"),
+            (PcbLayer::TopCopper, "F.Cu"),
+            (PcbLayer::Silkscreen, "F.SilkS"),
+            (PcbLayer::Ratsnest, "Ratsnest"),
+        ] {
+            assert_eq!(layer.kicad_name(), name);
+            assert_eq!(PcbLayer::from_kicad_name(name), Ok(layer));
+        }
+        assert_eq!(
+            PcbLayer::from_kicad_name("In1.Cu"),
+            Err(KicadLowerError::UnknownLayer("In1.Cu".to_owned()))
+        );
+
+        let report = run_pinned_kicad_corpus();
+        assert_eq!(report.total_files, 3);
+        assert_eq!(report.passed_files, 3);
+        assert_eq!(report.roundtrip_files, 3);
+        assert!(report.meets_ratchet_floors());
+        assert_eq!(
+            report.summary_badge(),
+            "Corpus [PASS]: 3/3 pass, 3/3 round-trip"
+        );
+
+        let spi_board = BoardModel::from_kicad_pcb_sexpr(PINNED_KICAD_CORPUS[1].1).unwrap();
+        assert_eq!(spi_board.components.len(), 1);
+        assert_eq!(spi_board.pads.len(), 1);
+        assert_eq!(spi_board.traces.len(), 1);
+        assert_eq!(spi_board.traces[0].net, Some(NetId(2)));
+
+        let usb_board = BoardModel::from_kicad_pcb_sexpr(PINNED_KICAD_CORPUS[2].1).unwrap();
+        assert_eq!(usb_board.traces.len(), 2);
+        assert_eq!(usb_board.traces[0].net, None);
+        assert_eq!(usb_board.traces[1].net, Some(NetId(2)));
+
+        for failing_report in [
+            CorpusOracleReport {
+                total_files: 3,
+                passed_files: 2,
+                roundtrip_files: 3,
+            },
+            CorpusOracleReport {
+                total_files: 4,
+                passed_files: 3,
+                roundtrip_files: 3,
+            },
+            CorpusOracleReport {
+                total_files: 3,
+                passed_files: 3,
+                roundtrip_files: 2,
+            },
+        ] {
+            assert!(!failing_report.meets_ratchet_floors());
+            assert!(failing_report.summary_badge().starts_with("Corpus [FAIL]:"));
+        }
+
+        // Synthetic crash-regression &amp; validation error coverage
+        assert_eq!(
+            BoardModel::from_kicad_pcb_sexpr("(kicad_sch (version 1))"),
+            Err(KicadLowerError::UnexpectedRootTag("kicad_sch".to_owned()))
+        );
+        assert_eq!(
+            BoardModel::from_kicad_pcb_sexpr("(kicad_pcb (footprint))"),
+            Err(KicadLowerError::MissingField("package"))
+        );
+        assert_eq!(
+            BoardModel::from_kicad_pcb_sexpr("(kicad_pcb (footprint \"SOT-23\"))"),
+            Err(KicadLowerError::MissingField("ref"))
+        );
+        assert_eq!(
+            BoardModel::from_kicad_pcb_sexpr(
+                "(kicad_pcb (footprint \"SOT-23\" (ref \"U1\") (val \"LDO\") (at 20.0)))"
+            ),
+            Err(KicadLowerError::MissingField("at"))
+        );
+        assert_eq!(
+            BoardModel::from_kicad_pcb_sexpr(
+                "(kicad_pcb (footprint \"SOT-23\" (ref \"U1\") (val \"LDO\") (at 20.0 bad_y) (size 12.0 16.0) (net 1)))"
+            ),
+            Err(KicadLowerError::InvalidNumber("bad_y".to_owned()))
+        );
+        assert_eq!(
+            BoardModel::from_kicad_pcb_sexpr(
+                "(kicad_pcb (pad \"1\" smd (at 20.0 22.0) (size 4.0 2.4) (layer \"F.Cu\") (net bad_net)))"
+            ),
+            Err(KicadLowerError::InvalidNumber("bad_net".to_owned()))
+        );
+    }
+}</code></pre>
+</figure>
+<figure>
+  <figcaption>Complete KiCad board import/export UI methods and egui_kittest checks in src/main.rs</figcaption>
+  <pre><code class="language-rust">impl PcbReviewerApp {
+    // ...
+    pub fn import_kicad_sexpr_board(&amp;mut self) -&gt; bool {
+        match BoardModel::from_kicad_pcb_sexpr(&amp;self.view.ast_source_text) {
+            Ok(board) =&gt; {
+                self.board = board;
+                self.view.parse_active_sexpr();
+                true
+            }
+            Err(err) =&gt; {
+                self.view.parsed_ast = None;
+                self.view.last_ast_error = Some(err.to_string());
+                false
+            }
+        }
+    }
+
+    pub fn export_kicad_sexpr_board(&amp;mut self) {
+        self.view.ast_source_text = self.board.to_kicad_pcb_sexpr();
+        self.view.parse_active_sexpr();
+    }
+
+    pub fn render_session_panel(&amp;mut self, ui: &amp;mut egui::Ui) {
+        // ...
+        ui.separator();
+        ui.heading("KiCad S-Expr AST (nom)");
+        ui.label(self.view.ast_status_badge());
+        ui.label(run_pinned_kicad_corpus().summary_badge());
+        ui.horizontal(|ui| {
+            if ui.button("Parse Sample KiCad AST").clicked() {
+                self.view.ast_source_text = SAMPLE_KICAD_PCB_SNIPPET.to_owned();
+                self.view.parse_active_sexpr();
+            }
+            if ui.button("Test Unclosed S-Expr").clicked() {
+                self.view.ast_source_text = "(kicad_pcb (net 1".to_owned();
+                self.view.parse_active_sexpr();
+            }
+        });
+        ui.horizontal(|ui| {
+            if ui.button("Import KiCad Board").clicked() {
+                self.import_kicad_sexpr_board();
+            }
+            if ui.button("Export KiCad S-Expr").clicked() {
+                self.export_kicad_sexpr_board();
+            }
+        });
+        if let Some(root) = &amp;self.view.parsed_ast {
+            egui::CollapsingHeader::new(format!(
+                "Root ({}) [{} children]",
+                root.tag_name().unwrap_or("atom"),
+                root.children().len()
+            ))
+            .default_open(true)
+            .show(ui, |ui| {
+                for child in root.children() {
+                    if let Some(tag) = child.tag_name() {
+                        ui.label(format!("Node: ({tag}) • {} items", child.children().len()));
+                    }
+                }
+            });
+        }
+    }
+}
+
+// Inside tests::standalone_layer_swatch_and_headless_ui_workflows_pass in src/main.rs:
+        assert!(
+            harness
+                .query_by_label("Corpus [PASS]: 3/3 pass, 3/3 round-trip")
+                .is_some()
+        );
+
+        harness.get_by_label("Import KiCad Board").click();
+        harness.run();
+        assert_eq!(harness.state().board.components.len(), 1);
+        assert_eq!(harness.state().board.pads.len(), 1);
+
+        harness.state_mut().board = BoardModel::default();
+        harness.get_by_label("Export KiCad S-Expr").click();
+        harness.run();
+        assert!(
+            harness
+                .state()
+                .view
+                .ast_source_text
+                .contains("(segment (start 20.0 32.0)")
+        );
+
+        harness.state_mut().view.ast_source_text = "(kicad_sch (version 1))".to_owned();
+        assert!(!harness.state_mut().import_kicad_sexpr_board());
+        assert!(
+            harness
+                .state()
+                .view
+                .ast_status_badge()
+                .starts_with("AST Error:")
+        );</code></pre>
 </figure>
 </div>
 
