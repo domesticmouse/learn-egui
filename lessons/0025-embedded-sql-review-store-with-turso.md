@@ -25,7 +25,7 @@ flowchart LR
     Parser -- "Valid AST" --> FK{"Foreign Key Check:<br/>board_id registered?"}
     FK -- "No" --> ErrFK["Err(SqlStoreError::ForeignKeyViolation)"]
     FK -- "Yes" --> Store["TursoReviewStore<br/>Upsert / Query SqlReviewRecord"]
-    Store --> UI["egui SidePanel::right<br/>Turso SQL Inspector"]
+    Store --> UI["egui Panel::right<br/>Turso SQL Inspector"]
     style Store fill:#14231c,stroke:#3dd68c,color:#e6edf3
     style ErrSyn fill:#2a1418,stroke:#ff5555,color:#e6edf3
     style ErrFK fill:#2a1418,stroke:#ff5555,color:#e6edf3
@@ -52,7 +52,7 @@ edition = "2024"
 workspace = true
 
 [dependencies]
-emath = { version = "0.33", features = ["serde"] }
+emath = { version = "0.37", features = ["serde"] }
 kicad-sexpr = { path = "../kicad-sexpr" }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"

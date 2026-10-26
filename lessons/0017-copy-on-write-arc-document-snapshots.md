@@ -76,7 +76,7 @@ edition = "2024"
 workspace = true
 
 [dependencies]
-emath = { version = "0.33", features = ["serde"] }
+emath = { version = "0.37", features = ["serde"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 thiserror = "2.0"
@@ -85,7 +85,7 @@ thiserror = "2.0"
 proptest = "1.11"
 ```
 
-We also add `shared_arc_buffers(&self, other: &Self) -> usize` using `Arc::ptr_eq` so both our `proptest!` suite and the `SidePanel::right` UI (`"Shared Arc Buffers: 3 / 4"`) can inspect structural sharing directly.
+We also add `shared_arc_buffers(&self, other: &Self) -> usize` using `Arc::ptr_eq` so both our `proptest!` suite and the `Panel::right` UI (`"Shared Arc Buffers: 3 / 4"`) can inspect structural sharing directly.
 
 ```rust caption="Copy-on-Write BoardModel with Arc::make_mut and Arc::ptr_eq in crates/pcb-doc/src/lib.rs"
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

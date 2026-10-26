@@ -729,8 +729,9 @@ impl PcbReviewerApp {
         ui.separator();
         ui.heading("BOM & Netlist Inspector");
         ui.horizontal(|ui| {
-            ui.label("Filter BOM:");
-            ui.text_edit_singleline(&mut self.view.bom_search_query);
+            let bom_label = ui.label("Filter BOM:");
+            ui.text_edit_singleline(&mut self.view.bom_search_query)
+                .labelled_by(bom_label.id);
             if ui.button("Clear Filter").clicked() {
                 self.view.clear_bom_query();
             }
@@ -820,7 +821,7 @@ impl PcbReviewerApp {
         };
 
         egui::Window::new("Review Callout")
-            .id(egui::Id::new(("review_pin_callout", pin.id.0)))
+            .id(egui::Id::unique(("review_pin_callout", pin.id.0)))
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
@@ -856,11 +857,13 @@ impl PcbReviewerApp {
             return;
         }
         egui::Window::new("Command Palette")
-            .id(egui::Id::new("command_palette_window"))
+            .id(egui::Id::unique("command_palette_window"))
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.text_edit_singleline(&mut self.view.command_palette_query);
+                let cmd_label = ui.label("Filter Commands:");
+                ui.text_edit_singleline(&mut self.view.command_palette_query)
+                    .labelled_by(cmd_label.id);
                 let matching = filter_command_specs(&self.view.command_palette_query);
                 ui.label(format!("Matching Commands: {}", matching.len()));
                 if ui.button("Run: Inspect Session").clicked() {
@@ -1051,28 +1054,28 @@ impl PcbReviewerApp {
 }
 
 impl eframe::App for PcbReviewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.poll_async_import(ctx);
-        self.handle_hotkeys(ctx);
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.poll_async_import(ui.ctx());
+        self.handle_hotkeys(ui.ctx());
 
-        egui::TopBottomPanel::top("schematic_cross_probe_bar").show(ctx, |ui| {
+        egui::Panel::top("schematic_cross_probe_bar").show(ui, |ui| {
             self.render_schematic_bar(ui);
         });
 
-        egui::SidePanel::left("layer_panel").show(ctx, |ui| {
+        egui::Panel::left("layer_panel").show(ui, |ui| {
             self.render_side_panel(ui);
         });
 
-        egui::SidePanel::right("session_panel").show(ctx, |ui| {
+        egui::Panel::right("session_panel").show(ui, |ui| {
             self.render_session_panel(ui);
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             self.render_canvas(ui);
         });
 
-        self.render_active_pin_callout(ctx);
-        self.render_command_palette_window(ctx);
+        self.render_active_pin_callout(ui.ctx());
+        self.render_command_palette_window(ui.ctx());
     }
 }
 
@@ -1424,6 +1427,8 @@ mod tests {
         assert!(!swatch_harness.state().visible);
 
         let mut harness = Harness::new_eframe(|_cc| PcbReviewerApp::default());
+        harness.set_size(vec2(1280.0, 900.0));
+        harness.run();
         assert!(harness.query_by_label("Shared Arc Buffers: 4 / 4").is_some());
         assert!(
             harness

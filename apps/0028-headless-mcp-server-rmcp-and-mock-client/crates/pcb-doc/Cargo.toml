@@ -7,7 +7,7 @@ edition = "2024"
 workspace = true
 
 [dependencies]
-emath = { version = "0.33", features = ["serde"] }
+emath = { version = "0.37", features = ["serde"] }
 kicad-sexpr = { path = "../kicad-sexpr" }
 rmcp = { version = "=3.5.0", default-features = false, features = ["server", "client", "macros", "schemars", "transport-async-rw"] }
 schemars = "=1.2.2"

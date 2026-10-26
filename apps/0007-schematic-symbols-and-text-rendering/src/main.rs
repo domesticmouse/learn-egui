@@ -94,7 +94,7 @@ impl SmdPad {
 }
 
 /// Silkscreen/schematic component metadata rendered on the canvas with `Painter::text`
-/// and listed in the `SidePanel` Component Inspector.
+/// and listed in the `Panel` Component Inspector.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ComponentSymbol {
     pub ref_des: String,
@@ -475,12 +475,12 @@ impl PcbReviewerApp {
 }
 
 impl eframe::App for PcbReviewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::SidePanel::left("layer_panel").show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::Panel::left("layer_panel").show(ui, |ui| {
             self.render_side_panel(ui);
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             self.render_canvas(ui);
         });
     }

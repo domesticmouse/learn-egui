@@ -21,11 +21,11 @@ edition = "2024"
 workspace = true
 
 [dependencies]
-eframe = "0.33"
+eframe = "0.37"
 pcb-doc = { path = "crates/pcb-doc" }
 
 [dev-dependencies]
-egui_kittest = { version = "0.33", features = ["eframe"] }
+egui_kittest = { version = "0.37", features = ["eframe"] }
 
 # Optimize dependencies (like egui/eframe) even in debug builds so our
 # 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.

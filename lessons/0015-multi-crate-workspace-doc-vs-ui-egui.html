@@ -60,8 +60,8 @@
 <p>In Lessons <code>0001</code> through <code>0014</code>, our <code>BoardModel</code> (<code>traces</code>, <code>pads</code>, <code>components</code>, <code>review_pins</code>, and DRC clearance math) lived in the same <code>src/main.rs</code> binary crate as <code>ViewState</code> and <code>PcbReviewerApp</code>. That kept early lessons compact, but every single edit to a pure domain function—like <code>pad_edge_gap_mm</code> or <code>ReviewStatus::can_transition_to</code>—forced <code>rustc</code> and <code>cargo-mutants</code> to re-link the entire <code>eframe</code> + <code>egui</code> + windowing stack.<span class="sidenote-number"></span><span class="sidenote"><strong>Strict L0–L7 Layering:</strong> Production <code>egui</code> CAD and graphics workspaces organize crates into a strict directed acyclic graph (DAG): <code>L0</code> foundational math (<code>emath</code>), <code>L1</code> pure document model (<code>pcb-doc</code>), <code>L2</code>–<code>L5</code> file formats and command engines, <code>L6</code> reusable <code>egui</code> widgets/panels, and <code>L7</code> native/Wasm shell binaries.</span></p>
 <p>By refactoring <code>./apps/0015-multi-crate-workspace-doc-vs-ui-egui</code> into a Cargo <code>[workspace]</code> with two crates:</p>
 <ol>
-<li><strong><code>crates/pcb-doc</code> (<code>L1</code> Domain Crate)</strong>: Depends <em>only</em> on <code>emath = &quot;0.33&quot;</code> for <code>Pos2</code>, <code>Vec2</code>, and <code>Rect</code>. It contains zero <code>egui</code>, <code>eframe</code>, <code>winit</code>, or <code>Color32</code> types. For layer colors, <code>PcbLayer::rgb(self) -&gt; (u8, u8, u8)</code> returns a UI-agnostic RGB tuple that <code>pcb-reviewer</code> bridges into <code>egui::Color32</code>.</li>
-<li><strong><code>pcb-reviewer</code> (<code>L6</code>/<code>L7</code> UI Crate)</strong>: Depends on <code>pcb-doc = { path = &quot;crates/pcb-doc&quot; }</code>, <code>eframe = &quot;0.33&quot;</code>, and <code>egui_kittest = &quot;0.33&quot;</code>. It owns <code>ViewState</code>, <code>BoardViewport</code>, <code>LayerSwatch&lt;'a&gt;</code>, and the <code>eframe::App</code> shell.</li>
+<li><strong><code>crates/pcb-doc</code> (<code>L1</code> Domain Crate)</strong>: Depends <em>only</em> on <code>emath = &quot;0.37&quot;</code> for <code>Pos2</code>, <code>Vec2</code>, and <code>Rect</code>. It contains zero <code>egui</code>, <code>eframe</code>, <code>winit</code>, or <code>Color32</code> types. For layer colors, <code>PcbLayer::rgb(self) -&gt; (u8, u8, u8)</code> returns a UI-agnostic RGB tuple that <code>pcb-reviewer</code> bridges into <code>egui::Color32</code>.</li>
+<li><strong><code>pcb-reviewer</code> (<code>L6</code>/<code>L7</code> UI Crate)</strong>: Depends on <code>pcb-doc = { path = &quot;crates/pcb-doc&quot; }</code>, <code>eframe = &quot;0.37&quot;</code>, and <code>egui_kittest = &quot;0.37&quot;</code>. It owns <code>ViewState</code>, <code>BoardViewport</code>, <code>LayerSwatch&lt;'a&gt;</code>, and the <code>eframe::App</code> shell.</li>
 </ol>
 <p>Scaffold the library crate and wire its dependencies with <code>cargo new --lib</code> and <code>cargo add</code>:</p>
 <pre><code class="language-console">cargo new --lib crates/pcb-doc
@@ -79,7 +79,7 @@ edition = "2024"
 workspace = true
 
 [dependencies]
-emath = "0.33"</code></pre>
+emath = "0.37"</code></pre>
 </figure>
 <figure>
   <figcaption>Cargo.toml (Root Workspace &amp; UI Crate)</figcaption>
@@ -106,11 +106,11 @@ edition = "2024"
 workspace = true
 
 [dependencies]
-eframe = "0.33"
+eframe = "0.37"
 pcb-doc = { path = "crates/pcb-doc" }
 
 [dev-dependencies]
-egui_kittest = { version = "0.33", features = ["eframe"] }
+egui_kittest = { version = "0.37", features = ["eframe"] }
 
 # Optimize dependencies (like egui/eframe) even in debug builds so our
 # 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
@@ -121,7 +121,7 @@ opt-level = 2</code></pre>
   <pre class="mermaid">
 flowchart TD
     L7["pcb-reviewer (L6 UI / L7 Shell)&lt;br/&gt;eframe + egui + egui_kittest&lt;br/&gt;ViewState, LayerSwatch, Painter"] --&gt; L1["crates/pcb-doc (L1 Domain)&lt;br/&gt;BoardModel, SmdPad, ReviewNote, DrcViolation"]
-    L1 --&gt; L0["emath 0.33 (L0 Foundational Math)&lt;br/&gt;Pos2, Vec2, Rect, TSTransform"]
+    L1 --&gt; L0["emath 0.37 (L0 Foundational Math)&lt;br/&gt;Pos2, Vec2, Rect, TSTransform"]
     style L7 fill:#14231c,stroke:#3dd68c,color:#e6edf3
     style L1 fill:#141a21,stroke:#3b8eea,color:#e6edf3
     style L0 fill:#1c1c24,stroke:#f0e68c,color:#e6edf3
@@ -177,15 +177,15 @@ impl PcbLayer {
       <h4>1. <code>crates/pcb-doc/Cargo.toml</code></h4>
       <label class="egui-checkbox" style="margin-bottom:0.45rem;">
         <input type="checkbox" checked disabled>
-        <code>emath = "0.33"</code> (L0 math — allowed)
+        <code>emath = "0.37"</code> (L0 math — allowed)
       </label>
       <label class="egui-checkbox" style="margin-bottom:0.45rem;">
         <input type="checkbox" data-dep="egui">
-        Inject <code>egui = "0.33"</code> (L6 UI — forbidden!)
+        Inject <code>egui = "0.37"</code> (L6 UI — forbidden!)
       </label>
       <label class="egui-checkbox" style="margin-bottom:0.45rem;">
         <input type="checkbox" data-dep="eframe">
-        Inject <code>eframe = "0.33"</code> (L7 Shell — forbidden!)
+        Inject <code>eframe = "0.37"</code> (L7 Shell — forbidden!)
       </label>
       <label class="egui-checkbox">
         <input type="checkbox" data-dep="rfd">

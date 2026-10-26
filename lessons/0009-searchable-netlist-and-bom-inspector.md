@@ -63,12 +63,13 @@ impl BoardModel {
 
 Now, even in an immediate-mode GUI, laying out 10,000 offscreen table rows on every 60 Hz frame is a great way to warm up your laptop fan for no reason.
 
-Turns out, [`ScrollArea::show_rows`](https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows) makes virtualised scrolling almost ridiculously simple: it calculates the exact `row_range: Range<usize>` currently visible inside the scroll viewport based on `row_height_sans_spacing` and calls your closure for _only those visible rows_:
+Turns out, [`ScrollArea::show_rows`](https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows) makes virtualised scrolling almost ridiculously simple: it calculates the exact `row_range: Range<usize>` currently visible inside the scroll viewport based on `row_height_sans_spacing` and calls your closure for _only those visible rows_:{{sidenote:Notice how we chain `.labelled_by(bom_label.id)` onto `ui.text_edit_singleline(...)`. In `egui_kittest 0.37`, `Harness::run()` automatically audits AccessKit nodes and panics if any interactive `TextInput` lacks an accessible name!}}
 
 ```rust
 ui.horizontal(|ui| {
-    ui.label("Filter BOM:");
-    ui.text_edit_singleline(&mut self.view.bom_search_query);
+    let bom_label = ui.label("Filter BOM:");
+    ui.text_edit_singleline(&mut self.view.bom_search_query)
+        .labelled_by(bom_label.id);
     if ui.button("Clear Filter").clicked() {
         self.view.clear_bom_query();
     }
@@ -108,7 +109,9 @@ pub fn filter_components(&self, query: &str) -> Vec<ComponentSymbol> {
 }
 
 // Inside render_side_panel():
-ui.{{blank:text_edit_singleline|Call the `Ui` convenience method for a single-line text box (`text_edit_singleline`).|/* 2: singleline edit */|185px}}(&mut self.view.bom_search_query);
+let bom_label = ui.label("Filter BOM:");
+ui.{{blank:text_edit_singleline|Call the `Ui` convenience method for a single-line text box (`text_edit_singleline`).|/* 2: singleline edit */|185px}}(&mut self.view.bom_search_query)
+    .labelled_by(bom_label.id);
 
 let matching = self.board.filter_components(&self.view.bom_search_query);
 egui::ScrollArea::vertical()

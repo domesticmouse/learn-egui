@@ -40,7 +40,7 @@ Start with [Lesson 0001](./lessons/0001-project-setup-and-eframe-boot.html) to s
 
 ### Foundation: Project Setup & Immediate-Mode Core (`0001`–`0002`) {#foundation}
 
-Every hardware review tool starts with a reliable application shell and a clear understanding of how immediate-mode GUIs manage state. In this foundational module, we configure a high-performance Cargo project with dev-profile optimizations, boot a native desktop window with `eframe::run_native`, and explore Emil Ernerfeldt’s single-frame immediate-mode loop (`eframe::App::update`) by building an interactive PCB layer visibility inspector backed by mutation testing.
+Every hardware review tool starts with a reliable application shell and a clear understanding of how immediate-mode GUIs manage state. In this foundational module, we configure a high-performance Cargo project with dev-profile optimizations, boot a native desktop window with `eframe::run_native`, and explore Emil Ernerfeldt’s single-frame immediate-mode loop (`eframe::App::ui`) by building an interactive PCB layer visibility inspector backed by mutation testing.
 
 {{widget:lesson-cards act="foundation"}}
 
@@ -93,7 +93,7 @@ Turns out, having a one-page cheat sheet next to your editor saves a lot of tab-
 | Reference Sheet | What It Covers |
 | --- | --- |
 | [**Glossary of Rust & `egui` Terms**](./reference/glossary.html) | Canonical definitions of Immediate-Mode vs. Retained-Mode GUI, `&mut` borrows, closures, `TSTransform`, `Sense`, `Arc::make_mut`, and PCB domain analogies. |
-| [**Immediate-Mode GUI Cheat Sheet**](./reference/immediate-mode-cheatsheet.html) | The 5-step single-frame mental model, panel layout ordering rules (`SidePanel` before `CentralPanel`), and custom 2D CAD painter idioms. |
+| [**Immediate-Mode GUI Cheat Sheet**](./reference/immediate-mode-cheatsheet.html) | The 5-step single-frame mental model, panel layout ordering rules (`Panel` before `CentralPanel`), and custom 2D CAD painter idioms. |
 | [**Testing & Mutation Coverage Cheat Sheet**](./reference/testing-and-mutation-cheatsheet.html) | Why line coverage lies, how `cargo-mutants` tests your tests, fast APFS copy-on-write workflows, and the evolutionary verification ladder (`proptest`, workspace gates, and `egui_kittest`). |
 
 ## Running the Companion Rust Apps Locally

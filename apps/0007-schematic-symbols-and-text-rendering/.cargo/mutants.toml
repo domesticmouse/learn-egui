@@ -2,7 +2,7 @@
 # Reuse the target directory across scratch builds so mutation runs finish quickly.
 copy_target = true
 
-# Notice that `<impl eframe::App for PcbReviewerApp>::update` and `render_side_panel`
+# Notice that `<impl eframe::App for PcbReviewerApp>::ui` and `render_side_panel`
 # are NO LONGER excluded! Only the OS window launcher and raw Painter canvas remain excluded.
 exclude_re = [
     "replace main",

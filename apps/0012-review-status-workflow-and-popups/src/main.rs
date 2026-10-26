@@ -768,8 +768,9 @@ impl PcbReviewerApp {
         ui.separator();
         ui.heading("BOM & Netlist Inspector");
         ui.horizontal(|ui| {
-            ui.label("Filter BOM:");
-            ui.text_edit_singleline(&mut self.view.bom_search_query);
+            let bom_label = ui.label("Filter BOM:");
+            ui.text_edit_singleline(&mut self.view.bom_search_query)
+                .labelled_by(bom_label.id);
             if ui.button("Clear Filter").clicked() {
                 self.view.clear_bom_query();
             }
@@ -838,7 +839,7 @@ impl PcbReviewerApp {
         };
 
         egui::Window::new("Review Callout")
-            .id(egui::Id::new(("review_pin_callout", pin.id.0)))
+            .id(egui::Id::unique(("review_pin_callout", pin.id.0)))
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
@@ -1030,22 +1031,22 @@ impl PcbReviewerApp {
 }
 
 impl eframe::App for PcbReviewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.handle_hotkeys(ctx);
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.handle_hotkeys(ui.ctx());
 
-        egui::TopBottomPanel::top("schematic_cross_probe_bar").show(ctx, |ui| {
+        egui::Panel::top("schematic_cross_probe_bar").show(ui, |ui| {
             self.render_schematic_bar(ui);
         });
 
-        egui::SidePanel::left("layer_panel").show(ctx, |ui| {
+        egui::Panel::left("layer_panel").show(ui, |ui| {
             self.render_side_panel(ui);
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             self.render_canvas(ui);
         });
 
-        self.render_active_pin_callout(ctx);
+        self.render_active_pin_callout(ui.ctx());
     }
 }
 

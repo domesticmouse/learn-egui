@@ -9,4 +9,4 @@ Implemented both the runnable Rust/egui applications (`apps/0002-*` through `app
 - **`0005-hit-testing-and-net-cross-probing`**: 11 unit tests pass; `cargo mutants --in-place` catches `25 / 25 viable mutants (10 unviable, 0 missed)`.
 
 ## Implications
-- Ready to advance to Act II (`0007`–`0010`), where Lesson `0007` introduces `egui_kittest::Harness` to test rendered UI widgets headlessly and remove `<impl eframe::App for PcbReviewerApp>::update` from `.cargo/mutants.toml` exclusions.
+- Ready to advance to Act II (`0007`–`0010`), where Lesson `0007` introduces `egui_kittest::Harness` to test rendered UI widgets headlessly and remove `<impl eframe::App for PcbReviewerApp>::ui` from `.cargo/mutants.toml` exclusions.

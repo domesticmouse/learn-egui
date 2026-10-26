@@ -57,20 +57,20 @@
 <p class="subtitle">Anchoring engineering review comments to <code>(x, y)</code> board coordinates with <code>HashMap&lt;PinId, ReviewNote&gt;</code>, preventing silent overwrites via <code>HashMap::entry</code>, and rendering floating callouts with <code>egui::Window</code> and <code>egui::Id</code></p>
 
 <p>A board viewer lets you inspect traces and measure pad pitches on your own. A <strong>Design Review System</strong> lets your team drop numbered callout pins directly onto a questionable thermal relief or connector footprint—and jump straight to each pin's physical <code>(x, y)</code> coordinate during a schematic/layout sign-off meeting.</p>
-<p>In <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html">Lesson 0010</a>, we finished <strong>Act II</strong> with CAD keyboard shortcuts and a point-to-point measurement ruler. Now, we kick off <strong>Act III (Design Review Workflows)</strong> by storing anchored engineering review notes in a <code>HashMap&lt;PinId, ReviewNote&gt;</code>, sorting them deterministically for immediate-mode rendering, and opening an interactive floating callout overlay (<code>egui::Window</code>) with a collision-free widget identity (<code>egui::Id::new</code>).</p>
+<p>In <a href="./0010-keyboard-shortcuts-and-point-to-point-ruler.html">Lesson 0010</a>, we finished <strong>Act II</strong> with CAD keyboard shortcuts and a point-to-point measurement ruler. Now, we kick off <strong>Act III (Design Review Workflows)</strong> by storing anchored engineering review notes in a <code>HashMap&lt;PinId, ReviewNote&gt;</code>, sorting them deterministically for immediate-mode rendering, and opening an interactive floating callout overlay (<code>egui::Window</code>) with a collision-free widget identity (<code>egui::Id::unique</code>).</p>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 flowchart LR
-    KeyP["Press 'P' (PlacePin)&lt;br/&gt;or Click Pin in SidePanel"] --&gt; Store["BoardModel::review_pins&lt;br/&gt;HashMap&amp;lt;PinId, ReviewNote&amp;gt;"]
+    KeyP["Press 'P' (PlacePin)&lt;br/&gt;or Click Pin in Panel::left"] --&gt; Store["BoardModel::review_pins&lt;br/&gt;HashMap&amp;lt;PinId, ReviewNote&amp;gt;"]
     Store --&gt;|"insert_review_pin(id, ...)"| Entry["match review_pins.entry(id)&lt;br/&gt;Vacant -&gt; insert | Occupied -&gt; false"]
     Store --&gt;|"sorted_review_pins()"| Sort["Vec&amp;lt;ReviewNote&amp;gt; sorted by PinId&lt;br/&gt;(Deterministic UI order)"]
-    Sort --&gt;|"select_review_pin(id)"| Win["egui::Window::new('Review Callout')&lt;br/&gt;.id(Id::new(('review_pin_callout', pin.id.0)))"]
+    Sort --&gt;|"select_review_pin(id)"| Win["egui::Window::new('Review Callout')&lt;br/&gt;.id(Id::unique(('review_pin_callout', pin.id.0)))"]
   </pre>
 </figure>
 <p><em>Figure 11.1: <code>HashMap&lt;PinId, ReviewNote&gt;</code> provides $O(1)$ lookup by <code>PinId</code>, <code>HashMap::entry</code> prevents overwriting existing notes, <code>sorted_review_pins()</code> guarantees deterministic frame layout order, and <code>egui::Window</code> renders the floating callout.</em></p>
 <h2 id="1-just-in-time-rust-hashmap-lt-pinid-reviewnote-gt-hash-eq-amp-the-entry-api">1. Just-in-Time Rust: <code>HashMap&lt;PinId, ReviewNote&gt;</code>, <code>Hash</code> + <code>Eq</code> &amp; the <code>Entry</code> API</h2>
 <p>Why store review notes in <a href="https://doc.rust-lang.org/std/collections/struct.HashMap.html"><code>std::collections::HashMap&lt;PinId, ReviewNote&gt;</code></a> instead of a plain <code>Vec&lt;ReviewNote&gt;</code>? When <code>ViewState</code> holds <code>selected_pin: Option&lt;PinId&gt;</code>, we want direct lookup by <code>PinId</code> even if pins are later deleted, synced out of order, or imported from a database (<a href="https://doc.rust-lang.org/book/ch08-03-hash-maps.html">Rust Book §8.3</a>).</p>
-<p>To use our tuple struct <code>PinId(pub u32)</code> as a <code>HashMap</code> key, it derives <code>PartialEq</code>, <code>Eq</code>, and <code>Hash</code> (plus <code>PartialOrd</code> and <code>Ord</code> so we can sort pins by ID). And instead of calling <code>self.review_pins.insert(id, note)</code>—which would silently overwrite an existing note if a duplicate <code>PinId</code> arrived—we use <a href="https://doc.rust-lang.org/std/collections/struct.HashMap.html#method.entry"><code>HashMap::entry</code></a>:<span class="sidenote-number"></span><span class="sidenote">Why does <code>sorted_review_pins()</code> sort the <code>HashMap</code> values before we render buttons in <code>SidePanel</code>? Rust's <code>HashMap</code> uses a randomly seeded SipHash function per process to prevent hash-flooding attacks, so iterating over <code>review_pins.values()</code> directly would shuffle your UI buttons on every launch!</span></p>
+<p>To use our tuple struct <code>PinId(pub u32)</code> as a <code>HashMap</code> key, it derives <code>PartialEq</code>, <code>Eq</code>, and <code>Hash</code> (plus <code>PartialOrd</code> and <code>Ord</code> so we can sort pins by ID). And instead of calling <code>self.review_pins.insert(id, note)</code>—which would silently overwrite an existing note if a duplicate <code>PinId</code> arrived—we use <a href="https://doc.rust-lang.org/std/collections/struct.HashMap.html#method.entry"><code>HashMap::entry</code></a>:<span class="sidenote-number"></span><span class="sidenote">Why does <code>sorted_review_pins()</code> sort the <code>HashMap</code> values before we render buttons in <code>Panel::left</code>? Rust's <code>HashMap</code> uses a randomly seeded SipHash function per process to prevent hash-flooding attacks, so iterating over <code>review_pins.values()</code> directly would shuffle your UI buttons on every launch!</span></p>
 <pre><code class="language-rust">use std::collections::{HashMap, hash_map::Entry};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -112,9 +112,9 @@ impl BoardModel {
         list
     }
 }</code></pre>
-<h2 id="2-floating-callout-overlays-with-egui-window-and-egui-id-new">2. Floating Callout Overlays with <code>egui::Window</code> and <code>egui::Id::new</code></h2>
-<p>When the engineer clicks a review pin in the <code>SidePanel</code> (or drops a new pin on the canvas in <code>PlacePin</code> mode via hotkey <code>P</code>), <code>self.view.select_review_pin(&amp;self.board, pin.id)</code> sets <code>self.view.selected_pin = Some(pin.id)</code> and centres the PCB viewport on <code>pin.position_mm</code>.</p>
-<p>To display the floating callout overlay on top of the canvas, we use <a href="https://docs.rs/egui/latest/egui/containers/struct.Window.html"><code>egui::Window</code></a> keyed by a deterministic <a href="https://docs.rs/egui/latest/egui/struct.Id.html#method.new"><code>egui::Id::new((&quot;review_pin_callout&quot;, pin.id.0))</code></a>:</p>
+<h2 id="2-floating-callout-overlays-with-egui-window-and-egui-id-unique">2. Floating Callout Overlays with <code>egui::Window</code> and <code>egui::Id::unique</code></h2>
+<p>When the engineer clicks a review pin in <code>Panel::left</code> (or drops a new pin on the canvas in <code>PlacePin</code> mode via hotkey <code>P</code>), <code>self.view.select_review_pin(&amp;self.board, pin.id)</code> sets <code>self.view.selected_pin = Some(pin.id)</code> and centres the PCB viewport on <code>pin.position_mm</code>.</p>
+<p>To display the floating callout overlay on top of the canvas, we use <a href="https://docs.rs/egui/latest/egui/containers/struct.Window.html"><code>egui::Window</code></a> keyed by a deterministic <a href="https://docs.rs/egui/latest/egui/struct.Id.html#method.unique"><code>egui::Id::unique((&quot;review_pin_callout&quot;, pin.id.0))</code></a>:</p>
 <pre><code class="language-rust">pub fn render_active_pin_callout(&amp;mut self, ctx: &amp;egui::Context) {
     let Some(pin_id) = self.view.selected_pin else {
         return;
@@ -124,7 +124,7 @@ impl BoardModel {
     };
 
     egui::Window::new("Review Callout")
-        .id(egui::Id::new(("review_pin_callout", pin.id.0)))
+        .id(egui::Id::unique(("review_pin_callout", pin.id.0)))
         .collapsible(false)
         .resizable(false)
         .show(ctx, |ui| {
@@ -148,7 +148,7 @@ impl BoardModel {
 
   <div class="sim-grid">
     <div class="sim-box">
-      <h4>1. Sorted Review Pins (<code>SidePanel</code>)</h4>
+      <h4>1. Sorted Review Pins (<code>Panel::left</code>)</h4>
       <div data-role="pin-list" style="display:flex; flex-direction:column; margin-bottom:0.6rem;"></div>
       <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
         <button type="button" class="egui-btn" data-action="add-pin-r12">+ Insert Pin #3 at R12</button>
@@ -179,7 +179,7 @@ impl BoardModel {
 <section class="full-width-panel">
   <div class="panel-header">
     <span class="panel-title">Interactive Lab 2: Guard <code>HashMap</code> Pin Insertion &amp; Key the Callout Window</span>
-    <span class="panel-badge">HashMap::entry • sort_by_key • egui::Id::new</span>
+    <span class="panel-badge">HashMap::entry • sort_by_key • egui::Id::unique</span>
   </div>
   <p>Fill in the three blanks below to (1) inspect the <code>HashMap</code> slot with <code>.entry(id)</code>, (2) sort the collected <code>Vec&lt;ReviewNote&gt;</code> deterministically by <code>p.id</code>, and (3) construct a unique <code>egui::Id</code> tuple for the floating <code>egui::Window</code>:</p>
 <pre class="keep-markup"><code class="language-rust">impl BoardModel {
@@ -213,7 +213,7 @@ impl BoardModel {
 
 // Inside render_active_pin_callout():
 egui::Window::new("Review Callout")
-    .id(egui::<input id="ex-0011-blank-3" class="code-challenge-input" style="width:105px;" placeholder="/* 3: Id::new */" autocomplete="off">(("review_pin_callout", pin.id.0)))</code></pre>
+    .id(egui::<input id="ex-0011-blank-3" class="code-challenge-input" style="width:115px;" placeholder="/* 3: Id::unique */" autocomplete="off">(("review_pin_callout", pin.id.0)))</code></pre>
   <div style="display: flex; gap: 0.75rem; align-items: center;">
     <button type="button" class="btn-primary" id="btn-check-ex-0011">Check Rust Code</button>
     <button type="button" class="btn-secondary" id="btn-hint-ex-0011">Show Hint</button>
@@ -325,13 +325,13 @@ fn review_pin_entry_api_prevents_overwrites_and_sorts_deterministically() {
         },
         {
           inputId: "ex-0011-blank-3",
-          accepted: ["Id::new"],
+          accepted: ["Id::unique", "Id::new"],
           getErrorHint: (val) =>
-            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Call <code>Id::new</code> to hash the <code>(&quot;review_pin_callout&quot;, pin.id.0)</code> tuple into a deterministic widget ID.",
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Call <code>Id::unique</code> to hash the <code>(&quot;review_pin_callout&quot;, pin.id.0)</code> tuple into a deterministic widget ID.",
         }
       ],
-      hintMessage: "<strong>Hints:</strong> (1) <code>entry(id)</code>. (2) <code>sort_by_key</code>. (3) <code>Id::new</code>.",
-      successMessage: "<strong>Spot on!</strong> <code>entry(id)</code> prevents silent overwrites, <code>sort_by_key(|p| p.id)</code> keeps UI rendering deterministic, and <code>egui::Id::new(...)</code> gives each pin's callout window a stable identity.",
+      hintMessage: "<strong>Hints:</strong> (1) <code>entry(id)</code>. (2) <code>sort_by_key</code>. (3) <code>Id::unique</code>.",
+      successMessage: "<strong>Spot on!</strong> <code>entry(id)</code> prevents silent overwrites, <code>sort_by_key(|p| p.id)</code> keeps UI rendering deterministic, and <code>egui::Id::unique(...)</code> gives each pin's callout window a stable identity.",
     });
 
     initQuiz("quiz-0011", [
@@ -360,7 +360,7 @@ fn review_pin_entry_api_prevents_overwrites_and_sorts_deterministically() {
             "wrongHint": "Consider what happens to `@alice`'s review note if `PinId(1)` is inserted a second time."
       },
       {
-            "question": "Why does `sorted_review_pins()` sort collected `ReviewNote` items by `PinId` before rendering buttons in the `SidePanel`?",
+            "question": "Why does `sorted_review_pins()` sort collected `ReviewNote` items by `PinId` before rendering buttons in `Panel::left`?",
             "options": [
                   "Immediate panels forbid iterating over vectors",
                   "Floating windows require descending coordinate order",

@@ -54,14 +54,14 @@
     <article class="tufte-article">
 <div class="prose-col">
 <h1>Lesson 0007: Schematic Symbols, Text Rendering &amp; Headless UI Testing (<code>egui_kittest</code>)</h1>
-<p class="subtitle">Drawing IC reference designators (<code>U1</code>, <code>R12</code>, <code>J1</code>) with <code>Painter::text</code>, mastering <code>String</code> vs. <code>&amp;str</code>, and un-skipping <code>eframe::App::update</code> with <code>egui_kittest::Harness</code></p>
+<p class="subtitle">Drawing IC reference designators (<code>U1</code>, <code>R12</code>, <code>J1</code>) with <code>Painter::text</code>, mastering <code>String</code> vs. <code>&amp;str</code>, and un-skipping <code>eframe::App::ui</code> with <code>egui_kittest::Harness</code></p>
 
 <p>Welcome to <strong>Act II</strong>! In <a href="./0006-hit-testing-and-net-cross-probing.html">Lesson 0006</a>, we built interactive pad hit-testing and net highlighting. But, staring at anonymous red and blue rectangles gets old fast—when you are reviewing a real board or schematic, you navigate by <strong>reference designators</strong> (<code>U1</code>, <code>R12</code>, <code>J1</code>), component values (<code>LDO_3V3</code>, <code>10k</code>), and human-readable net names (<code>VCC_3V3</code>, <code>SPI_CLK</code>).</p>
-<p>Or, moreover, Lesson 0007 marks a huge milestone in our testing story. Remember how we excluded <code>&lt;impl eframe::App for PcbReviewerApp&gt;::update</code> in <code>.cargo/mutants.toml</code> back in Lesson 0001? Today, we add <a href="https://docs.rs/egui_kittest/latest/egui_kittest/"><code>egui_kittest</code></a> to <code>[dev-dependencies]</code>, boot our <code>PcbReviewerApp</code> headlessly inside <code>cargo test</code>, and <strong>take <code>eframe::App::update</code> off the exclusion list</strong> so <code>cargo-mutants</code> actively guards our rendered UI panels.</p>
+<p>Or, moreover, Lesson 0007 marks a huge milestone in our testing story. Remember how we excluded <code>&lt;impl eframe::App for PcbReviewerApp&gt;::ui</code> in <code>.cargo/mutants.toml</code> back in Lesson 0001? Today, we add <a href="https://docs.rs/egui_kittest/latest/egui_kittest/"><code>egui_kittest</code></a> to <code>[dev-dependencies]</code>, boot our <code>PcbReviewerApp</code> headlessly inside <code>cargo test</code>, and <strong>take <code>eframe::App::ui</code> off the exclusion list</strong> so <code>cargo-mutants</code> actively guards our rendered UI panels.</p>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 flowchart LR
-    Comp["ComponentSymbol&lt;br/&gt;ref_des: String ('U1')&lt;br/&gt;value: String ('LDO_3V3')"] --&gt;|"format!('{}: {} ({})')"| Panel["SidePanel::left&lt;br/&gt;ui.label(comp.inspector_label())"]
+    Comp["ComponentSymbol&lt;br/&gt;ref_des: String ('U1')&lt;br/&gt;value: String ('LDO_3V3')"] --&gt;|"format!('{}: {} ({})')"| Panel["Panel::left&lt;br/&gt;ui.label(comp.inspector_label())"]
     Comp --&gt;|"Painter::text(&amp;comp.ref_des)"| Canvas["CentralPanel Canvas&lt;br/&gt;Align2::CENTER_CENTER + FontId::monospace"]
     Panel --&gt;|"AccessKit Node Tree"| Kittest["egui_kittest::Harness&lt;br/&gt;harness.get_by_label('U1: LDO_3V3 (SOT-23)')"]
   </pre>
@@ -83,7 +83,7 @@ pub struct ComponentSymbol {
 }
 
 impl ComponentSymbol {
-    /// Formats a human-readable summary for the SidePanel Component Inspector.
+    /// Formats a human-readable summary for the left Panel Component Inspector.
     pub fn inspector_label(&amp;self) -&gt; String {
         format!("{}: {} ({})", self.ref_des, self.value, self.package_name)
     }
@@ -109,10 +109,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-eframe = "0.33"
+eframe = "0.37"
 
 [dev-dependencies]
-egui_kittest = { version = "0.33", features = ["eframe"] }
+egui_kittest = { version = "0.37", features = ["eframe"] }
 
 # Optimise dependencies (like egui/eframe) even in debug builds so our
 # 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
@@ -125,7 +125,7 @@ opt-level = 2</code></pre>
 fn headless_ui_renders_component_labels_and_toggles_layers() {
     let mut harness = Harness::new_eframe(|_cc| PcbReviewerApp::default());
 
-    // 1. Verify silkscreen component labels are rendered in the SidePanel
+    // 1. Verify silkscreen component labels are rendered in the left Panel
     assert!(harness.query_by_label("U1: LDO_3V3 (SOT-23)").is_some());
     assert!(harness.query_by_label("R12: 10k (0603)").is_some());
 
@@ -144,7 +144,7 @@ fn headless_ui_renders_component_labels_and_toggles_layers() {
     <span class="panel-badge">Align2 • FontId • Harness::new_eframe</span>
   </div>
   <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-    Adjust the <code>Align2</code> anchor mode, font size, and <code>show_silkscreen</code> toggle below. Observe how <code>Painter::text</code> repositions the reference designators on the canvas while <code>egui_kittest::Harness</code> inspects the live accessibility tree in the <code>SidePanel</code>.
+    Adjust the <code>Align2</code> anchor mode, font size, and <code>show_silkscreen</code> toggle below. Observe how <code>Painter::text</code> repositions the reference designators on the canvas while <code>egui_kittest::Harness</code> inspects the live accessibility tree in the <code>Panel::left</code>.
   </p>
 
   <div class="sim-grid">
@@ -234,14 +234,14 @@ harness.run();</code></pre>
 
 <section class="full-width-panel">
   <div class="panel-header">
-    <span class="panel-title">Interactive Lab 3: Un-Skipping <code>eframe::App::update</code> with <code>egui_kittest</code></span>
+    <span class="panel-title">Interactive Lab 3: Un-Skipping <code>eframe::App::ui</code> with <code>egui_kittest</code></span>
     <span class="panel-badge">cargo test + cargo mutants</span>
   </div>
-  <p>Look at <code>apps/0007-schematic-symbols-and-text-rendering/.cargo/mutants.toml</code>: we have removed <code>&quot;&lt;impl eframe::App for PcbReviewerApp&gt;::update&quot;</code> from <code>exclude_re</code>! Because our <code>egui_kittest::Harness</code> test queries the rendered <code>SidePanel</code> labels and clicks its buttons, <code>cargo mutants</code> now mutates <code>update()</code> and <code>render_side_panel()</code>—and catches every single mutant.</p>
+  <p>Look at <code>apps/0007-schematic-symbols-and-text-rendering/.cargo/mutants.toml</code>: we have removed <code>&quot;&lt;impl eframe::App for PcbReviewerApp&gt;::ui&quot;</code> from <code>exclude_re</code>! Because our <code>egui_kittest::Harness</code> test queries the rendered <code>Panel::left</code> labels and clicks its buttons, <code>cargo mutants</code> now mutates <code>ui()</code> and <code>render_side_panel()</code>—and catches every single mutant.</p>
 <pre><code class="language-toml"># apps/0007-schematic-symbols-and-text-rendering/.cargo/mutants.toml
 copy_target = true
 
-# Notice that `&lt;impl eframe::App for PcbReviewerApp&gt;::update` and `render_side_panel`
+# Notice that `&lt;impl eframe::App for PcbReviewerApp&gt;::ui` and `render_side_panel`
 # are NO LONGER excluded! Only the OS window launcher and raw Painter canvas remain excluded.
 exclude_re = [
     "replace main",
@@ -275,7 +275,7 @@ exclude_re = [
         <li>
           <input type="checkbox" id="verify-2">
           <label for="verify-2">
-            <strong>2. Run <code>cargo mutants --in-place</code>:</strong> Verify that all 35 viable mutants (including <code>update</code>, <code>render_side_panel</code>, <code>inspector_label</code>, and <code>NetId::signal_name</code>) are <strong>Caught</strong> with <strong>0 Missed</strong>.
+            <strong>2. Run <code>cargo mutants --in-place</code>:</strong> Verify that all 35 viable mutants (including <code>ui</code>, <code>render_side_panel</code>, <code>inspector_label</code>, and <code>NetId::signal_name</code>) are <strong>Caught</strong> with <strong>0 Missed</strong>.
           </label>
         </li>
       </ul>
@@ -362,7 +362,7 @@ exclude_re = [
             "wrongHint": "Think about which point of the text's bounding rectangle is placed at `anchor_px`."
       },
       {
-            "question": "How does `egui_kittest::Harness` let us remove `eframe::App::update` from `.cargo/mutants.toml`?",
+            "question": "How does `egui_kittest::Harness` let us remove `eframe::App::ui` from `.cargo/mutants.toml`?",
             "options": [
                   "It builds GPU shaders without using rustc",
                   "It skips widget layout during cargo tests",
@@ -370,8 +370,8 @@ exclude_re = [
                   "It drives frames and queries widget nodes"
             ],
             "correctIndex": 3,
-            "explanation": "`egui_kittest::Harness` runs `eframe::App::update` headlessly and exposes the AccessKit widget tree so tests can query labels and simulate clicks.",
-            "wrongHint": "Consider how `Harness::new_eframe` executes `update()` and inspects rendered widgets during `cargo test`."
+            "explanation": "`egui_kittest::Harness` runs `eframe::App::ui` headlessly and exposes the AccessKit widget tree so tests can query labels and simulate clicks.",
+            "wrongHint": "Consider how `Harness::new_eframe` executes `ui()` and inspects rendered widgets during `cargo test`."
       }
 ]);
 

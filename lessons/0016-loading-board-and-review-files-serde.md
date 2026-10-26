@@ -3,13 +3,13 @@ nav_id: "0016"
 page_title: "Lesson 0016: Loading & Saving Board & Review Session Files (serde & thiserror) — Learn Rust & egui"
 act_badge: "Act IV • Engine-First Architecture & Persistence"
 title: "0016. Loading & Saving Board & Review Session Files (`serde`, `serde_json` & `thiserror`)"
-subtitle: "Serializing `BoardModel` and `ReviewNote` pins into a schema-versioned `ReviewSessionEnvelope` JSON payload, validating untrusted inputs with exhaustive destructuring, and surfacing `SessionIoError` banners in `egui::SidePanel::right` without panicking."
+subtitle: "Serializing `BoardModel` and `ReviewNote` pins into a schema-versioned `ReviewSessionEnvelope` JSON payload, validating untrusted inputs with exhaustive destructuring, and surfacing `SessionIoError` banners in `egui::Panel::right` without panicking."
 card:
   num: "Lesson 0016"
   mutants: "155 / 155 Caught"
   title: "Loading & Saving Board & Review Session Files (`serde` & `thiserror`)"
-  summary: "Serialize and deserialize PCB geometry and review pins with `serde_json` (`emath` `serde` feature), enforce `CURRENT_SCHEMA_VERSION = 1` with `thiserror` (`SessionIoError`), and display dismissible I/O error banners in `SidePanel::right`."
-  egui_skill: "`SidePanel::right` Session Persistence & Error Banner UI"
+  summary: "Serialize and deserialize PCB geometry and review pins with `serde_json` (`emath` `serde` feature), enforce `CURRENT_SCHEMA_VERSION = 1` with `thiserror` (`SessionIoError`), and display dismissible I/O error banners in `Panel::right`."
+  egui_skill: "`Panel::right` Session Persistence & Error Banner UI"
   rust_concept: "`serde` (`Serialize`/`Deserialize`), `thiserror::Error` & Exhaustive Destructuring"
   app_dir: "apps/0016-loading-board-and-review-files-serde"
 ---
@@ -20,7 +20,7 @@ A hardware design review tool is only useful if engineers can save their review 
 
 Because `pcb-doc` (`L1`) owns all domain types, adding persistence requires zero changes to our `egui` rendering code:
 
-1. **Enable `emath`'s `"serde"` feature**: Running `cargo add --package pcb-doc emath --features serde` updates `crates/pcb-doc/Cargo.toml` so `emath = { version = "0.33", features = ["serde"] }` enables `Serialize` and `Deserialize` on `Pos2`, `Vec2`, and `Rect`.
+1. **Enable `emath`'s `"serde"` feature**: Running `cargo add --package pcb-doc emath --features serde` updates `crates/pcb-doc/Cargo.toml` so `emath = { version = "0.37", features = ["serde"] }` enables `Serialize` and `Deserialize` on `Pos2`, `Vec2`, and `Rect`.
 2. **Define a typed `SessionIoError` with `thiserror`**: Instead of returning opaque strings or panicking on corrupt files, `SessionIoError` models three explicit failure modes: `EmptyBoardId`, `UnsupportedSchemaVersion { found, expected }`, and `MalformedJson(String)`.
 3. **Destructure `ReviewSessionEnvelope` exhaustively**: In `BoardModel::from_session_json`, we unpack `let ReviewSessionEnvelope { schema_version, board_id, board } = ...` *without* `..` so adding any new envelope field in the future triggers a compiler error until validation is wired.
 
@@ -44,7 +44,7 @@ edition = "2024"
 workspace = true
 
 [dependencies]
-emath = { version = "0.33", features = ["serde"] }
+emath = { version = "0.37", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
@@ -63,9 +63,9 @@ flowchart LR
     style EmptyId fill:#2a1418,stroke:#ff5555,color:#e6edf3
 ```
 
-## Non-Destructive Error Recovery in `egui::SidePanel::right`
+## Non-Destructive Error Recovery in `egui::Panel::right`
 
-When a user attempts to load a corrupt or incompatible JSON file in `PcbReviewerApp::import_session_from_json(&mut self, raw: &str)`, the UI must **never** overwrite `self.board` with partial data or crash.{{sidenote: **Why `SidePanel::right("session_panel")`?** Placing session persistence, snapshot controls, and error banners in a dedicated right-hand inspector panel keeps the left layer/BOM panel (`SidePanel::left`) and top cross-probe bar (`TopBottomPanel::top`) within their vertical and horizontal layout budgets inside `800x600` viewports.}} On `Err(err)`, `import_session_from_json` leaves `self.board` untouched, stores `Some(err.to_string())` in `self.view.last_io_error`, and renders a dismissible `"I/O Error: ..."` banner inside `SidePanel::right("session_panel")`.
+When a user attempts to load a corrupt or incompatible JSON file in `PcbReviewerApp::import_session_from_json(&mut self, raw: &str)`, the UI must **never** overwrite `self.board` with partial data or crash.{{sidenote: **Why `Panel::right("session_panel")`?** Placing session persistence, snapshot controls, and error banners in a dedicated right-hand inspector panel keeps the left layer/BOM panel (`Panel::left`) and top cross-probe bar (`Panel::top`) within their vertical and horizontal layout budgets.}} On `Err(err)`, `import_session_from_json` leaves `self.board` untouched, stores `Some(err.to_string())` in `self.view.last_io_error`, and renders a dismissible `"I/O Error: ..."` banner inside `Panel::right("session_panel")`.
 
 ```rust caption="Typed SessionIoError and exhaustive envelope validation in crates/pcb-doc/src/lib.rs"
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
@@ -168,7 +168,7 @@ Q: How do we enable `serde::Serialize` and `serde::Deserialize` on `emath::Pos2`
 - [x] By enabling the `serde` Cargo feature on the `emath` dependency
 - [ ] By converting every millimetre coordinate into a formatted string first
 - [ ] By linking the `egui_glow` desktop shader compiler into `crates/pcb-doc` directly
-why: `emath = { version = "0.33", features = ["serde"] }` provides upstream `Serialize` and `Deserialize` implementations for `Pos2`, `Vec2`, `Rect`, and `TSTransform`.
+why: `emath = { version = "0.37", features = ["serde"] }` provides upstream `Serialize` and `Deserialize` implementations for `Pos2`, `Vec2`, `Rect`, and `TSTransform`.
 hint: Check `[dependencies]` in `apps/0016-loading-board-and-review-files-serde/crates/pcb-doc/Cargo.toml`.
 
 Q: Why does `BoardModel::from_session_json` destructure `ReviewSessionEnvelope` without `..`?

@@ -60,7 +60,7 @@
 <p>So, welcome to <strong>Act I: The 2D CAD Canvas &amp; Viewport</strong>. We are going to replace those text placeholders with a real 2D vector canvas that draws an FR4 PCB substrate, Top and Bottom Copper traces, rectangular SMD pads, plated through-hole vias, Silkscreen courtyards, and unrouted Ratsnest airwires.</p>
 <h2 id="1-reserving-canvas-space-with-ui-allocate-painter">1. Reserving Canvas Space with <code>ui.allocate_painter</code></h2>
 <p>Unlike standard widgets (<code>ui.checkbox</code>, <code>ui.button</code>) that know their own size, a 2D CAD viewport needs you to explicitly tell <code>egui</code> how much rectangular space to claim and what mouse interactions to listen for.<span class="sidenote-number"></span><span class="sidenote">See <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.allocate_painter"><code>Ui::allocate_painter</code></a> in the official <code>egui</code> docs: it returns a two-element Rust tuple <code>(Response, Painter)</code> clipped to the allocated rectangle.</span></p>
-<pre><code class="language-rust">egui::CentralPanel::default().show(ctx, |ui| {
+<pre><code class="language-rust">egui::CentralPanel::default().show(ui, |ui| {
     let (response, painter) =
         ui.allocate_painter(ui.available_size(), egui::Sense::hover());
     self.paint_static_board(&amp;painter, response.rect);
@@ -177,8 +177,8 @@ pub fn smd_pad_rect(center: Pos2, size: Vec2) -&gt; Rect {
     )
 }
 
-// Inside PcbReviewerApp::update:
-egui::CentralPanel::default().show(ctx, |ui| {
+// Inside PcbReviewerApp::ui:
+egui::CentralPanel::default().show(ui, |ui| {
     let (response, painter) = ui.<input id="ex-blank-2" class="code-challenge-input" style="width:170px;" placeholder="/* 2: allocate fn */" autocomplete="off">(ui.available_size(), Sense::hover());
     self.paint_static_board(&amp;painter, <input id="ex-blank-3" class="code-challenge-input" style="width:145px;" placeholder="/* 3: rect field */" autocomplete="off">);
 });</code></pre>

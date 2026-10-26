@@ -161,7 +161,7 @@ fn headless_hotkeys_switch_tools_and_fit_viewport() {
 :::quiz title="Retrieval Practice: Data-Carrying Enums, `consume_key` & `key_press`"
 Q: Why is `enum ActiveTool { Select, Measure { ... } }` safer than keeping separate boolean and coordinate fields?
 - [ ] Booleans allocate heap memory during frames
-- [ ] Enums disable borrow checking inside update
+- [ ] Enums disable borrow checking inside frames
 - [ ] Structs forbid storing Pos2 fields directly
 - [x] Ruler points exist exclusively when enabled
 why: Storing `start_mm` and `end_mm` inside `ActiveTool::Measure` makes illegal states unrepresentable: ruler endpoints only exist when the Measure tool is active.

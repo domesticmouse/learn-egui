@@ -198,7 +198,7 @@ impl&lt;'a&gt; egui::Widget for LayerSwatch&lt;'a&gt; {
     <span class="panel-title">Interactive Lab 3: Testing <code>LayerSwatch&lt;'a&gt;</code> in Isolation with <code>Harness::new_ui_state</code></span>
     <span class="panel-badge">cargo test + cargo mutants</span>
   </div>
-  <p>In <code>apps/0014-custom-layer-swatch-widget-and-design-tokens</code>, we test <code>LayerSwatch::new</code> both in isolation via <code>Harness::new_ui_state</code> and inside the full <code>PcbReviewerApp</code> <code>SidePanel</code>:</p>
+  <p>In <code>apps/0014-custom-layer-swatch-widget-and-design-tokens</code>, we test <code>LayerSwatch::new</code> both in isolation via <code>Harness::new_ui_state</code> and inside the full <code>PcbReviewerApp</code> <code>Panel::left</code>:</p>
 <pre><code class="language-rust">#[test]
 fn standalone_layer_swatch_widget_toggles_visibility_in_harness_new_ui() {
     struct SwatchFixture {

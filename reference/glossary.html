@@ -143,23 +143,23 @@
     </tr>
     <tr>
       <td><strong><code>eframe::App</code></strong></td>
-      <td>The root application trait in <code>eframe</code> whose core method, <code>fn update(&amp;mut self, ctx: &amp;egui::Context, frame: &amp;mut eframe::Frame)</code>, is invoked on every repaint (<a href="https://docs.rs/eframe/latest/eframe/trait.App.html">docs.rs/eframe</a>).</td>
+      <td>The root application trait in <code>eframe</code> whose core method, <code>fn ui(&amp;mut self, ui: &amp;mut egui::Ui, frame: &amp;mut eframe::Frame)</code>, is invoked on every repaint (<a href="https://docs.rs/eframe/latest/eframe/trait.App.html">docs.rs/eframe</a>).</td>
       <td><em>Avoid:</em> &quot;window controller&quot; (<code>eframe::App</code> describes per-frame UI state transitions and rendering).</td>
     </tr>
     <tr>
       <td><strong><code>egui::Context</code> (<code>ctx</code>)</strong></td>
-      <td>The top-level handle to <code>egui</code> for the entire window: manages input state, fonts, style, widget ID memory, and root panels (<code>SidePanel</code>, <code>TopBottomPanel</code>, <code>CentralPanel</code>) (<a href="https://docs.rs/egui/latest/egui/struct.Context.html">docs.rs/egui</a>).</td>
-      <td><em>Avoid:</em> confusing <code>ctx: &amp;egui::Context</code> (whole-window coordinator) with <code>ui: &amp;mut egui::Ui</code> (a bounded region inside a panel).</td>
+      <td>The top-level handle to <code>egui</code> for the entire window (accessible via <code>ui.ctx()</code>): manages input state, fonts, style, widget ID memory, and floating windows (<a href="https://docs.rs/egui/latest/egui/struct.Context.html">docs.rs/egui</a>).</td>
+      <td><em>Avoid:</em> confusing <code>ctx: &amp;egui::Context</code> (whole-window coordinator) with <code>ui: &amp;mut egui::Ui</code> (a bounded region or root panel container).</td>
     </tr>
     <tr>
       <td><strong><code>egui::Ui</code> (<code>ui</code>)</strong></td>
-      <td>A bounded rectangular region inside a panel or container with an automatic layout cursor on which you invoke widget methods (<code>ui.heading</code>, <code>ui.checkbox</code>, <code>ui.button</code>, <code>ui.allocate_painter</code>) (<a href="https://docs.rs/egui/latest/egui/struct.Ui.html">docs.rs/egui</a>).</td>
+      <td>A bounded rectangular region (passed directly to <code>eframe::App::ui</code>, <code>Panel::show</code>, or <code>CentralPanel::show</code>) with an automatic layout cursor on which you invoke widget methods (<code>ui.heading</code>, <code>ui.checkbox</code>, <code>ui.button</code>, <code>ui.allocate_painter</code>) (<a href="https://docs.rs/egui/latest/egui/struct.Ui.html">docs.rs/egui</a>).</td>
       <td><em>Avoid:</em> storing <code>Ui</code> across frames (<code>Ui</code> is a short-lived per-frame layout builder).</td>
     </tr>
     <tr>
       <td><strong><code>egui::Response</code></strong></td>
       <td>The immediate return value of every widget call (e.g., <code>ui.button(&quot;Reset&quot;).clicked()</code> or <code>.hovered()</code>) reporting how the user interacted with that widget during the current frame (<a href="https://docs.rs/egui/latest/egui/struct.Response.html">docs.rs/egui</a>).</td>
-      <td><em>Avoid:</em> &quot;event listener&quot; (<code>Response</code> is a plain value inspected synchronously inside <code>update</code>).</td>
+      <td><em>Avoid:</em> &quot;event listener&quot; (<code>Response</code> is a plain value inspected synchronously inside <code>ui</code>).</td>
     </tr>
     <tr>
       <td><strong><code>egui::Painter</code></strong></td>
@@ -179,7 +179,7 @@
     <tr>
       <td><strong>Headless UI Harness (<code>egui_kittest</code>)</strong></td>
       <td>The official testing library for <code>egui</code> that drives an app or widget closure without opening an OS window, supporting semantic AccessKit widget queries (<code>get_by_label</code>), simulated clicks/key presses, and offscreen visual snapshots (<a href="https://docs.rs/egui_kittest/latest/egui_kittest/">docs.rs/egui_kittest</a>).</td>
-      <td><em>Avoid:</em> skipping <code>eframe::App::update</code> forever once headless UI testing is available in Act II+.</td>
+      <td><em>Avoid:</em> skipping <code>eframe::App::ui</code> forever once headless UI testing is available in Act II+.</td>
     </tr>
     <tr>
       <td><strong>Hash Map &amp; <code>Entry</code> API (<code>HashMap&lt;K, V&gt;</code>)</strong></td>
@@ -188,7 +188,7 @@
     </tr>
     <tr>
       <td><strong>Floating Window &amp; Widget Identity (<code>egui::Window</code>, <code>egui::Id</code>)</strong></td>
-      <td><code>egui::Window</code> renders a floating, draggable overlay layer above panels, keyed by a deterministic <code>egui::Id::new(...)</code> hash so <code>egui</code> remembers window state without collisions (<a href="https://docs.rs/egui/latest/egui/containers/struct.Window.html">docs.rs/egui</a>).</td>
+      <td><code>egui::Window</code> renders a floating, draggable overlay layer above panels, keyed by a deterministic <code>egui::Id::unique(...)</code> hash so <code>egui</code> remembers window state without collisions (<a href="https://docs.rs/egui/latest/egui/containers/struct.Window.html">docs.rs/egui</a>).</td>
       <td><em>Avoid:</em> creating multiple windows or grids with identical titles and no disambiguating <code>.id(...)</code>.</td>
     </tr>
     <tr>
@@ -228,8 +228,8 @@
     </tr>
     <tr>
       <td><strong>Non-Blocking Background Channel (<code>std::sync::mpsc::try_recv</code>)</strong></td>
-      <td>Offloading file parsing onto a worker thread (<code>std::thread::spawn</code>) that streams <code>ImportJobMessage</code> progress updates over an <code>mpsc::channel</code>, while <code>eframe::App::update</code> drains ready messages via <code>rx.try_recv()</code> and calls <code>ctx.request_repaint()</code> while <code>ImportJobState::Running</code> is active (<a href="https://doc.rust-lang.org/std/sync/mpsc/index.html">std::sync::mpsc</a>).</td>
-      <td><em>Avoid:</em> calling blocking <code>rx.recv()</code> inside <code>eframe::App::update</code> (which freezes the UI thread).</td>
+      <td>Offloading file parsing onto a worker thread (<code>std::thread::spawn</code>) that streams <code>ImportJobMessage</code> progress updates over an <code>mpsc::channel</code>, while <code>eframe::App::ui</code> drains ready messages via <code>rx.try_recv()</code> and calls <code>ctx.request_repaint()</code> while <code>ImportJobState::Running</code> is active (<a href="https://doc.rust-lang.org/std/sync/mpsc/index.html">std::sync::mpsc</a>).</td>
+      <td><em>Avoid:</em> calling blocking <code>rx.recv()</code> inside <code>eframe::App::ui</code> (which freezes the UI thread).</td>
     </tr>
     <tr>
       <td><strong>Process-Wide GPU Lock &amp; Frame Snapshot Digest (<code>gpu_lock</code>, <code>FrameSnapshotDigest</code>)</strong></td>

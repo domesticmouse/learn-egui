@@ -22,7 +22,7 @@ So, welcome to **Act I: The 2D CAD Canvas & Viewport**. We are going to replace 
 Unlike standard widgets (`ui.checkbox`, `ui.button`) that know their own size, a 2D CAD viewport needs you to explicitly tell `egui` how much rectangular space to claim and what mouse interactions to listen for.{{sidenote:See [`Ui::allocate_painter`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.allocate_painter) in the official `egui` docs: it returns a two-element Rust tuple `(Response, Painter)` clipped to the allocated rectangle.}}
 
 ```rust
-egui::CentralPanel::default().show(ctx, |ui| {
+egui::CentralPanel::default().show(ui, |ui| {
     let (response, painter) =
         ui.allocate_painter(ui.available_size(), egui::Sense::hover());
     self.paint_static_board(&painter, response.rect);
@@ -97,8 +97,8 @@ pub fn smd_pad_rect(center: Pos2, size: Vec2) -> Rect {
     )
 }
 
-// Inside PcbReviewerApp::update:
-egui::CentralPanel::default().show(ctx, |ui| {
+// Inside PcbReviewerApp::ui:
+egui::CentralPanel::default().show(ui, |ui| {
     let (response, painter) = ui.{{blank:allocate_painter|Call the `Ui` method that reserves a rectangle and returns `(Response, Painter)`.|/* 2: allocate fn */|170px}}(ui.available_size(), Sense::hover());
     self.paint_static_board(&painter, {{blank:response.rect|Access the allocated screen-space `Rect` field on `response`.|/* 3: rect field */|145px}});
 });

@@ -16,13 +16,13 @@ card:
 
 ## Why Synchronous File Parsing Freezes Immediate-Mode GUIs
 
-In Lesson `0016`, `import_session_from_json` ran synchronously on the main UI thread inside `update(&mut self, ctx, frame)`. For a small 2 KB review envelope, that takes microseconds—but when an engineer opens a 50 MB industrial `.kicad_pcb` board file with 100,000 trace segments, synchronous parsing blocks `update()` for ratusan milliseconds, freezing panning, zooming, and OS window events.{{sidenote: **Never Block `eframe::App::update`:** Because `egui` runs on a single UI thread, any operation taking more than ~4 ms should run on a background thread (`std::thread::spawn`) and communicate back via non-blocking message passing (`std::sync::mpsc::Receiver::try_recv`).}}
+In Lesson `0016`, `import_session_from_json` ran synchronously on the main UI thread inside `ui(&mut self, ui, frame)`. For a small 2 KB review envelope, that takes microseconds—but when an engineer opens a 50 MB industrial `.kicad_pcb` board file with 100,000 trace segments, synchronous parsing blocks `ui()` for hundreds of milliseconds, freezing panning, zooming, and OS window events.{{sidenote: **Never Block `eframe::App::ui`:** Because `egui` runs on a single UI thread, any operation taking more than ~4 ms should run on a background thread (`std::thread::spawn`) and communicate back via non-blocking message passing (`std::sync::mpsc::Receiver::try_recv`).}}
 
 We keep the UI locked at 60 FPS with a three-part pattern:
 
 1. **Spawn & Stream (`spawn_background_session_import`)**: Creates a `std::sync::mpsc::channel::<ImportJobMessage>()`, spawns a worker thread owning the raw JSON `String` (`Send + 'static`), emits staged `ImportJobMessage::Progress` updates (`"Validating envelope"`, `"Loading copper layers"`), and finishes with `Completed { board_id, board }` or `Failed(SessionIoError)`.
-2. **Non-Blocking Poll (`poll_async_import`)**: At the start of each frame, drains available messages with `while let Ok(msg) = rx.try_recv()`—never blocking `update()`!
-3. **Continuous Repaint & Cancellation (`ctx.request_repaint()`)**: In reactive desktop mode, `egui` sleeps when the mouse is idle. Calling `ctx.request_repaint()` while `matches!(self.import_state, ImportJobState::Running { .. })` ensures `update()` keeps polling the channel until the worker finishes, and dropping `self.import_rx = None` cancels an in-flight job cleanly.
+2. **Non-Blocking Poll (`poll_async_import`)**: At the start of each frame, drains available messages with `while let Ok(msg) = rx.try_recv()`—never blocking `ui()`!
+3. **Continuous Repaint & Cancellation (`ctx.request_repaint()`)**: In reactive desktop mode, `egui` sleeps when the mouse is idle. Calling `ctx.request_repaint()` while `matches!(self.import_state, ImportJobState::Running { .. })` ensures `ui()` keeps polling the channel until the worker finishes, and dropping `self.import_rx = None` cancels an in-flight job cleanly.
 
 ```mermaid
 sequenceDiagram
@@ -128,7 +128,7 @@ success: Well done! Background imports stream progress over `mpsc::channel`, upd
 :::
 
 :::verify id="verify-0021" title="Lab 3: Background Worker `mpsc` Channel & Progress UI Mutation Gate (`0021`)" badge="cargo test --workspace + cargo mutants" tier="Tier 2 + Tier 6 (Headless UI)" caught="269 / 269 (100%)" missed="0 Missed"
-Run the workspace test suite and mutate the background import worker, progress fraction math, non-blocking `try_recv()` polling, and `SidePanel::right` controls:
+Run the workspace test suite and mutate the background import worker, progress fraction math, non-blocking `try_recv()` polling, and `Panel::right` controls:
 
 ```bash caption="Run workspace tests and cargo-mutants on 0020 async import functions"
 cargo test --manifest-path ./apps/0021-non-blocking-file-import-and-progress-ui/Cargo.toml --workspace
@@ -147,7 +147,7 @@ Q: Why does `poll_async_import` call `Receiver::try_recv()` inside a `while let 
 - [ ] Because `try_recv()` automatically spawns a fresh operating system worker thread
 - [ ] Because `recv()` cannot deserialize versioned JSON envelopes across thread boundaries
 why: `Receiver::recv()` blocks the calling thread until a message arrives, which would freeze the `egui` window; `try_recv()` returns `Err(TryRecvError::Empty)` immediately when no message is waiting.
-hint: Think about what happens to a 60-FPS UI loop if `update()` blocks waiting on a thread.
+hint: Think about what happens to a 60-FPS UI loop if `ui()` blocks waiting on a thread.
 
 Q: Why do we call `ctx.request_repaint()` whenever `self.import_state` is `ImportJobState::Running`?
 - [ ] To clear the undo history stack before loading copper layers

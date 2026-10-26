@@ -56,7 +56,7 @@
 <p class="subtitle">How we verify every PCB Reviewer feature with <code>cargo test</code> and measure real assertion coverage with <code>cargo mutants</code> across Acts I–VII.</p>
 
 <h2 id="1-why-mutation-testing-beats-line-coverage-in-egui">1. Why Mutation Testing Beats Line Coverage in <code>egui</code></h2>
-<p>Traditional line coverage only tells you whether a line of Rust code <em>executed</em> during a test—not whether your test would fail if that line were wrong. Turns out, in an immediate-mode GUI, calling <code>app.update(...)</code> executes almost every line of your panel layout even if your test contains zero assertions!</p>
+<p>Traditional line coverage only tells you whether a line of Rust code <em>executed</em> during a test—not whether your test would fail if that line were wrong. Turns out, in an immediate-mode GUI, calling <code>app.ui(...)</code> executes almost every line of your panel layout even if your test contains zero assertions!</p>
 <p>So, we use Martin Pool's <a href="https://mutants.rs/"><code>cargo-mutants</code></a> to test our tests: it copies your project to a scratch directory, systematically injects small faults (<strong>mutants</strong>—such as flipping <code>true</code> to <code>false</code>, replacing <code>+</code> with <code>-</code>, or emptying a method body), and runs <code>cargo test</code> against each mutant.</p>
 <figure class="mermaid-figure">
   <pre class="mermaid">
@@ -118,10 +118,10 @@ cargo mutants -f src/main.rs</code></pre>
 copy_target = true
 
 # Explicitly exclude the OS window launcher and raw panel draw loop in Act I;
-# we remove "update" from this list in Lesson 0007 when we add egui_kittest!
+# we remove "ui" from this list in Lesson 0007 when we add egui_kittest!
 exclude_re = [
     "replace main",
-    "&lt;impl eframe::App for PcbReviewerApp&gt;::update",
+    "&lt;impl eframe::App for PcbReviewerApp&gt;::ui",
 ]</code></pre>
 <h2 id="4-act-iv-multi-crate-workspace-amp-proptest-patterns-0015-0018">4. Act IV Multi-Crate Workspace &amp; <code>proptest</code> Patterns (<code>0015</code>–<code>0018</code>)</h2>
 <p>Once domain state lives in <code>crates/pcb-doc</code> (<code>L1</code>, depending only on <code>emath</code>), you can run <code>cargo test</code> and <code>cargo mutants</code> on the domain crate in milliseconds without compiling or linking <code>eframe</code>:</p>
@@ -194,7 +194,7 @@ cargo mutants --manifest-path ./apps/0018-undo-redo-history-and-slider-coalescin
 <tr>
 <td><strong>Act II (0007–0010)</strong></td>
 <td><code>egui_kittest::Harness</code> (headless UI queries &amp; simulated key presses)</td>
-<td>Un-skips <code>eframe::App::update</code>! Verifies rendered schematic labels, dual-viewport cross-probing, BOM filtering, and <code>F</code> / <code>M</code> / <code>Esc</code> hotkeys.</td>
+<td>Un-skips <code>eframe::App::ui</code>! Verifies rendered schematic labels, dual-viewport cross-probing, BOM filtering, and <code>F</code> / <code>M</code> / <code>Esc</code> hotkeys.</td>
 </tr>
 <tr>
 <td><strong>Act III (0011–0014)</strong></td>

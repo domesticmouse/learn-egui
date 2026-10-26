@@ -64,10 +64,10 @@ flowchart LR
     Pads["board.pads: Vec&amp;lt;SmdPad&amp;gt;"] --&gt; Pair["Same PcbLayer &amp;amp;&amp;amp; a.net != b.net"]
     Pair --&gt; Gap["pad_edge_gap_mm(a, b)&lt;br/&gt;dx.max(0.0).hypot(dy.max(0.0))"]
     Gap --&gt;|"gap &amp;lt; min_clearance_mm"| Viol["DrcViolation { center_mm, measured_gap_mm, ... }"]
-    Viol --&gt; Halo["Canvas: painter.circle_stroke(center_px, 14.0, red)&lt;br/&gt;SidePanel: Click violation -&gt; center camera"]
+    Viol --&gt; Halo["Canvas: painter.circle_stroke(center_px, 14.0, red)&lt;br/&gt;Panel::left: Click violation -&gt; center camera"]
   </pre>
 </figure>
-<p><em>Figure 13.1: Same-layer pads on distinct nets are checked against <code>min_clearance_mm</code>, emitting <code>DrcViolation</code> markers rendered as red halos on the canvas and clickable jump buttons in the <code>SidePanel</code>.</em></p>
+<p><em>Figure 13.1: Same-layer pads on distinct nets are checked against <code>min_clearance_mm</code>, emitting <code>DrcViolation</code> markers rendered as red halos on the canvas and clickable jump buttons in <code>Panel::left</code>.</em></p>
 <h2 id="1-just-in-time-rust-bounding-box-reduction-iterator-reduce-amp-f32-clamp">1. Just-in-Time Rust: Bounding-Box Reduction (<code>Iterator::reduce</code>) &amp; <code>f32::clamp</code></h2>
 <p>To compute the edge-to-edge Euclidean distance between two axis-aligned rectangular pads <code>a</code> and <code>b</code>, we subtract their half-widths <code>(a.size_mm.x + b.size_mm.x) * 0.5</code> from the centre-to-centre distance <code>(a.center_mm.x - b.center_mm.x).abs()</code> along each axis, clamp negative values (which represent axis overlap) to <code>0.0</code> via <code>.max(0.0)</code>, and take the hypotenuse with <code>.hypot(...)</code>:<span class="sidenote-number"></span><span class="sidenote">Notice how <code>pads_bounding_box_mm</code> uses <code>.map(SmdPad::bounds_mm).reduce(Rect::union)</code>: <code>Iterator::reduce</code> folds the iterator using the first pad's <code>Rect</code> as the initial accumulator and returns <code>None</code> if the board has zero pads.</span></p>
 <pre><code class="language-rust">pub fn pad_edge_gap_mm(a: &amp;SmdPad, b: &amp;SmdPad) -&gt; f32 {

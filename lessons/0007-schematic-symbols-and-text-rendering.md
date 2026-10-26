@@ -1,6 +1,6 @@
 ---
 title: "Lesson 0007: Schematic Symbols, Text Rendering & Headless UI Testing (`egui_kittest`)"
-subtitle: Drawing IC reference designators (`U1`, `R12`, `J1`) with `Painter::text`, mastering `String` vs. `&str`, and un-skipping `eframe::App::update` with `egui_kittest::Harness`
+subtitle: Drawing IC reference designators (`U1`, `R12`, `J1`) with `Painter::text`, mastering `String` vs. `&str`, and un-skipping `eframe::App::ui` with `egui_kittest::Harness`
 lesson_num: "0007"
 act_badge: "Act II: Schematic Views, Layout & egui_kittest"
 card:
@@ -15,11 +15,11 @@ card:
 
 Welcome to **Act II**! In [Lesson 0006](./0006-hit-testing-and-net-cross-probing.html), we built interactive pad hit-testing and net highlighting. But, staring at anonymous red and blue rectangles gets old fast—when you are reviewing a real board or schematic, you navigate by **reference designators** (`U1`, `R12`, `J1`), component values (`LDO_3V3`, `10k`), and human-readable net names (`VCC_3V3`, `SPI_CLK`).
 
-Or, moreover, Lesson 0007 marks a huge milestone in our testing story. Remember how we excluded `<impl eframe::App for PcbReviewerApp>::update` in `.cargo/mutants.toml` back in Lesson 0001? Today, we add [`egui_kittest`](https://docs.rs/egui_kittest/latest/egui_kittest/) to `[dev-dependencies]`, boot our `PcbReviewerApp` headlessly inside `cargo test`, and **take `eframe::App::update` off the exclusion list** so `cargo-mutants` actively guards our rendered UI panels.
+Or, moreover, Lesson 0007 marks a huge milestone in our testing story. Remember how we excluded `<impl eframe::App for PcbReviewerApp>::ui` in `.cargo/mutants.toml` back in Lesson 0001? Today, we add [`egui_kittest`](https://docs.rs/egui_kittest/latest/egui_kittest/) to `[dev-dependencies]`, boot our `PcbReviewerApp` headlessly inside `cargo test`, and **take `eframe::App::ui` off the exclusion list** so `cargo-mutants` actively guards our rendered UI panels.
 
 ```mermaid
 flowchart LR
-    Comp["ComponentSymbol<br/>ref_des: String ('U1')<br/>value: String ('LDO_3V3')"] -->|"format!('{}: {} ({})')"| Panel["SidePanel::left<br/>ui.label(comp.inspector_label())"]
+    Comp["ComponentSymbol<br/>ref_des: String ('U1')<br/>value: String ('LDO_3V3')"] -->|"format!('{}: {} ({})')"| Panel["Panel::left<br/>ui.label(comp.inspector_label())"]
     Comp -->|"Painter::text(&comp.ref_des)"| Canvas["CentralPanel Canvas<br/>Align2::CENTER_CENTER + FontId::monospace"]
     Panel -->|"AccessKit Node Tree"| Kittest["egui_kittest::Harness<br/>harness.get_by_label('U1: LDO_3V3 (SOT-23)')"]
 ```
@@ -43,7 +43,7 @@ pub struct ComponentSymbol {
 }
 
 impl ComponentSymbol {
-    /// Formats a human-readable summary for the SidePanel Component Inspector.
+    /// Formats a human-readable summary for the left Panel Component Inspector.
     pub fn inspector_label(&self) -> String {
         format!("{}: {} ({})", self.ref_des, self.value, self.package_name)
     }
@@ -84,10 +84,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-eframe = "0.33"
+eframe = "0.37"
 
 [dev-dependencies]
-egui_kittest = { version = "0.33", features = ["eframe"] }
+egui_kittest = { version = "0.37", features = ["eframe"] }
 
 # Optimise dependencies (like egui/eframe) even in debug builds so our
 # 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
@@ -104,7 +104,7 @@ use egui_kittest::{Harness, kittest::Queryable};
 fn headless_ui_renders_component_labels_and_toggles_layers() {
     let mut harness = Harness::new_eframe(|_cc| PcbReviewerApp::default());
 
-    // 1. Verify silkscreen component labels are rendered in the SidePanel
+    // 1. Verify silkscreen component labels are rendered in the left Panel
     assert!(harness.query_by_label("U1: LDO_3V3 (SOT-23)").is_some());
     assert!(harness.query_by_label("R12: 10k (0603)").is_some());
 
@@ -149,14 +149,14 @@ success: **Spot on!** `format!` builds the owned `String` summary, `Align2::CENT
 :::
 :::
 
-:::verify title="Interactive Lab 3: Un-Skipping `eframe::App::update` with `egui_kittest`" badge="cargo test + cargo mutants" tier="Tier 6: Headless UI (egui_kittest)" caught="35 Caught (10 Unviable)" missed="0 Missed"
-Look at `apps/0007-schematic-symbols-and-text-rendering/.cargo/mutants.toml`: we have removed `"<impl eframe::App for PcbReviewerApp>::update"` from `exclude_re`! Because our `egui_kittest::Harness` test queries the rendered `SidePanel` labels and clicks its buttons, `cargo mutants` now mutates `update()` and `render_side_panel()`—and catches every single mutant.
+:::verify title="Interactive Lab 3: Un-Skipping `eframe::App::ui` with `egui_kittest`" badge="cargo test + cargo mutants" tier="Tier 6: Headless UI (egui_kittest)" caught="35 Caught (10 Unviable)" missed="0 Missed"
+Look at `apps/0007-schematic-symbols-and-text-rendering/.cargo/mutants.toml`: we have removed `"<impl eframe::App for PcbReviewerApp>::ui"` from `exclude_re`! Because our `egui_kittest::Harness` test queries the rendered `Panel::left` labels and clicks its buttons, `cargo mutants` now mutates `ui()` and `render_side_panel()`—and catches every single mutant.
 
 ```toml
 # apps/0007-schematic-symbols-and-text-rendering/.cargo/mutants.toml
 copy_target = true
 
-# Notice that `<impl eframe::App for PcbReviewerApp>::update` and `render_side_panel`
+# Notice that `<impl eframe::App for PcbReviewerApp>::ui` and `render_side_panel`
 # are NO LONGER excluded! Only the OS window launcher and raw Painter canvas remain excluded.
 exclude_re = [
     "replace main",
@@ -169,7 +169,7 @@ exclude_re = [
 ```
 
 - [ ] **1. Run `cargo test` in `apps/0007-schematic-symbols-and-text-rendering`:** Confirm all 14 unit + headless `egui_kittest` tests pass.
-- [ ] **2. Run `cargo mutants --in-place`:** Verify that all 35 viable mutants (including `update`, `render_side_panel`, `inspector_label`, and `NetId::signal_name`) are **Caught** with **0 Missed**.
+- [ ] **2. Run `cargo mutants --in-place`:** Verify that all 35 viable mutants (including `ui`, `render_side_panel`, `inspector_label`, and `NetId::signal_name`) are **Caught** with **0 Missed**.
 :::
 
 :::quiz title="Retrieval Practice: `String` vs. `&str`, `Align2`, and `egui_kittest`"
@@ -189,13 +189,13 @@ Q: What does `Align2::CENTER_CENTER` do when passed to `painter.text(anchor_px, 
 why: `Align2::CENTER_CENTER` positions the geometric centre of the rendered text bounding box directly on `anchor_px`.
 hint: Think about which point of the text's bounding rectangle is placed at `anchor_px`.
 
-Q: How does `egui_kittest::Harness` let us remove `eframe::App::update` from `.cargo/mutants.toml`?
+Q: How does `egui_kittest::Harness` let us remove `eframe::App::ui` from `.cargo/mutants.toml`?
 - [ ] It builds GPU shaders without using rustc
 - [ ] It skips widget layout during cargo tests
 - [ ] It mutates private fields inside main app
 - [x] It drives frames and queries widget nodes
-why: `egui_kittest::Harness` runs `eframe::App::update` headlessly and exposes the AccessKit widget tree so tests can query labels and simulate clicks.
-hint: Consider how `Harness::new_eframe` executes `update()` and inspects rendered widgets during `cargo test`.
+why: `egui_kittest::Harness` runs `eframe::App::ui` headlessly and exposes the AccessKit widget tree so tests can query labels and simulate clicks.
+hint: Consider how `Harness::new_eframe` executes `ui()` and inspects rendered widgets during `cargo test`.
 :::
 
 ## Recommended Primary Source

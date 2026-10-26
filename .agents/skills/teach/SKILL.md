@@ -56,7 +56,7 @@ Fluency can give an illusory sense of mastery, whereas storage strength is the r
 
 A lesson is the primary artifact you produce: the unit in which knowledge and skills reach the user. Each lesson is authored as a clean Markdown file saved to `lessons/` and titled `0001-<dash-case-name>.md` (starting at `0001-<dash-case-name>.md` for project bootstrap), then compiled to HTML (`lessons/<NNNN-slug>.html`) by running `.venv/bin/python build.py --check`.
 
-When teaching a programming language, framework, or tool where Lesson `0002` needs a configured project manifest and entry point, start with a `0001-<dash-case-name>.md` bootstrap lesson covering Cargo package creation (`Cargo.toml` with `eframe = "0.33"` and `[profile.dev.package."*"] opt-level = 2`), `eframe::run_native`, `#[cfg(test)]`, and `.cargo/mutants.toml` setup so subsequent lessons have a concrete, runnable foundation.
+When teaching a programming language, framework, or tool where Lesson `0002` needs a configured project manifest and entry point, start with a `0001-<dash-case-name>.md` bootstrap lesson covering Cargo package creation (`Cargo.toml` with `eframe = "0.37"` and `[profile.dev.package."*"] opt-level = 2`), `eframe::run_native`, `#[cfg(test)]`, and `.cargo/mutants.toml` setup so subsequent lessons have a concrete, runnable foundation.
 
 ### Markdown Directives & Frontmatter (`build.py`)
 
