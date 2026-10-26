@@ -303,6 +303,39 @@ exclude_re = [
 ]
 ```
 
+### Running `cargo test` and `cargo mutants`
+
+With `.cargo/mutants.toml` in place, verification is a two-step workflow from your project root (`pcb-reviewer/`, or `./apps/0001-project-setup-and-eframe-boot` if you are running the companion crate in this repository):
+
+1. **Run the standard unit test suite (`cargo test`):** First confirm your code compiles and all `#[test]` functions pass against your unmodified source code.
+2. **Run the mutation test suite (`cargo mutants`):** Next, run `cargo mutants` (optionally passing `-v` so caught mutants are printed alongside any missed ones, or `--list` to preview which mutations will be generated before compiling).
+
+```bash
+# 1. Run standard Rust unit tests
+cargo test
+
+# 2. (Optional) Preview which mutations cargo-mutants will generate
+cargo mutants --list
+
+# 3. Run the mutation test suite (-v prints caught mutants as well as missed ones)
+cargo mutants -v
+```
+
+When you run `cargo mutants -v`, it copies your crate into an isolated temporary build directory, verifies that `cargo test` passes on the unmutated baseline, and then runs `cargo test` once for each generated mutant:
+
+```console
+Found 1 mutant to test
+ok       Unmutated baseline in 0.4s build + 0.1s test
+CAUGHT   src/main.rs:36:5: replace PcbReviewerApp::reset_layers with () in 0.3s build + 0.1s test
+1 mutants tested in 0.9s: 1 caught
+```
+
+Here is how to read that output:
+
+- **`Unmutated baseline ... ok`**: `cargo-mutants` first runs `cargo test` with zero changes to make sure your test suite isn't already failing.
+- **`CAUGHT src/main.rs:36:5: replace PcbReviewerApp::reset_layers with ()`**: `cargo-mutants` hollowed out `pub fn reset_layers(&mut self)` so it did nothing (`()`), recompiled, and ran `cargo test`. Because our `default_enables_physical_layers_and_hides_ratsnest` test asserted `assert!(app.show_top_copper)`, the test **failed**—which means the mutant was **CAUGHT** (exit code `0`).
+- **What if a mutant is `MISSED`?**: If `cargo test` still passes when a function is mutated, `cargo-mutants` prints `MISSED` in red and exits with a non-zero status code, pointing you to the exact file and line where a test assertion is missing. (It also writes detailed logs and diffs into a `mutants.out/` directory, which you can add to `.gitignore`.)
+
 :::verify title="Interactive Lab 1: Crate Setup & Cargo Verification Gate" badge="cargo test + cargo mutants" tier="Tier 2: Unit Tests" caught="1 / 1 (100%)" missed="0 Missed"
 Every lesson includes a **Cargo Verification & Mutation Coverage** gate. Check off each step in your terminal to establish your baseline:
 

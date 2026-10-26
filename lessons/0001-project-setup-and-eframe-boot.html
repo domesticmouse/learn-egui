@@ -311,6 +311,31 @@ exclude_re = [
     "replace main",
     "&lt;impl eframe::App for PcbReviewerApp&gt;::ui",
 ]</code></pre>
+<h3 id="running-cargo-test-and-cargo-mutants">Running <code>cargo test</code> and <code>cargo mutants</code></h3>
+<p>With <code>.cargo/mutants.toml</code> in place, verification is a two-step workflow from your project root (<code>pcb-reviewer/</code>, or <code>./apps/0001-project-setup-and-eframe-boot</code> if you are running the companion crate in this repository):</p>
+<ol>
+<li><strong>Run the standard unit test suite (<code>cargo test</code>):</strong> First confirm your code compiles and all <code>#[test]</code> functions pass against your unmodified source code.</li>
+<li><strong>Run the mutation test suite (<code>cargo mutants</code>):</strong> Next, run <code>cargo mutants</code> (optionally passing <code>-v</code> so caught mutants are printed alongside any missed ones, or <code>--list</code> to preview which mutations will be generated before compiling).</li>
+</ol>
+<pre><code class="language-bash"># 1. Run standard Rust unit tests
+cargo test
+
+# 2. (Optional) Preview which mutations cargo-mutants will generate
+cargo mutants --list
+
+# 3. Run the mutation test suite (-v prints caught mutants as well as missed ones)
+cargo mutants -v</code></pre>
+<p>When you run <code>cargo mutants -v</code>, it copies your crate into an isolated temporary build directory, verifies that <code>cargo test</code> passes on the unmutated baseline, and then runs <code>cargo test</code> once for each generated mutant:</p>
+<pre><code class="language-console">Found 1 mutant to test
+ok       Unmutated baseline in 0.4s build + 0.1s test
+CAUGHT   src/main.rs:36:5: replace PcbReviewerApp::reset_layers with () in 0.3s build + 0.1s test
+1 mutants tested in 0.9s: 1 caught</code></pre>
+<p>Here is how to read that output:</p>
+<ul>
+<li><strong><code>Unmutated baseline ... ok</code></strong>: <code>cargo-mutants</code> first runs <code>cargo test</code> with zero changes to make sure your test suite isn't already failing.</li>
+<li><strong><code>CAUGHT src/main.rs:36:5: replace PcbReviewerApp::reset_layers with ()</code></strong>: <code>cargo-mutants</code> hollowed out <code>pub fn reset_layers(&amp;mut self)</code> so it did nothing (<code>()</code>), recompiled, and ran <code>cargo test</code>. Because our <code>default_enables_physical_layers_and_hides_ratsnest</code> test asserted <code>assert!(app.show_top_copper)</code>, the test <strong>failed</strong>—which means the mutant was <strong>CAUGHT</strong> (exit code <code>0</code>).</li>
+<li><strong>What if a mutant is <code>MISSED</code>?</strong>: If <code>cargo test</code> still passes when a function is mutated, <code>cargo-mutants</code> prints <code>MISSED</code> in red and exits with a non-zero status code, pointing you to the exact file and line where a test assertion is missing. (It also writes detailed logs and diffs into a <code>mutants.out/</code> directory, which you can add to <code>.gitignore</code>.)</li>
+</ul>
 </div>
 
 <section class="full-width-panel">
