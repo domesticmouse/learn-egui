@@ -31,6 +31,37 @@ flowchart LR
 
 ## Spatial Neighborhood, Net Topology & `schemars::JsonSchema`
 
+Add `schemars` to `crates/pcb-doc` with `cargo add`:
+
+```console
+cargo add --package pcb-doc schemars@=1.2.2
+```
+
+Here is the resulting `crates/pcb-doc/Cargo.toml`:
+
+```toml caption="crates/pcb-doc/Cargo.toml"
+[package]
+name = "pcb-doc"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+emath = { version = "0.33", features = ["serde"] }
+kicad-sexpr = { path = "../kicad-sexpr" }
+schemars = "=1.2.2"
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+thiserror = "2.0"
+turso_parser = "=0.8.1"
+
+[dev-dependencies]
+proptest = "1.11"
+tokio = { version = "1", features = ["rt", "macros"] }
+```
+
 By deriving `schemars::JsonSchema` alongside `Serialize` and `Deserialize`, Rust generates a standard JSON Schema 2020-12 specification via `schemars::schema_for!(SpatialQueryParams)` that MCP servers (`rmcp`) advertise directly to AI agents:
 
 ```rust caption="Typed spatial, net-topology, and custom DRC queries in crates/pcb-doc/src/lib.rs"

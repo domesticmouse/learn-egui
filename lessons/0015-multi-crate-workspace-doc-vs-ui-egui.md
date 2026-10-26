@@ -23,6 +23,65 @@ By refactoring `./apps/0015-multi-crate-workspace-doc-vs-ui-egui` into a Cargo `
 1. **`crates/pcb-doc` (`L1` Domain Crate)**: Depends *only* on `emath = "0.33"` for `Pos2`, `Vec2`, and `Rect`. It contains zero `egui`, `eframe`, `winit`, or `Color32` types. For layer colors, `PcbLayer::rgb(self) -> (u8, u8, u8)` returns a UI-agnostic RGB tuple that `pcb-reviewer` bridges into `egui::Color32`.
 2. **`pcb-reviewer` (`L6`/`L7` UI Crate)**: Depends on `pcb-doc = { path = "crates/pcb-doc" }`, `eframe = "0.33"`, and `egui_kittest = "0.33"`. It owns `ViewState`, `BoardViewport`, `LayerSwatch<'a>`, and the `eframe::App` shell.
 
+Scaffold the library crate and wire its dependencies with `cargo new --lib` and `cargo add`:
+
+```console
+cargo new --lib crates/pcb-doc
+cargo add --package pcb-doc emath
+cargo add --path crates/pcb-doc
+```
+
+Here are the resulting `crates/pcb-doc/Cargo.toml` and root workspace `Cargo.toml`:
+
+```toml caption="crates/pcb-doc/Cargo.toml"
+[package]
+name = "pcb-doc"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+emath = "0.33"
+```
+
+```toml caption="Cargo.toml (Root Workspace & UI Crate)"
+[workspace]
+resolver = "3"
+members = ["crates/pcb-doc"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[package]
+name = "pcb-reviewer"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+eframe = "0.33"
+pcb-doc = { path = "crates/pcb-doc" }
+
+[dev-dependencies]
+egui_kittest = { version = "0.33", features = ["eframe"] }
+
+# Optimize dependencies (like egui/eframe) even in debug builds so our
+# 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
+[profile.dev.package."*"]
+opt-level = 2
+```
+
 ```mermaid
 flowchart TD
     L7["pcb-reviewer (L6 UI / L7 Shell)<br/>eframe + egui + egui_kittest<br/>ViewState, LayerSwatch, Painter"] --> L1["crates/pcb-doc (L1 Domain)<br/>BoardModel, SmdPad, ReviewNote, DrcViolation"]

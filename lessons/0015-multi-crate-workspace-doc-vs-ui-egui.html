@@ -63,6 +63,60 @@
 <li><strong><code>crates/pcb-doc</code> (<code>L1</code> Domain Crate)</strong>: Depends <em>only</em> on <code>emath = &quot;0.33&quot;</code> for <code>Pos2</code>, <code>Vec2</code>, and <code>Rect</code>. It contains zero <code>egui</code>, <code>eframe</code>, <code>winit</code>, or <code>Color32</code> types. For layer colors, <code>PcbLayer::rgb(self) -&gt; (u8, u8, u8)</code> returns a UI-agnostic RGB tuple that <code>pcb-reviewer</code> bridges into <code>egui::Color32</code>.</li>
 <li><strong><code>pcb-reviewer</code> (<code>L6</code>/<code>L7</code> UI Crate)</strong>: Depends on <code>pcb-doc = { path = &quot;crates/pcb-doc&quot; }</code>, <code>eframe = &quot;0.33&quot;</code>, and <code>egui_kittest = &quot;0.33&quot;</code>. It owns <code>ViewState</code>, <code>BoardViewport</code>, <code>LayerSwatch&lt;'a&gt;</code>, and the <code>eframe::App</code> shell.</li>
 </ol>
+<p>Scaffold the library crate and wire its dependencies with <code>cargo new --lib</code> and <code>cargo add</code>:</p>
+<pre><code class="language-console">cargo new --lib crates/pcb-doc
+cargo add --package pcb-doc emath
+cargo add --path crates/pcb-doc</code></pre>
+<p>Here are the resulting <code>crates/pcb-doc/Cargo.toml</code> and root workspace <code>Cargo.toml</code>:</p>
+<figure>
+  <figcaption>crates/pcb-doc/Cargo.toml</figcaption>
+  <pre><code class="language-toml">[package]
+name = "pcb-doc"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+emath = "0.33"</code></pre>
+</figure>
+<figure>
+  <figcaption>Cargo.toml (Root Workspace &amp; UI Crate)</figcaption>
+  <pre><code class="language-toml">[workspace]
+resolver = "3"
+members = ["crates/pcb-doc"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[package]
+name = "pcb-reviewer"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+eframe = "0.33"
+pcb-doc = { path = "crates/pcb-doc" }
+
+[dev-dependencies]
+egui_kittest = { version = "0.33", features = ["eframe"] }
+
+# Optimize dependencies (like egui/eframe) even in debug builds so our
+# 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
+[profile.dev.package."*"]
+opt-level = 2</code></pre>
+</figure>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 flowchart TD

@@ -36,9 +36,15 @@ _Figure 1.1: How Cargo and `eframe::run_native` initialise your state once, then
 
 ## 2. Creating the Project & Configuring `Cargo.toml`
 
-In Rust, [`cargo new pcb-reviewer`](https://doc.rust-lang.org/cargo/guide/creating-a-new-project.html) generates a binary package with two key files: `Cargo.toml` (the manifest) and `src/main.rs` (the entry point).
+In Rust, [`cargo new pcb-reviewer`](https://doc.rust-lang.org/cargo/guide/creating-a-new-project.html) generates a binary package (`--bin` is the default) with two key files: `Cargo.toml` (the manifest) and `src/main.rs` (the entry point). We then step into the directory and use [`cargo add`](https://doc.rust-lang.org/cargo/commands/cargo-add.html) to pull in `eframe`:{{sidenote:**Tip: Single Dependency Import.** Because `eframe` re-exports `egui` as `eframe::egui`, we only add `eframe` under `[dependencies]`. This guarantees your `egui` types never suffer a version mismatch with `eframe`.}}
 
-Here is the complete `Cargo.toml` for our Schematic & PCB Reviewer:{{sidenote:**Tip: Single Dependency Import.** Because `eframe` re-exports `egui` as `eframe::egui`, we only list `eframe` under `[dependencies]`. This guarantees your `egui` types never suffer a version mismatch with `eframe`.}}
+```console
+cargo new pcb-reviewer
+cd pcb-reviewer
+cargo add eframe
+```
+
+After running `cargo add eframe` and appending a `[profile.dev.package."*"]` optimisation block, here is the resulting `Cargo.toml` for our Schematic & PCB Reviewer:
 
 ```toml
 [package]
@@ -173,7 +179,7 @@ exclude_re = [
 :::verify title="Interactive Lab 1: Crate Setup & Cargo Verification Gate" badge="cargo test + cargo mutants" tier="Tier 2: Unit Tests" caught="1 / 1 (100%)" missed="0 Missed"
 Every lesson includes a **Cargo Verification & Mutation Coverage** gate. Check off each step in your terminal to establish your baseline:
 
-- [ ] **1. Scaffold the binary crate:** Run `cargo new pcb-reviewer && cd pcb-reviewer` and add `eframe = "0.33"` + `[profile.dev.package."*"] opt-level = 2` to `Cargo.toml`.
+- [ ] **1. Scaffold the binary crate:** Run `cargo new pcb-reviewer`, `cd pcb-reviewer`, and `cargo add eframe`, then add `[profile.dev.package."*"] opt-level = 2` to `Cargo.toml`.
 - [ ] **2. Paste `src/main.rs` and verify the unit test:** Run `cargo test` and confirm `test tests::default_enables_physical_layers_and_hides_ratsnest ... ok` passes.
 - [ ] **3. Run your first mutation coverage check:** Install `cargo install --locked cargo-mutants` (once), save `.cargo/mutants.toml` above, and run `cargo mutants`. Confirm it reports `1 mutant tested: 1 caught` (replacing `PcbReviewerApp::reset_layers` with `()`). Try commenting out the three `assert!(app.show_...);` lines in your test to watch that mutant flip from **Caught** to **Missed**!
 :::

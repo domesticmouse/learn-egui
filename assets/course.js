@@ -157,6 +157,9 @@ async function initSyntaxAndDiagrams() {
     await loadScript("https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-toml.min.js");
     await loadScript("https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js");
     await loadScript("https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/keep-markup/prism-keep-markup.min.js");
+    if (window.Prism && window.Prism.languages && window.Prism.languages.bash) {
+      window.Prism.languages.console = window.Prism.languages.bash;
+    }
     if (window.Prism && window.Prism.highlightAll) {
       window.Prism.highlightAll();
     }

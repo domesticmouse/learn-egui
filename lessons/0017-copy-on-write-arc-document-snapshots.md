@@ -57,7 +57,35 @@ flowchart TD
 
 ## Serializing `Arc<T>` with `serde`'s `"rc"` Feature & Property Testing with `proptest`
 
-To keep `BoardModel`'s `#[derive(Serialize, Deserialize)]` working seamlessly across `Arc<...>` fields, we enable `serde = { version = "1.0", features = ["derive", "rc"] }` in `crates/pcb-doc/Cargo.toml`.{{sidenote: **Tier 2 Property-Based Testing (`proptest`):** Unit tests check fixed examples; `proptest!` generates hundreds of randomized `(x, y, comment)` inputs and shrinks any failure to its minimal counterexample.}} We also add `shared_arc_buffers(&self, other: &Self) -> usize` using `Arc::ptr_eq` so both our `proptest!` suite and the `SidePanel::right` UI (`"Shared Arc Buffers: 3 / 4"`) can inspect structural sharing directly.
+To keep `BoardModel`'s `#[derive(Serialize, Deserialize)]` working seamlessly across `Arc<...>` fields, we enable `serde`'s `"rc"` feature and add `proptest` under `[dev-dependencies]` using `cargo add`:{{sidenote: **Tier 2 Property-Based Testing (`proptest`):** Unit tests check fixed examples; `proptest!` generates hundreds of randomized `(x, y, comment)` inputs and shrinks any failure to its minimal counterexample.}}
+
+```console
+cargo add --package pcb-doc serde --features derive,rc
+cargo add --package pcb-doc --dev proptest
+```
+
+Here is the resulting `crates/pcb-doc/Cargo.toml`:
+
+```toml caption="crates/pcb-doc/Cargo.toml"
+[package]
+name = "pcb-doc"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+emath = { version = "0.33", features = ["serde"] }
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+thiserror = "2.0"
+
+[dev-dependencies]
+proptest = "1.11"
+```
+
+We also add `shared_arc_buffers(&self, other: &Self) -> usize` using `Arc::ptr_eq` so both our `proptest!` suite and the `SidePanel::right` UI (`"Shared Arc Buffers: 3 / 4"`) can inspect structural sharing directly.
 
 ```rust caption="Copy-on-Write BoardModel with Arc::make_mut and Arc::ptr_eq in crates/pcb-doc/src/lib.rs"
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -20,9 +20,35 @@ A hardware design review tool is only useful if engineers can save their review 
 
 Because `pcb-doc` (`L1`) owns all domain types, adding persistence requires zero changes to our `egui` rendering code:
 
-1. **Enable `emath`'s `"serde"` feature**: In `crates/pcb-doc/Cargo.toml`, `emath = { version = "0.33", features = ["serde"] }` enables `Serialize` and `Deserialize` on `Pos2`, `Vec2`, and `Rect`.
+1. **Enable `emath`'s `"serde"` feature**: Running `cargo add --package pcb-doc emath --features serde` updates `crates/pcb-doc/Cargo.toml` so `emath = { version = "0.33", features = ["serde"] }` enables `Serialize` and `Deserialize` on `Pos2`, `Vec2`, and `Rect`.
 2. **Define a typed `SessionIoError` with `thiserror`**: Instead of returning opaque strings or panicking on corrupt files, `SessionIoError` models three explicit failure modes: `EmptyBoardId`, `UnsupportedSchemaVersion { found, expected }`, and `MalformedJson(String)`.
 3. **Destructure `ReviewSessionEnvelope` exhaustively**: In `BoardModel::from_session_json`, we unpack `let ReviewSessionEnvelope { schema_version, board_id, board } = ...` *without* `..` so adding any new envelope field in the future triggers a compiler error until validation is wired.
+
+Add the persistence and error-handling dependencies to `pcb-doc` with `cargo add`:
+
+```console
+cargo add --package pcb-doc emath --features serde
+cargo add --package pcb-doc serde --features derive
+cargo add --package pcb-doc serde_json thiserror
+```
+
+Here is the resulting `crates/pcb-doc/Cargo.toml`:
+
+```toml caption="crates/pcb-doc/Cargo.toml"
+[package]
+name = "pcb-doc"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+emath = { version = "0.33", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+```
 
 ```mermaid
 flowchart LR
