@@ -58,6 +58,15 @@ A lesson is the primary artifact you produce: the unit in which knowledge and sk
 
 When teaching a programming language, framework, or tool where Lesson `0002` needs a configured project manifest and entry point, start with a `0001-<dash-case-name>.md` bootstrap lesson covering Cargo package creation (`Cargo.toml` with `eframe = "0.37"` and `[profile.dev.package."*"] opt-level = 2`), `eframe::run_native`, `#[cfg(test)]`, and `.cargo/mutants.toml` setup so subsequent lessons have a concrete, runnable foundation.
 
+### Explaining Code: Block-by-Block Walkthrough Followed by Full Context
+
+When introducing or modifying code in a lesson, use the **Block-by-Block + In-Context** pattern to keep cognitive load low while still giving the learner a copy-pasteable, runnable reference:
+
+1. **Break Out Logical Blocks First (`### Block N: ...`):** Instead of dropping a large file or function all at once and explaining it after the fact, split the new or changed code into small, self-contained blocks (e.g., imports & entry point, state struct definition, trait/method implementation, inline unit tests). For each block:
+   - Show **only the relevant snippet** of code in a fenced `rust` block.
+   - Immediately follow the snippet with a focused bulleted breakdown unpacking the new Rust syntax, types, ownership/borrowing rules, and `egui`/`eframe` API calls in that block.
+2. **Show the Code in Full Context Next (`### Complete ... Listing`):** After walking through the individual blocks, provide the complete source file (such as `src/main.rs`) or the full surrounding module/function in context so the learner can see exactly how the pieces fit together and copy or compare the runnable code without guesswork.
+
 ### Markdown Directives & Frontmatter (`build.py`)
 
 All course pages (`index.md`, `lessons/*.md`, `reference/*.md`) use YAML frontmatter (`title`, `page_title`, `nav_id`, `badge`, `subtitle`, plus `card` metadata for lessons and reference sheets, or `nav_label` for reference sheets) and clean Markdown directives:
@@ -148,7 +157,7 @@ Each lesson should challenge the user "just enough". Determine the next lesson b
 
 ## Knowledge & Skills
 
-- **Knowledge**: Design each lesson around a concrete skill. Present only the knowledge required to acquire that skill, backed by citations to `RESOURCES.md` and `reference/*.html`. Keep cognitive load low during knowledge acquisition.
+- **Knowledge**: Design each lesson around a concrete skill. Present only the knowledge required to acquire that skill, backed by citations to `RESOURCES.md` and `reference/*.html`. Keep cognitive load low during knowledge acquisition by breaking out new code block by block, explaining each snippet in isolation, and then showing the full code in context.
 - **Skills**: Build durability through effortful retrieval and immediate feedback loops:
   - Interactive fill-in-the-blank Rust/`egui` code blocks (using `:::exercise` and Prism `keep-markup`)
   - Multiple-choice retrieval quizzes (`:::quiz`) with immediate feedback. **Quiz rule**: Every option within a quiz question must have the exact same word count (and similar character length), with the correct answer position varied across questions so formatting or length never leaks the answer.
