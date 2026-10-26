@@ -100,7 +100,25 @@ painter.text(
 );</code></pre>
 <h2 id="3-headless-ui-verification-with-egui-kittest-harness">3. Headless UI Verification with <code>egui_kittest::Harness</code></h2>
 <p>So, how do you test a GUI without opening a real OS window and hijacking your mouse cursor?</p>
-<p>Turns out, <code>egui_kittest</code> solves this cleanly by tapping into AccessKit's semantic accessibility node tree. By adding <code>egui_kittest = { version = &quot;0.37&quot;, features = [&quot;eframe&quot;] }</code> under <code>[dev-dependencies]</code>, we can spin up our entire <code>eframe::App</code> headlessly in milliseconds, query widgets by their label, and click buttons directly from <code>cargo test</code>:</p>
+<p>Turns out, <code>egui_kittest</code> solves this cleanly by tapping into AccessKit's semantic accessibility node tree. Add <code>egui_kittest</code> as a development dependency with its <code>eframe</code> feature enabled:</p>
+<pre><code class="language-console">cargo add --dev egui_kittest --features eframe</code></pre>
+<p>Here is the resulting <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[package]
+name = "pcb-reviewer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.37"
+
+[dev-dependencies]
+egui_kittest = { version = "0.37", features = ["eframe"] }
+
+# Optimise dependencies (like egui/eframe) even in debug builds so our
+# 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
+[profile.dev.package."*"]
+opt-level = 2</code></pre>
+<p>With <code>egui_kittest</code> under <code>[dev-dependencies]</code>, we can spin up our entire <code>eframe::App</code> headlessly in milliseconds, query widgets by their label, and click buttons directly from <code>cargo test</code>:</p>
 <pre><code class="language-rust">use egui_kittest::{Harness, kittest::Queryable};
 
 #[test]

@@ -28,6 +28,54 @@ Real-world KiCad `.kicad_pcb` and `.kicad_sch` files store every board outline, 
 
 Instead of hand-rolling fragile index-based character loops that can panic on UTF-8 boundaries or unclosed parentheses, we use **[`nom`](https://docs.rs/nom/latest/nom/)**—Rust's declarative parser combinator library. Every `nom` parser is a pure function `fn(&str) -> IResult<&str, Output>` returning `Ok((remaining_input, parsed_value))` or a structured `Err` without panicking.
 
+Scaffold the standalone `crates/kicad-sexpr` library crate and add `nom`, `thiserror`, and `proptest` with `cargo add`:
+
+```console
+cargo new --lib crates/kicad-sexpr
+cargo add --package kicad-sexpr nom@7.1.3 thiserror
+cargo add --package kicad-sexpr --dev proptest
+cargo add --package pcb-doc --path crates/kicad-sexpr
+```
+
+Here are the resulting `crates/kicad-sexpr/Cargo.toml` and `crates/pcb-doc/Cargo.toml`:
+
+```toml caption="crates/kicad-sexpr/Cargo.toml"
+[package]
+name = "kicad-sexpr"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+nom = "7.1.3"
+thiserror = "2.0"
+
+[dev-dependencies]
+proptest = "1.11"
+```
+
+```toml caption="crates/pcb-doc/Cargo.toml"
+[package]
+name = "pcb-doc"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+emath = { version = "0.37", features = ["serde"] }
+kicad-sexpr = { path = "../kicad-sexpr" }
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+thiserror = "2.0"
+
+[dev-dependencies]
+proptest = "1.11"
+```
+
 ```mermaid
 flowchart LR
     Raw["Raw KiCad .kicad_pcb Text"] --> Trim["parse_sexpr_str(input)<br/>1. Check EmptyInput"]

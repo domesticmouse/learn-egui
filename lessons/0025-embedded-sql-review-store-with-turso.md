@@ -33,6 +33,37 @@ flowchart LR
 
 ## Validating SQL ASTs with `turso_parser` & Enforcing Foreign Keys in `TursoReviewStore`
 
+Add `turso_parser` and the async `tokio` test runtime to `crates/pcb-doc` with `cargo add`:
+
+```console
+cargo add --package pcb-doc turso_parser@=0.8.1
+cargo add --package pcb-doc --dev tokio --features rt,macros
+```
+
+Here is the resulting `crates/pcb-doc/Cargo.toml`:
+
+```toml caption="crates/pcb-doc/Cargo.toml"
+[package]
+name = "pcb-doc"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+emath = { version = "0.37", features = ["serde"] }
+kicad-sexpr = { path = "../kicad-sexpr" }
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+thiserror = "2.0"
+turso_parser = "=0.8.1"
+
+[dev-dependencies]
+proptest = "1.11"
+tokio = { version = "1", features = ["rt", "macros"] }
+```
+
 ```rust caption="Validating SQL statements with turso_parser::parser::Parser in crates/pcb-doc/src/lib.rs"
 use turso_parser::{
     ast::{Cmd, Stmt},

@@ -30,6 +30,39 @@ flowchart LR
 
 ## Implementing `PcbMcpServer` with `#[tool_router]` & `tokio::io::duplex`
 
+Add `rmcp` and promote `tokio` (with `sync` and `io-util` for `tokio::io::duplex`) to `[dependencies]` in `crates/pcb-doc` with `cargo add`:
+
+```console
+cargo add --package pcb-doc rmcp@=3.5.0 --no-default-features --features server,client,macros,schemars,transport-async-rw
+cargo add --package pcb-doc tokio --features rt,macros,sync,io-util
+```
+
+Here is the resulting `crates/pcb-doc/Cargo.toml`:
+
+```toml caption="crates/pcb-doc/Cargo.toml"
+[package]
+name = "pcb-doc"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+emath = { version = "0.37", features = ["serde"] }
+kicad-sexpr = { path = "../kicad-sexpr" }
+rmcp = { version = "=3.5.0", default-features = false, features = ["server", "client", "macros", "schemars", "transport-async-rw"] }
+schemars = "=1.2.2"
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tokio = { version = "1", features = ["rt", "macros", "sync", "io-util"] }
+turso_parser = "=0.8.1"
+
+[dev-dependencies]
+proptest = "1.11"
+```
+
 ```rust caption="PcbMcpServer with #[tool_router], kicad:// resources, and review prompts in crates/pcb-doc/src/lib.rs"
 use rmcp::{
     ClientHandler, Json, ServerHandler, ServiceExt,

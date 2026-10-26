@@ -71,6 +71,32 @@ flowchart LR
   </pre>
 </figure>
 <h2 id="spatial-neighborhood-net-topology-amp-schemars-jsonschema">Spatial Neighborhood, Net Topology &amp; <code>schemars::JsonSchema</code></h2>
+<p>Add <code>schemars</code> to <code>crates/pcb-doc</code> with <code>cargo add</code>:</p>
+<pre><code class="language-console">cargo add --package pcb-doc schemars@=1.2.2</code></pre>
+<p>Here is the resulting <code>crates/pcb-doc/Cargo.toml</code>:</p>
+<figure>
+  <figcaption>crates/pcb-doc/Cargo.toml</figcaption>
+  <pre><code class="language-toml">[package]
+name = "pcb-doc"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+emath = { version = "0.37", features = ["serde"] }
+kicad-sexpr = { path = "../kicad-sexpr" }
+schemars = "=1.2.2"
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+thiserror = "2.0"
+turso_parser = "=0.8.1"
+
+[dev-dependencies]
+proptest = "1.11"
+tokio = { version = "1", features = ["rt", "macros"] }</code></pre>
+</figure>
 <p>By deriving <code>schemars::JsonSchema</code> alongside <code>Serialize</code> and <code>Deserialize</code>, Rust generates a standard JSON Schema 2020-12 specification via <code>schemars::schema_for!(SpatialQueryParams)</code> that MCP servers (<code>rmcp</code>) advertise directly to AI agents:</p>
 <figure>
   <figcaption>Typed spatial, net-topology, and custom DRC queries in crates/pcb-doc/src/lib.rs</figcaption>

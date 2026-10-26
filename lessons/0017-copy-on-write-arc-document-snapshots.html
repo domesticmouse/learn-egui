@@ -97,7 +97,30 @@ flowchart TD
   </pre>
 </figure>
 <h2 id="serializing-arc-lt-t-gt-with-serde-s-quot-rc-quot-feature-amp-property-testing-with-proptest">Serializing <code>Arc&lt;T&gt;</code> with <code>serde</code>'s <code>&quot;rc&quot;</code> Feature &amp; Property Testing with <code>proptest</code></h2>
-<p>To keep <code>BoardModel</code>'s <code>#[derive(Serialize, Deserialize)]</code> working seamlessly across <code>Arc&lt;...&gt;</code> fields, we enable <code>serde = { version = &quot;1.0&quot;, features = [&quot;derive&quot;, &quot;rc&quot;] }</code> in <code>crates/pcb-doc/Cargo.toml</code>.<span class="sidenote-number"></span><span class="sidenote"><strong>Tier 2 Property-Based Testing (<code>proptest</code>):</strong> Unit tests check fixed examples; <code>proptest!</code> generates hundreds of randomized <code>(x, y, comment)</code> inputs and shrinks any failure to its minimal counterexample.</span> We also add <code>shared_arc_buffers(&amp;self, other: &amp;Self) -&gt; usize</code> using <code>Arc::ptr_eq</code> so both our <code>proptest!</code> suite and the <code>Panel::right</code> UI (<code>&quot;Shared Arc Buffers: 3 / 4&quot;</code>) can inspect structural sharing directly.</p>
+<p>To keep <code>BoardModel</code>'s <code>#[derive(Serialize, Deserialize)]</code> working seamlessly across <code>Arc&lt;...&gt;</code> fields, we enable <code>serde</code>'s <code>&quot;rc&quot;</code> feature and add <code>proptest</code> under <code>[dev-dependencies]</code> using <code>cargo add</code>:<span class="sidenote-number"></span><span class="sidenote"><strong>Tier 2 Property-Based Testing (<code>proptest</code>):</strong> Unit tests check fixed examples; <code>proptest!</code> generates hundreds of randomized <code>(x, y, comment)</code> inputs and shrinks any failure to its minimal counterexample.</span></p>
+<pre><code class="language-console">cargo add --package pcb-doc serde --features derive,rc
+cargo add --package pcb-doc --dev proptest</code></pre>
+<p>Here is the resulting <code>crates/pcb-doc/Cargo.toml</code>:</p>
+<figure>
+  <figcaption>crates/pcb-doc/Cargo.toml</figcaption>
+  <pre><code class="language-toml">[package]
+name = "pcb-doc"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+emath = { version = "0.37", features = ["serde"] }
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+thiserror = "2.0"
+
+[dev-dependencies]
+proptest = "1.11"</code></pre>
+</figure>
+<p>We also add <code>shared_arc_buffers(&amp;self, other: &amp;Self) -&gt; usize</code> using <code>Arc::ptr_eq</code> so both our <code>proptest!</code> suite and the <code>Panel::right</code> UI (<code>&quot;Shared Arc Buffers: 3 / 4&quot;</code>) can inspect structural sharing directly.</p>
 <figure>
   <figcaption>Copy-on-Write BoardModel with Arc::make_mut and Arc::ptr_eq in crates/pcb-doc/src/lib.rs</figcaption>
   <pre><code class="language-rust">#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
