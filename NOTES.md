@@ -5,6 +5,7 @@
   - Always use **Prism.js** (`<pre><code class="language-rust">`, `language-toml`, `language-bash`, `language-console`, etc.) for syntax highlighting across all lessons and reference documents.
   - Always use **Mermaid.js** (`<pre class="mermaid">`) for architecture, lifecycle, and flow diagrams (avoid ASCII art diagrams).
   - **Adding Dependencies (`cargo add` + `Cargo.toml`)**: Whenever a lesson introduces new crate dependencies or sub-crates, show the `cargo add` (and `cargo new`) CLI commands first, followed by the resulting `Cargo.toml` manifest.
+  - **Code Explanations**: Prefer a block-by-block walkthrough showing just the relevant block of code with detailed explanations, followed by the complete source file listing.
 - **Testing & Mutation Coverage Preference**:
   - Integrate testing gradually across the **entire narrative arc** (`0001`–`0030`+), not as an isolated module near the end.
   - **Every lesson** must include concrete **Cargo Verification Prompts** (`cargo test` + `cargo mutants`) so the learner continuously verifies new code and monitors real assertion coverage via mutation testing (`Caught` vs. `Missed` mutants).

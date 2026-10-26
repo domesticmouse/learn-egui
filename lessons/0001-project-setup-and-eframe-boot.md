@@ -63,9 +63,126 @@ opt-level = 2
 
 Now, those last three lines ([Cargo Profile Overrides](https://doc.rust-lang.org/cargo/reference/profiles.html#overrides)) are doing a lot of heavy lifting. If you run a 2D CAD canvas in a stock Rust debug build (`opt-level = 0`), software rasterising and tessellation can feel like wading through treacle. By setting `opt-level = 2` on `package."*"`, Cargo compiles third-party crates once at near-release speed so our viewport stays locked at 60 FPS, while our own edits in `src/main.rs` still recompile in under a second. Best of both worlds.
 
-## 3. Anatomy of `src/main.rs`
+## 3. Anatomy of `src/main.rs`: Block by Block
 
-So, let's look at the complete, runnable `src/main.rs` that hosts our `PcbReviewerApp` struct:{{sidenote:In Rust, [`Result<T, E>`](https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html) represents an operation that either succeeds (`Ok(T)`) or fails (`Err(E)`). `eframe::Result` is a type alias for `Result<(), eframe::Error>`.}}
+Rather than staring at a 65-line wall of Rust and trying to decode everything at once, let's walk through `src/main.rs` one logical block at a time. Once we've unpacked all five pieces, we'll put the complete file together at the end of this section.
+
+### Block 1: Importing `egui` & Booting the Native Window (`fn main`)
+
+```rust
+use eframe::egui;
+
+fn main() -> eframe::Result {
+    let mut options = eframe::NativeOptions::default();
+    options.viewport = egui::ViewportBuilder::default()
+        .with_inner_size([1024.0, 720.0]);
+
+    eframe::run_native(
+        "Schematic & PCB Design Reviewer",
+        options,
+        Box::new(|_cc| Ok(Box::new(PcbReviewerApp::default()))),
+    )
+}
+```
+
+- **`use eframe::egui;`**: Instead of pulling in a separate `egui` crate in `Cargo.toml`, we import `eframe`'s re-exported `egui` module so our UI code and window runner are guaranteed to use the exact same `egui` version.
+- **`fn main() -> eframe::Result`**: Every Rust binary starts at `fn main()`. Returning `eframe::Result` allows `eframe` to report any window-creation or GPU initialisation errors cleanly back to the OS.{{sidenote:In Rust, [`Result<T, E>`](https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html) represents an operation that either succeeds (`Ok(T)`) or fails (`Err(E)`). `eframe::Result` is a type alias for `Result<(), eframe::Error>`.}}
+- **Configuring `NativeOptions` & `ViewportBuilder`**: In Rust, variables are immutable by default, so we write `let mut options` to make the struct mutable. We then replace `options.viewport` using the **builder pattern**: `egui::ViewportBuilder::default().with_inner_size([1024.0, 720.0])` starts from standard window defaults and chains `.with_inner_size(...)` to request a `1024×720` logical-point canvas.
+- **`eframe::run_native(...)`**: Notice there is **no semicolon** after `eframe::run_native(...)`—in Rust, the final expression of a function without a trailing semicolon is automatically its return value. It takes three arguments:
+  1. `"Schematic & PCB Design Reviewer"`: The native OS window title.
+  2. `options`: The `NativeOptions` we just configured.
+  3. `Box::new(|_cc| Ok(Box::new(PcbReviewerApp::default())))`: The **app creator closure**. [`eframe::run_native`](https://docs.rs/eframe/latest/eframe/fn.run_native.html) invokes this factory closure _once_ after the GPU and window context (`_cc: &CreationContext`) are ready. Inside, we construct `PcbReviewerApp::default()`, allocate it on the heap with [`Box::new`](https://doc.rust-lang.org/book/ch15-01-box.html), wrap it in `Ok(...)`, and hand ownership to `eframe`.
+
+### Block 2: Defining Application State (`pub struct PcbReviewerApp`)
+
+```rust
+pub struct PcbReviewerApp {
+    pub show_top_copper: bool,
+    pub show_bottom_copper: bool,
+    pub show_silkscreen: bool,
+    pub show_ratsnest: bool,
+}
+```
+
+- **Data-Only `struct`**: Rust doesn't have classes or inheritance hierarchies. Instead, you group your application's persistent state into a `struct` and attach behaviour via separate `impl` blocks.
+- **Why State Lives Here**: Because `egui` is an immediate-mode GUI, widgets don't secretly store their own checkbox states between frames. `PcbReviewerApp` is the single source of truth that survives from frame to frame.
+- **`pub` Visibility**: Marking the struct and its four `bool` fields `pub` (public) allows external modules and test harnesses to inspect or toggle our four PCB layers directly.
+
+### Block 3: Initialising Default Layer Visibility (`impl Default` & `reset_layers`)
+
+```rust
+impl Default for PcbReviewerApp {
+    fn default() -> Self {
+        let mut app = Self {
+            show_top_copper: false,
+            show_bottom_copper: false,
+            show_silkscreen: false,
+            show_ratsnest: false,
+        };
+        app.reset_layers();
+        app
+    }
+}
+
+impl PcbReviewerApp {
+    pub fn reset_layers(&mut self) {
+        self.show_top_copper = true;
+        self.show_bottom_copper = true;
+        self.show_silkscreen = true;
+        self.show_ratsnest = false;
+    }
+}
+```
+
+- **Why Custom `impl Default` Instead of `#[derive(Default)]`?**: Rust lets you slap `#[derive(Default)]` above a struct, which happily sets every `bool` field to `false`. Problem is, opening a PCB viewer where every copper and silkscreen layer is switched off looks suspiciously like a broken app! Implementing the [`Default`](https://doc.rust-lang.org/std/default/trait.Default.html) trait by hand lets us choose sensible startup defaults (`Self` is just an alias for the type being implemented, `PcbReviewerApp`).
+- **Delegating to `reset_layers(&mut self)`**: Inside `fn default()`, we create `let mut app`, call `app.reset_layers()`, and return `app` (again, no trailing semicolon). The `impl PcbReviewerApp` block defines an inherent method where `&mut self` grants mutable borrow access to the struct's fields so it can enable the three physical board layers (`show_top_copper`, `show_bottom_copper`, `show_silkscreen`) while keeping the logical `show_ratsnest` airwires hidden until requested.
+- **Why Extract `reset_layers`?**: The reason we pull `reset_layers(&mut self)` out into its own method is also interesting: `cargo-mutants` deliberately skips mutating `impl Default` blocks directly (since replacing `Default::default()` in generic code can cause infinite recursion). Extracting a helper method lets both our future "Reset Layers" UI button and our mutation runner exercise the exact same initialisation code.
+
+### Block 4: Implementing the Frame Loop (`impl eframe::App`)
+
+```rust
+impl eframe::App for PcbReviewerApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Lesson 0002's SidePanel and CentralPanel code lives right here!
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("PCB Viewport Ready");
+        });
+    }
+}
+```
+
+- **`impl eframe::App for PcbReviewerApp`**: In Rust, **traits** work like interfaces. Implementing `eframe::App` is the contract that connects our `PcbReviewerApp` struct to `eframe`'s event and render loop.
+- **`fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame)`**: `eframe` calls this method on every repaint:
+  - `&mut self`: Gives us mutable access to our `PcbReviewerApp` state so checkboxes and buttons can modify fields in place.
+  - `ctx: &egui::Context`: The handle to `egui`'s central context for the current frame, which tracks input events, styling, fonts, and panel layout across the window.
+  - `_frame: &mut eframe::Frame`: Provides integration hooks into the surrounding `eframe` shell. Prefixing the parameter name with an underscore (`_frame`) tells the Rust compiler we intentionally aren't using it yet, keeping our build free of unused-variable warnings.
+- **`egui::CentralPanel::default().show(ctx, |ui| { ... })`**: Claims the main canvas area of the window and invokes our closure `|ui| { ... }`, passing in a `&mut egui::Ui` region builder where `ui.heading("PCB Viewport Ready")` emits our startup heading.
+
+### Block 5: Inline Unit Tests (`#[cfg(test)] mod tests`)
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_enables_physical_layers_and_hides_ratsnest() {
+        let app = PcbReviewerApp::default();
+        assert!(app.show_top_copper);
+        assert!(app.show_bottom_copper);
+        assert!(app.show_silkscreen);
+        assert!(!app.show_ratsnest);
+    }
+}
+```
+
+- **`#[cfg(test)] mod tests`**: Rust makes unit testing frictionless by letting you place a `tests` submodule right at the bottom of the file you are testing. The `#[cfg(test)]` conditional compilation attribute tells `rustc` to compile this block _only_ when you run `cargo test` ([Rust Book §11.1](https://doc.rust-lang.org/book/ch11-01-writing-tests.html)), so zero test code bloats your production binary.
+- **`use super::*;`**: Brings everything from the parent file (`PcbReviewerApp` and its methods) into scope inside the `tests` submodule.
+- **`#[test]` and `assert!`**: Marking a function with `#[test]` registers it with Cargo's test runner. Inside, we construct `PcbReviewerApp::default()` and use `assert!(...)` (and `assert!(!...)` with the logical NOT operator `!`) to verify that every physical layer starts enabled and the ratsnest starts hidden.
+
+### Complete `src/main.rs` Listing
+
+Putting all five blocks together, here is the complete, runnable `src/main.rs`:
 
 ```rust
 use eframe::egui;
@@ -134,12 +251,6 @@ mod tests {
     }
 }
 ```
-
-### Three Rust Details Worth Unpacking
-
-1. **Builder Pattern on `ViewportBuilder`:** When configuring `eframe::NativeOptions::default()`, we customise `options.viewport` with `egui::ViewportBuilder::default().with_inner_size([1024.0, 720.0])` to request a `1024×720` logical-point window while keeping all other window options at their defaults.
-2. **Custom `impl Default` Delegating to `reset_layers(&mut self)`:** Rust lets you slap `#[derive(Default)]` on a struct, which happily sets every `bool` field to `false`. Problem is, opening a PCB viewer where every copper and silkscreen layer is switched off looks suspiciously like a broken app. So, we write an explicit `impl Default for PcbReviewerApp` block that calls `app.reset_layers()`. The reason we pull `reset_layers(&mut self)` out into its own method is also interesting: `cargo-mutants` skips `impl Default` blocks directly to avoid infinite recursion, so extracting a helper method lets our mutation runner actually verify our initialisation logic.
-3. **The App Creator Closure (`Box::new(|_cc| Ok(Box::new(...)))`):** [`eframe::run_native`](https://docs.rs/eframe/latest/eframe/fn.run_native.html) takes a factory closure that runs _once_ after the GPU context (`_cc: &CreationContext`) is ready, allocating your `PcbReviewerApp` on the heap ([`Box::new`](https://doc.rust-lang.org/book/ch15-01-box.html)) and handing ownership to `eframe`.
 
 ## 4. Sanity-Saving Verification with `cargo-mutants`
 
