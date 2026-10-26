@@ -60,14 +60,14 @@
   <pre class="mermaid">
 flowchart TD
     State["Persistent Rust Struct&lt;br/&gt;struct PcbReviewerApp { show_top_copper: bool, ... }"]
-    State --&gt;|"1. eframe calls update(&amp;mut self, ctx, frame)"| Side["SidePanel::left('layers').show(ctx, |ui| { ... })"]
+    State --&gt;|"1. eframe calls ui(&amp;mut self, ui, frame)"| Side["Panel::left('layers').show(ui, |ui| { ... })"]
     Side --&gt; Checkbox["ui.checkbox(&amp;mut self.show_top_copper, 'Top Copper (F.Cu)')"]
-    Checkbox --&gt;|"Reads bool to draw box&lt;br/&gt;Flips bool in-place if clicked"| Central["CentralPanel::default().show(ctx, |ui| { ... })"]
+    Checkbox --&gt;|"Reads bool to draw box&lt;br/&gt;Flips bool in-place if clicked"| Central["CentralPanel::default().show(ui, |ui| { ... })"]
     Central --&gt;|"2. Reads updated self.show_top_copper"| Paint["Paints visible F.Cu traces &amp; pads for this frame"]
-    Paint --&gt;|"3. End of update(): borrow released"| State
+    Paint --&gt;|"3. End of ui(): borrow released"| State
   </pre>
 </figure>
-<p><em>The <code>eframe::App::update</code> lifecycle across a single frame.</em></p>
+<p><em>The <code>eframe::App::ui</code> lifecycle across a single frame.</em></p>
 <h2 id="2-complete-runnable-skeleton-src-main-rs">2. Complete Runnable Skeleton (<code>src/main.rs</code>)</h2>
 <pre><code class="language-rust">use eframe::egui;
 
@@ -129,9 +129,9 @@ impl PcbReviewerApp {
 
 // 2. Implement eframe::App to define the per-frame UI
 impl eframe::App for PcbReviewerApp {
-    fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame) {
-        // Always declare SidePanels / TopBottomPanels BEFORE CentralPanel!
-        egui::SidePanel::left("layer_panel").show(ctx, |ui| {
+    fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame) {
+        // Always declare edge Panels (left/right/top/bottom) BEFORE CentralPanel!
+        egui::Panel::left("layer_panel").show(ui, |ui| {
             ui.heading("PCB Layers");
             ui.checkbox(&amp;mut self.show_top_copper, "Top Copper (F.Cu)");
             ui.checkbox(&amp;mut self.show_bottom_copper, "Bottom Copper (B.Cu)");
@@ -147,7 +147,7 @@ impl eframe::App for PcbReviewerApp {
             }
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("PCB Viewport Ready");
         });
     }
@@ -174,8 +174,8 @@ impl eframe::App for PcbReviewerApp {
 </tr>
 <tr>
 <td><strong>Panel ordering rule</strong></td>
-<td><code>SidePanel</code> first, <code>CentralPanel</code> last</td>
-<td><code>CentralPanel</code> claims all remaining area left over in <code>ctx</code> after outer panels allocate their widths/heights (<a href="https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html">docs.rs</a>).</td>
+<td><code>Panel</code> first, <code>CentralPanel</code> last</td>
+<td><code>CentralPanel</code> claims all remaining area left over in the root <code>Ui</code> after outer panels allocate their widths/heights (<a href="https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html">docs.rs</a>).</td>
 </tr>
 </tbody>
 </table>

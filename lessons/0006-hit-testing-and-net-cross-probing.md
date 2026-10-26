@@ -1,6 +1,6 @@
 ---
 title: "Lesson 0006: Hit-Testing & Net Cross-Probing (`Option<NetId>`)"
-subtitle: Hovering and clicking PCB pads in physical world coordinates to highlight connected nets and drive the `SidePanel` Net Inspector
+subtitle: Hovering and clicking PCB pads in physical world coordinates to highlight connected nets and drive the `Panel::left` Net Inspector
 lesson_num: "0006"
 act_badge: "Act I Finale: The 2D CAD Canvas & Viewport"
 card:
@@ -15,7 +15,7 @@ card:
 
 Drawing a PCB in physical millimetres is a great start. Being able to hover over an SMD pad, see which electrical net it belongs to, and watch every connected trace light up across the board is when it starts feeling like a real CAD tool.
 
-In [Lesson 0005](./0005-modeling-layers-traces-and-footprints.html), we rendered our PCB traces in deterministic back-to-front Z-order. Now, we complete **Act I** by making the 2D board interactive: when you hover over or click an SMD pad on the canvas, our app converts the mouse pointer from screen pixels back into physical millimetres (`screen_to_world`), checks which visible pad contains that coordinate, highlights every trace and pad on that net across all layers, and updates the left `SidePanel`.
+In [Lesson 0005](./0005-modeling-layers-traces-and-footprints.html), we rendered our PCB traces in deterministic back-to-front Z-order. Now, we complete **Act I** by making the 2D board interactive: when you hover over or click an SMD pad on the canvas, our app converts the mouse pointer from screen pixels back into physical millimetres (`screen_to_world`), checks which visible pad contains that coordinate, highlights every trace and pad on that net across all layers, and updates the left `Panel`.
 
 ```mermaid
 flowchart LR
@@ -23,7 +23,7 @@ flowchart LR
     World -->|"hit_test_net_at_mm(world_mm)"| Hit["hovered_net: Option<NetId><br/>Some(NetId(1)) or None"]
     Hit -->|"if response.clicked()"| Sel["selected_net = hovered_net"]
     Sel --> Active["active_net()<br/>self.selected_net.or(self.hovered_net)"]
-    Active --> Highlight["Highlights NET_1 pads & traces on canvas<br/>+ Updates SidePanel Net Inspector"]
+    Active --> Highlight["Highlights NET_1 pads & traces on canvas<br/>+ Updates Panel::left Net Inspector"]
 ```
 _Figure 6.1: Pointer screen coordinates are inverted into physical millimetres, hit-tested against visible pads in Z-order, and stored as `Option<NetId>`_
 
@@ -86,7 +86,7 @@ impl PcbReviewerApp {
 
 ## 3. Unpacking `Option<NetId>` with `if let Some(...)`
 
-So, inside the left `SidePanel`, we use [`if let Some(net) = self.active_net()`](https://doc.rust-lang.org/book/ch06-03-if-let.html) to display the active net's name and a **"Clear Selection"** button only when a net is actually hovered or selected:
+So, inside the left `Panel`, we use [`if let Some(net) = self.active_net()`](https://doc.rust-lang.org/book/ch06-03-if-let.html) to display the active net's name and a **"Clear Selection"** button only when a net is actually hovered or selected:
 
 ```rust
 ui.heading("Net Inspector");
@@ -110,7 +110,7 @@ pub fn active_net(&self) -> Option<NetId> {
     self.selected_net.{{blank:or(self.hovered_net)|Call `or(self.hovered_net)` on `self.selected_net`.|/* 1: fallback hover */|175px}}
 }
 
-// Inside PcbReviewerApp::update:
+// Inside PcbReviewerApp::ui:
 let (response, painter) =
     ui.allocate_painter(ui.available_size(), Sense::{{blank:click_and_drag()|Use the `Sense` constructor that listens for both clicks and drags (`click_and_drag()`).|/* 2: click+drag */|165px}});
 

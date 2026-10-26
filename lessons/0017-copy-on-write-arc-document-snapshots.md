@@ -57,7 +57,7 @@ flowchart TD
 
 ## Serializing `Arc<T>` with `serde`'s `"rc"` Feature & Property Testing with `proptest`
 
-To keep `BoardModel`'s `#[derive(Serialize, Deserialize)]` working seamlessly across `Arc<...>` fields, we enable `serde = { version = "1.0", features = ["derive", "rc"] }` in `crates/pcb-doc/Cargo.toml`.{{sidenote: **Tier 2 Property-Based Testing (`proptest`):** Unit tests check fixed examples; `proptest!` generates hundreds of randomized `(x, y, comment)` inputs and shrinks any failure to its minimal counterexample.}} We also add `shared_arc_buffers(&self, other: &Self) -> usize` using `Arc::ptr_eq` so both our `proptest!` suite and the `SidePanel::right` UI (`"Shared Arc Buffers: 3 / 4"`) can inspect structural sharing directly.
+To keep `BoardModel`'s `#[derive(Serialize, Deserialize)]` working seamlessly across `Arc<...>` fields, we enable `serde = { version = "1.0", features = ["derive", "rc"] }` in `crates/pcb-doc/Cargo.toml`.{{sidenote: **Tier 2 Property-Based Testing (`proptest`):** Unit tests check fixed examples; `proptest!` generates hundreds of randomized `(x, y, comment)` inputs and shrinks any failure to its minimal counterexample.}} We also add `shared_arc_buffers(&self, other: &Self) -> usize` using `Arc::ptr_eq` so both our `proptest!` suite and the `Panel::right` UI (`"Shared Arc Buffers: 3 / 4"`) can inspect structural sharing directly.
 
 ```rust caption="Copy-on-Write BoardModel with Arc::make_mut and Arc::ptr_eq in crates/pcb-doc/src/lib.rs"
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

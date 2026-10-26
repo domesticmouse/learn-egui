@@ -330,7 +330,7 @@ fn headless_hotkeys_switch_tools_and_fit_viewport() {
             "question": "Why is `enum ActiveTool { Select, Measure { ... } }` safer than keeping separate boolean and coordinate fields?",
             "options": [
                   "Booleans allocate heap memory during frames",
-                  "Enums disable borrow checking inside update",
+                  "Enums disable borrow checking inside frames",
                   "Structs forbid storing Pos2 fields directly",
                   "Ruler points exist exclusively when enabled"
             ],

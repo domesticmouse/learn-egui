@@ -193,7 +193,7 @@ mod tests {
             Err("pcb-doc")
         );
         assert_eq!(
-            validate_l0_standalone_manifest("[dependencies.egui]\nversion = \"0.33\""),
+            validate_l0_standalone_manifest("[dependencies.egui]\nversion = \"0.37\""),
             Err("egui")
         );
     }

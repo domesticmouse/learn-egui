@@ -9,13 +9,13 @@ page_type: reference
 ```mermaid
 flowchart TD
     State["Persistent Rust Struct<br/>struct PcbReviewerApp { show_top_copper: bool, ... }"]
-    State -->|"1. eframe calls update(&mut self, ctx, frame)"| Side["SidePanel::left('layers').show(ctx, |ui| { ... })"]
+    State -->|"1. eframe calls ui(&mut self, ui, frame)"| Side["Panel::left('layers').show(ui, |ui| { ... })"]
     Side --> Checkbox["ui.checkbox(&mut self.show_top_copper, 'Top Copper (F.Cu)')"]
-    Checkbox -->|"Reads bool to draw box<br/>Flips bool in-place if clicked"| Central["CentralPanel::default().show(ctx, |ui| { ... })"]
+    Checkbox -->|"Reads bool to draw box<br/>Flips bool in-place if clicked"| Central["CentralPanel::default().show(ui, |ui| { ... })"]
     Central -->|"2. Reads updated self.show_top_copper"| Paint["Paints visible F.Cu traces & pads for this frame"]
-    Paint -->|"3. End of update(): borrow released"| State
+    Paint -->|"3. End of ui(): borrow released"| State
 ```
-_The `eframe::App::update` lifecycle across a single frame._
+_The `eframe::App::ui` lifecycle across a single frame._
 
 ## 2. Complete Runnable Skeleton (`src/main.rs`)
 
@@ -80,9 +80,9 @@ impl PcbReviewerApp {
 
 // 2. Implement eframe::App to define the per-frame UI
 impl eframe::App for PcbReviewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Always declare SidePanels / TopBottomPanels BEFORE CentralPanel!
-        egui::SidePanel::left("layer_panel").show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Always declare edge Panels (left/right/top/bottom) BEFORE CentralPanel!
+        egui::Panel::left("layer_panel").show(ui, |ui| {
             ui.heading("PCB Layers");
             ui.checkbox(&mut self.show_top_copper, "Top Copper (F.Cu)");
             ui.checkbox(&mut self.show_bottom_copper, "Bottom Copper (B.Cu)");
@@ -98,7 +98,7 @@ impl eframe::App for PcbReviewerApp {
             }
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("PCB Viewport Ready");
         });
     }
@@ -111,4 +111,4 @@ impl eframe::App for PcbReviewerApp {
 | --- | --- | --- |
 | **Two-way boolean toggle** | `ui.checkbox(&mut self.flag, "Label")` | Borrows `self.flag` mutably for the duration of the call; flips the boolean if clicked and returns a `Response`. |
 | **Momentary action button** | `if ui.button("Reset").clicked() { ... }` | Buttons don't store a boolean; they return a `Response` whose `.clicked()` method is `true` on the frame the click occurred. |
-| **Panel ordering rule** | `SidePanel` first, `CentralPanel` last | `CentralPanel` claims all remaining area left over in `ctx` after outer panels allocate their widths/heights ([docs.rs](https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html)). |
+| **Panel ordering rule** | `Panel` first, `CentralPanel` last | `CentralPanel` claims all remaining area left over in the root `Ui` after outer panels allocate their widths/heights ([docs.rs](https://docs.rs/egui/latest/egui/containers/panel/struct.CentralPanel.html)). |

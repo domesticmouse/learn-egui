@@ -6,6 +6,6 @@ copy_target = true
 # introduces headless UI testing with egui_kittest.
 exclude_re = [
     "replace main",
-    "<impl eframe::App for PcbReviewerApp>::update",
+    "<impl eframe::App for PcbReviewerApp>::ui",
     "PcbReviewerApp::paint_static_board",
 ]

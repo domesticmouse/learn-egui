@@ -62,19 +62,19 @@
 <p>Turns out, Emil Ernerfeldt's <code>egui</code> crate doesn't actually open OS windows or talk directly to Metal, Vulkan, or OpenGL.<span class="sidenote-number"></span><span class="sidenote">Because <a href="https://docs.rs/egui/latest/egui/"><code>egui</code></a> only takes input events and outputs 2D triangles and textures, it can be embedded inside game engines, custom CAD renderers, or headless test runners.</span></p>
 <ul>
 <li><strong><code>egui</code> (The UI Core):</strong> Computes widget layouts, processes pointer/keyboard state, and generates 2D vector shapes for a single frame.</li>
-<li><strong><code>eframe</code> (The App Shell):</strong> The official framework wrapper (<a href="https://docs.rs/eframe/latest/eframe/"><code>docs.rs/eframe</code></a>) that creates a native desktop window (or WebAssembly canvas), initialises the GPU painter, and calls your app's <code>update()</code> method on every repaint.</li>
+<li><strong><code>eframe</code> (The App Shell):</strong> The official framework wrapper (<a href="https://docs.rs/eframe/latest/eframe/"><code>docs.rs/eframe</code></a>) that creates a native desktop window (or WebAssembly canvas), initialises the GPU painter, and calls your app's <code>ui()</code> method on every repaint.</li>
 </ul>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 flowchart LR
-    Cargo["Cargo.toml&lt;br/&gt;(eframe = 0.33)"] --&gt; Main["fn main()&lt;br/&gt;eframe::run_native(...)"]
+    Cargo["Cargo.toml&lt;br/&gt;(eframe = 0.37)"] --&gt; Main["fn main()&lt;br/&gt;eframe::run_native(...)"]
     Main --&gt;|"Runs once at startup"| Init["PcbReviewerApp::default()&lt;br/&gt;(Initialises struct state)"]
     Init --&gt; Loop["eframe Event &amp; Render Loop"]
-    Loop --&gt;|"Calls every frame (~60 Hz)"| Update["impl eframe::App for PcbReviewerApp&lt;br/&gt;fn update(&amp;mut self, ctx, frame)"]
+    Loop --&gt;|"Calls every frame (~60 Hz)"| Update["impl eframe::App for PcbReviewerApp&lt;br/&gt;fn ui(&amp;mut self, ui, frame)"]
     Update --&gt;|"Emits 2D shapes"| Loop
   </pre>
 </figure>
-<p><em>Figure 1.1: How Cargo and <code>eframe::run_native</code> initialise your state once, then drive the Lesson 0002 <code>update()</code> loop every frame.</em></p>
+<p><em>Figure 1.1: How Cargo and <code>eframe::run_native</code> initialise your state once, then drive the Lesson 0002 <code>ui()</code> loop every frame.</em></p>
 <h2 id="2-creating-the-project-amp-configuring-cargo-toml">2. Creating the Project &amp; Configuring <code>Cargo.toml</code></h2>
 <p>In Rust, <a href="https://doc.rust-lang.org/cargo/guide/creating-a-new-project.html"><code>cargo new pcb-reviewer</code></a> generates a binary package with two key files: <code>Cargo.toml</code> (the manifest) and <code>src/main.rs</code> (the entry point).</p>
 <p>Here is the complete <code>Cargo.toml</code> for our Schematic &amp; PCB Reviewer:<span class="sidenote-number"></span><span class="sidenote"><strong>Tip: Single Dependency Import.</strong> Because <code>eframe</code> re-exports <code>egui</code> as <code>eframe::egui</code>, we only list <code>eframe</code> under <code>[dependencies]</code>. This guarantees your <code>egui</code> types never suffer a version mismatch with <code>eframe</code>.</span></p>
@@ -84,7 +84,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-eframe = "0.33"
+eframe = "0.37"
 
 # Optimise dependencies (like egui/eframe) even in debug builds so our
 # 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
@@ -137,9 +137,9 @@ impl PcbReviewerApp {
 }
 
 impl eframe::App for PcbReviewerApp {
-    fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame) {
-        // Lesson 0002's SidePanel and CentralPanel code lives right here!
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame) {
+        // Lesson 0002's Panel::left and CentralPanel code lives right here!
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("PCB Viewport Ready");
         });
     }
@@ -184,7 +184,7 @@ copy_target = true
 # introduces headless UI testing with egui_kittest.
 exclude_re = [
     "replace main",
-    "&lt;impl eframe::App for PcbReviewerApp&gt;::update",
+    "&lt;impl eframe::App for PcbReviewerApp&gt;::ui",
 ]</code></pre>
 </div>
 
@@ -212,7 +212,7 @@ exclude_re = [
         <li>
           <input type="checkbox" id="verify-1">
           <label for="verify-1">
-            <strong>1. Scaffold the binary crate:</strong> Run <code>cargo new pcb-reviewer &amp;&amp; cd pcb-reviewer</code> and add <code>eframe = &quot;0.33&quot;</code> + <code>[profile.dev.package.&quot;*&quot;] opt-level = 2</code> to <code>Cargo.toml</code>.
+            <strong>1. Scaffold the binary crate:</strong> Run <code>cargo new pcb-reviewer &amp;&amp; cd pcb-reviewer</code> and add <code>eframe = &quot;0.37&quot;</code> + <code>[profile.dev.package.&quot;*&quot;] opt-level = 2</code> to <code>Cargo.toml</code>.
           </label>
         </li>
         <li>
@@ -248,7 +248,7 @@ fn main() -&gt; eframe::Result {
 }
 
 impl <input id="ex-blank-3" class="code-challenge-input" style="width:145px;" placeholder="/* 3: trait */" autocomplete="off"> for PcbReviewerApp {
-    fn update(&amp;mut self, ctx: &amp;egui::Context, _frame: &amp;mut eframe::Frame) {
+    fn ui(&amp;mut self, ui: &amp;mut egui::Ui, _frame: &amp;mut eframe::Frame) {
         // Frame loop body
     }
 }</code></pre>
@@ -275,7 +275,7 @@ impl <input id="ex-blank-3" class="code-challenge-input" style="width:145px;" pl
 Compare the minimal <code>eframe::run_native</code> example in the official docs with our <code>PcbReviewerApp</code> skeleton above.
 </div>
 <div class="teacher-prompt-box">
-  <strong>Next Step &amp; Questions:</strong> Have any questions about <code>Cargo.toml</code>, <code>Box::new</code>, or how <code>eframe::run_native</code> hands off to <code>update()</code>? Ask me in chat! Otherwise, click straight through to <a href="./0002-the-immediate-mode-loop.html"><strong>Lesson 0002: The Immediate-Mode Loop &amp; Mutable State (<code>&amp;mut</code>)</strong></a> to build the interactive PCB Layer Inspector inside <code>update()</code>.
+  <strong>Next Step &amp; Questions:</strong> Have any questions about <code>Cargo.toml</code>, <code>Box::new</code>, or how <code>eframe::run_native</code> hands off to <code>ui()</code>? Ask me in chat! Otherwise, click straight through to <a href="./0002-the-immediate-mode-loop.html"><strong>Lesson 0002: The Immediate-Mode Loop &amp; Mutable State (<code>&amp;mut</code>)</strong></a> to build the interactive PCB Layer Inspector inside <code>ui()</code>.
 </div>
 </div>
     </article>
@@ -309,7 +309,7 @@ Compare the minimal <code>eframe::run_native</code> example in the official docs
           inputId: "ex-blank-3",
           accepted: ["eframe::App"],
           getErrorHint: (val) =>
-            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Which trait from <code>eframe</code> defines the per-frame <code>update</code> method?",
+            `<strong>Blank 3:</strong> You wrote <code>${val || "(empty)"}</code>. ` + "Which trait from <code>eframe</code> defines the per-frame <code>ui</code> method?",
         }
       ],
       hintMessage: "<strong>Hints:</strong> (1) Re-export <code>egui</code> via <code>use eframe::egui;</code>. (2) Construct initial state with <code>default()</code>. (3) Implement <code>eframe::App</code>.",
@@ -350,8 +350,8 @@ Compare the minimal <code>eframe::run_native</code> example in the official docs
                   "Once during startup to initialise root state"
             ],
             "correctIndex": 3,
-            "explanation": "`eframe::run_native` invokes the creation closure once at startup after creating the window and GPU context, constructing your `PcbReviewerApp` state before the `update()` loop begins.",
-            "wrongHint": "Contrast `PcbReviewerApp::default()` in `run_native` with `fn update(&mut self, ...)`."
+            "explanation": "`eframe::run_native` invokes the creation closure once at startup after creating the window and GPU context, constructing your `PcbReviewerApp` state before the `ui()` loop begins.",
+            "wrongHint": "Contrast `PcbReviewerApp::default()` in `run_native` with `fn ui(&mut self, ...)`."
       }
 ]);
   </script>

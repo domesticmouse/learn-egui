@@ -191,7 +191,7 @@ if (document.readyState === "loading") {
 
 /**
  * 1. Immediate-Mode PCB Layer Frame Simulator
- * Demonstrates how `eframe::App::update(&mut self, ctx, frame)` reads `self`,
+ * Demonstrates how `eframe::App::ui(&mut self, ui, frame)` reads `self`,
  * handles widget interaction via `&mut`, and emits draw commands every frame.
  */
 function initPcbLayerSimulator(containerId) {
@@ -225,10 +225,10 @@ function initPcbLayerSimulator(containerId) {
     // Update frame counter badge
     const badgeEl = root.querySelector("[data-role='frame-badge']");
     if (badgeEl) {
-      badgeEl.textContent = `Frame #${state.frameCount} • update(&mut self, ctx, frame)`;
+      badgeEl.textContent = `Frame #${state.frameCount} • ui(&mut self, ui, frame)`;
     }
 
-    // Update checkboxes in mock egui SidePanel
+    // Update checkboxes in mock egui Panel::left
     const syncCheck = (key, prop) => {
       const cb = root.querySelector(`input[data-layer='${key}']`);
       if (cb) cb.checked = state[prop];
@@ -262,9 +262,9 @@ function initPcbLayerSimulator(containerId) {
         <div style="margin-bottom:0.45rem;"><strong>Last Event:</strong> ${state.lastEvent}</div>
         <div style="font-family:var(--font-mono); font-size:0.78rem; color:var(--text-muted);">
           1. Borrow <code>&amp;mut self</code> for Frame #${state.frameCount}<br>
-          2. <code>SidePanel::left</code> reads &amp; mutates bool fields<br>
+          2. <code>Panel::left</code> reads &amp; mutates bool fields<br>
           3. <code>CentralPanel</code> paints: [${activeLayers.join(", ") || "None"}]<br>
-          4. End of <code>update()</code> — borrow released!
+          4. End of <code>ui()</code> — borrow released!
         </div>
       `;
     }
@@ -888,7 +888,7 @@ painter.text(
     Color32::from_rgb(240, 230, 140),
 );
 
-// 2. SidePanel format!() -> owned String
+// 2. Panel::left format!() -> owned String
 // ${netLine}`;
       if (window.Prism && window.Prism.highlightElement) {
         window.Prism.highlightElement(codeEl);
@@ -908,7 +908,7 @@ painter.text(
           : `  └─ Label("Hover or click a pad to cross-probe its net.")`;
 
       kittestEl.textContent = `Harness::new_eframe(|_cc| PcbReviewerApp::default())
-SidePanel("layer_panel")
+Panel::left("layer_panel")
   ├─ CheckBox("Top Copper (F.Cu)")
   ├─ CheckBox("Silkscreen (F.SilkS)") = ${state.showSilkscreen}
 ${silkNodes}${netNode}`;
@@ -1326,7 +1326,7 @@ review_pins.len(): ${state.pins.length},
 next_pin_id: ${state.nextPinId},
 selected_pin: ${selStr},
 // Window::new("Review Callout")
-//   .id(Id::new(("review_pin_callout", ${active ? active.id : 0})))`;
+//   .id(Id::unique(("review_pin_callout", ${active ? active.id : 0})))`;
       if (window.Prism && window.Prism.highlightElement) {
         window.Prism.highlightElement(stateEl);
       }
@@ -1631,9 +1631,9 @@ function initWorkspaceLayersSimulator(containerId) {
 
     const extraLines = forbiddenOrder
       .filter((dep) => state[dep])
-      .map((dep) => `${dep} = "0.33"`)
+      .map((dep) => `${dep} = "0.37"`)
       .join("\n");
-    const tomlSnippet = `[package]\nname = "pcb-doc"\n\n[dependencies]\nemath = "0.33"${extraLines ? "\n" + extraLines : ""}`;
+    const tomlSnippet = `[package]\nname = "pcb-doc"\n\n[dependencies]\nemath = "0.37"${extraLines ? "\n" + extraLines : ""}`;
     const gateResult = firstViolation ? `Err("${firstViolation}")` : "Ok(())";
 
     const stateEl = root.querySelector("[data-role='layers-state']");

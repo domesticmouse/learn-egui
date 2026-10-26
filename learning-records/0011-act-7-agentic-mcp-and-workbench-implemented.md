@@ -20,7 +20,7 @@
 
 1. **Lesson `0027` — LLM-Native Spatial, Topological & Custom DRC Queries (`schemars`)**:
    - Derived `schemars::JsonSchema` on `SpatialQueryParams`, `SpatialNeighborhoodReport`, `NetTopologyReport`, `CustomDrcParams`, and `CustomDrcReport` and exposed `spatial_query_json_schema()` via `schemars::schema_for!()`.
-   - Implemented `BoardModel::query_spatial_neighborhood`, `BoardModel::query_net_topology`, and `BoardModel::run_custom_drc` (filtering copper traces via `PcbLayer::is_copper()`), wired into `SidePanel::right` (`"Query U1 Radius"`, `"Query VDD Net"`, `"Run Custom DRC"`).
+   - Implemented `BoardModel::query_spatial_neighborhood`, `BoardModel::query_net_topology`, and `BoardModel::run_custom_drc` (filtering copper traces via `PcbLayer::is_copper()`), wired into `Panel::right` (`"Query U1 Radius"`, `"Query VDD Net"`, `"Run Custom DRC"`).
 2. **Lesson `0028` — Headless MCP Server (`rmcp` v1.4) & `tokio::io::duplex` Mock Client**:
    - Implemented `PcbMcpServer` using `#[tool_router]`, `#[tool]`, and `#[tool_handler(router = self.tool_router)]` over `Arc<Mutex<BoardModel>>`, exposing 4 typed MCP tools (`pcb_query_spatial`, `pcb_query_net`, `pcb_run_custom_drc`, `pcb_add_review_pin`), `read_kicad_resource` (`kicad://board/summary`, `kicad://bom`, `kicad://net/{name}`), and `build_review_prompt` (`review_power_integrity`, `triage_open_drc`).
    - Built `MockMcpClient` (`impl ClientHandler`) and `run_duplex_mcp_roundtrip` over `tokio::io::duplex(4096)` for deterministic in-memory MCP integration testing (`rmcp_headless_server_duplex_client_resources_and_prompts_work`).

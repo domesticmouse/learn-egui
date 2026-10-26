@@ -7,4 +7,4 @@ edition = "2024"
 workspace = true
 
 [dependencies]
-emath = "0.33"
+emath = "0.37"

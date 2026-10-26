@@ -1238,11 +1238,11 @@ mod tests {
         assert_eq!(validate_l1_manifest_no_ui_deps(actual_manifest), Ok(()));
 
         assert_eq!(
-            validate_l1_manifest_no_ui_deps("[dependencies]\neframe = \"0.33\""),
+            validate_l1_manifest_no_ui_deps("[dependencies]\neframe = \"0.37\""),
             Err("eframe")
         );
         assert_eq!(
-            validate_l1_manifest_no_ui_deps("[dependencies.egui]\nversion = \"0.33\""),
+            validate_l1_manifest_no_ui_deps("[dependencies.egui]\nversion = \"0.37\""),
             Err("egui")
         );
     }

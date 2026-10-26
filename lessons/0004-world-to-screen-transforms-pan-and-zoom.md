@@ -87,7 +87,7 @@ impl BoardViewport {
 
 ## 3. Wiring Drag-to-Pan & Scroll-to-Zoom in `CentralPanel`
 
-Now, inside `PcbReviewerApp::update`, we upgrade our canvas allocation from `Sense::hover()` to [`Sense::drag()`](https://docs.rs/egui/latest/egui/struct.Sense.html#method.drag) and inspect both `response.dragged()` and [`ui.input(|i| i.smooth_scroll_delta.y)`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.input):
+Now, inside `PcbReviewerApp::ui`, we upgrade our canvas allocation from `Sense::hover()` to [`Sense::drag()`](https://docs.rs/egui/latest/egui/struct.Sense.html#method.drag) and inspect both `response.dragged()` and [`ui.input(|i| i.smooth_scroll_delta.y)`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.input):
 
 ```rust
 let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::drag());
@@ -125,7 +125,7 @@ impl BoardViewport {
     }
 }
 
-// Inside PcbReviewerApp::update:
+// Inside PcbReviewerApp::ui:
 if response.dragged() {
     self.viewport.pan_by(response.{{blank:drag_delta()|Call the method on `Response` that returns the pointer movement vector since the previous frame.|/* 3: delta fn */|140px}});
 }

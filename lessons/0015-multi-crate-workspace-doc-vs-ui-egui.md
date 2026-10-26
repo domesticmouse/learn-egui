@@ -20,13 +20,13 @@ In Lessons `0001` through `0014`, our `BoardModel` (`traces`, `pads`, `component
 
 By refactoring `./apps/0015-multi-crate-workspace-doc-vs-ui-egui` into a Cargo `[workspace]` with two crates:
 
-1. **`crates/pcb-doc` (`L1` Domain Crate)**: Depends *only* on `emath = "0.33"` for `Pos2`, `Vec2`, and `Rect`. It contains zero `egui`, `eframe`, `winit`, or `Color32` types. For layer colors, `PcbLayer::rgb(self) -> (u8, u8, u8)` returns a UI-agnostic RGB tuple that `pcb-reviewer` bridges into `egui::Color32`.
-2. **`pcb-reviewer` (`L6`/`L7` UI Crate)**: Depends on `pcb-doc = { path = "crates/pcb-doc" }`, `eframe = "0.33"`, and `egui_kittest = "0.33"`. It owns `ViewState`, `BoardViewport`, `LayerSwatch<'a>`, and the `eframe::App` shell.
+1. **`crates/pcb-doc` (`L1` Domain Crate)**: Depends *only* on `emath = "0.37"` for `Pos2`, `Vec2`, and `Rect`. It contains zero `egui`, `eframe`, `winit`, or `Color32` types. For layer colors, `PcbLayer::rgb(self) -> (u8, u8, u8)` returns a UI-agnostic RGB tuple that `pcb-reviewer` bridges into `egui::Color32`.
+2. **`pcb-reviewer` (`L6`/`L7` UI Crate)**: Depends on `pcb-doc = { path = "crates/pcb-doc" }`, `eframe = "0.37"`, and `egui_kittest = "0.37"`. It owns `ViewState`, `BoardViewport`, `LayerSwatch<'a>`, and the `eframe::App` shell.
 
 ```mermaid
 flowchart TD
     L7["pcb-reviewer (L6 UI / L7 Shell)<br/>eframe + egui + egui_kittest<br/>ViewState, LayerSwatch, Painter"] --> L1["crates/pcb-doc (L1 Domain)<br/>BoardModel, SmdPad, ReviewNote, DrcViolation"]
-    L1 --> L0["emath 0.33 (L0 Foundational Math)<br/>Pos2, Vec2, Rect, TSTransform"]
+    L1 --> L0["emath 0.37 (L0 Foundational Math)<br/>Pos2, Vec2, Rect, TSTransform"]
     style L7 fill:#14231c,stroke:#3dd68c,color:#e6edf3
     style L1 fill:#141a21,stroke:#3b8eea,color:#e6edf3
     style L0 fill:#1c1c24,stroke:#f0e68c,color:#e6edf3

@@ -114,7 +114,7 @@ success: **Bravo!** You have implemented `egui::Widget` on a lifetime-parameteri
 :::
 
 :::verify id="verify-0014" title="Interactive Lab 3: Testing `LayerSwatch<'a>` in Isolation with `Harness::new_ui_state`" badge="cargo test + cargo mutants" tier="Tier 2 + 6: Custom Widget & Opacity" caught="134 Caught (21 Unviable)" missed="0 Missed"
-In `apps/0014-custom-layer-swatch-widget-and-design-tokens`, we test `LayerSwatch::new` both in isolation via `Harness::new_ui_state` and inside the full `PcbReviewerApp` `SidePanel`:
+In `apps/0014-custom-layer-swatch-widget-and-design-tokens`, we test `LayerSwatch::new` both in isolation via `Harness::new_ui_state` and inside the full `PcbReviewerApp` `Panel::left`:
 
 ```rust
 #[test]

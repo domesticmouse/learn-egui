@@ -87,7 +87,7 @@ flowchart LR
   </ol>
 </nav>
 <h3 id="foundation">Foundation: Project Setup &amp; Immediate-Mode Core (<code>0001</code>–<code>0002</code>)</h3>
-<p>Every hardware review tool starts with a reliable application shell and a clear understanding of how immediate-mode GUIs manage state. In this foundational module, we configure a high-performance Cargo project with dev-profile optimizations, boot a native desktop window with <code>eframe::run_native</code>, and explore Emil Ernerfeldt’s single-frame immediate-mode loop (<code>eframe::App::update</code>) by building an interactive PCB layer visibility inspector backed by mutation testing.</p>
+<p>Every hardware review tool starts with a reliable application shell and a clear understanding of how immediate-mode GUIs manage state. In this foundational module, we configure a high-performance Cargo project with dev-profile optimizations, boot a native desktop window with <code>eframe::run_native</code>, and explore Emil Ernerfeldt’s single-frame immediate-mode loop (<code>eframe::App::ui</code>) by building an interactive PCB layer visibility inspector backed by mutation testing.</p>
 </div>
 
 <section class="lesson-grid" aria-label="Published lessons">
@@ -114,10 +114,10 @@ flowchart LR
         <span class="lesson-card-mutants">3 / 3 Mutants Caught</span>
       </div>
       <h3><a href="./lessons/0002-the-immediate-mode-loop.html">The Immediate-Mode Loop &amp; Mutable State (<code>&amp;mut</code>)</a></h3>
-      <p>Drive a PCB Layer Inspector sidebar with <code>SidePanel</code>, <code>CentralPanel</code>, <code>ui.checkbox</code>, and pure state-transition methods verified by unit and mutation tests.</p>
+      <p>Drive a PCB Layer Inspector sidebar with <code>Panel::left</code>, <code>CentralPanel</code>, <code>ui.checkbox</code>, and pure state-transition methods verified by unit and mutation tests.</p>
     </div>
     <div class="lesson-card-meta">
-      <span><strong><code>egui</code> Skill:</strong> <code>App::update</code>, <code>SidePanel</code>, <code>ui.checkbox</code></span>
+      <span><strong><code>egui</code> Skill:</strong> <code>App::ui</code>, <code>Panel::left</code>, <code>ui.checkbox</code></span>
       <span><strong>Rust Concept:</strong> Mutable borrows (<code>&amp;mut self</code>) &amp; closures (<code>|ui|</code>)</span>
       <span><strong>Runnable App:</strong> <code>apps/0002-the-immediate-mode-loop</code></span>
     </div>
@@ -224,10 +224,10 @@ flowchart LR
         <span class="lesson-card-mutants">40 / 40 Mutants Caught</span>
       </div>
       <h3><a href="./lessons/0008-split-viewports-and-egui-scene.html">Split Viewports, <code>egui::Scene</code> &amp; Schematic-to-PCB Cross-Probing</a></h3>
-      <p>Add a top schematic symbol bar with <code>TopBottomPanel</code>, wrap the 2D board in <code>egui::Scene</code>, and cross-probe schematic components to centre the PCB camera rectangle.</p>
+      <p>Add a top schematic symbol bar with <code>Panel::top</code>, wrap the 2D board in <code>egui::Scene</code>, and cross-probe schematic components to centre the PCB camera rectangle.</p>
     </div>
     <div class="lesson-card-meta">
-      <span><strong><code>egui</code> Skill:</strong> <code>TopBottomPanel</code>, <code>egui::Scene</code>, camera focusing</span>
+      <span><strong><code>egui</code> Skill:</strong> <code>Panel::top</code>, <code>egui::Scene</code>, camera focusing</span>
       <span><strong>Rust Concept:</strong> Disjoint struct borrows (<code>&amp;BoardModel</code> vs. <code>&amp;mut ViewState</code>)</span>
       <span><strong>Runnable App:</strong> <code>apps/0008-split-viewports-and-egui-scene</code></span>
     </div>
@@ -282,7 +282,7 @@ flowchart LR
       <p>Drop engineering review pins anchored to <code>(x, y)</code> board coordinates (mm), guard against duplicate IDs with <code>HashMap::entry</code>, and inspect notes in floating <code>egui::Window</code> callouts.</p>
     </div>
     <div class="lesson-card-meta">
-      <span><strong><code>egui</code> Skill:</strong> <code>egui::Window</code>, <code>egui::Id::new</code> &amp; <code>Key::P</code> tool</span>
+      <span><strong><code>egui</code> Skill:</strong> <code>egui::Window</code>, <code>egui::Id::unique</code> &amp; <code>Key::P</code> tool</span>
       <span><strong>Rust Concept:</strong> <code>HashMap&lt;PinId, ReviewNote&gt;</code>, <code>Hash</code> + <code>Eq</code> &amp; <code>Entry</code> API</span>
       <span><strong>Runnable App:</strong> <code>apps/0011-review-pins-and-sticky-note-callouts</code></span>
     </div>
@@ -366,10 +366,10 @@ flowchart LR
         <span class="lesson-card-mutants">155 / 155 Caught</span>
       </div>
       <h3><a href="./lessons/0016-loading-board-and-review-files-serde.html">Loading &amp; Saving Board &amp; Review Session Files (<code>serde</code> &amp; <code>thiserror</code>)</a></h3>
-      <p>Serialize and deserialize PCB geometry and review pins with <code>serde_json</code> (<code>emath</code> <code>serde</code> feature), enforce <code>CURRENT_SCHEMA_VERSION = 1</code> with <code>thiserror</code> (<code>SessionIoError</code>), and display dismissible I/O error banners in <code>SidePanel::right</code>.</p>
+      <p>Serialize and deserialize PCB geometry and review pins with <code>serde_json</code> (<code>emath</code> <code>serde</code> feature), enforce <code>CURRENT_SCHEMA_VERSION = 1</code> with <code>thiserror</code> (<code>SessionIoError</code>), and display dismissible I/O error banners in <code>Panel::right</code>.</p>
     </div>
     <div class="lesson-card-meta">
-      <span><strong><code>egui</code> Skill:</strong> <code>SidePanel::right</code> Session Persistence &amp; Error Banner UI</span>
+      <span><strong><code>egui</code> Skill:</strong> <code>Panel::right</code> Session Persistence &amp; Error Banner UI</span>
       <span><strong>Rust Concept:</strong> <code>serde</code> (<code>Serialize</code>/<code>Deserialize</code>), <code>thiserror::Error</code> &amp; Exhaustive Destructuring</span>
       <span><strong>Runnable App:</strong> <code>apps/0016-loading-board-and-review-files-serde</code></span>
     </div>
@@ -638,7 +638,7 @@ flowchart LR
 </tr>
 <tr>
 <td><a href="./reference/immediate-mode-cheatsheet.html"><strong>Immediate-Mode GUI Cheat Sheet</strong></a></td>
-<td>The 5-step single-frame mental model, panel layout ordering rules (<code>SidePanel</code> before <code>CentralPanel</code>), and custom 2D CAD painter idioms.</td>
+<td>The 5-step single-frame mental model, panel layout ordering rules (<code>Panel</code> before <code>CentralPanel</code>), and custom 2D CAD painter idioms.</td>
 </tr>
 <tr>
 <td><a href="./reference/testing-and-mutation-cheatsheet.html"><strong>Testing &amp; Mutation Coverage Cheat Sheet</strong></a></td>

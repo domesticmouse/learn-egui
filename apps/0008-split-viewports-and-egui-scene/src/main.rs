@@ -537,16 +537,16 @@ impl PcbReviewerApp {
 }
 
 impl eframe::App for PcbReviewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("schematic_cross_probe_bar").show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::Panel::top("schematic_cross_probe_bar").show(ui, |ui| {
             self.render_schematic_bar(ui);
         });
 
-        egui::SidePanel::left("layer_panel").show(ctx, |ui| {
+        egui::Panel::left("layer_panel").show(ui, |ui| {
             self.render_side_panel(ui);
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             self.render_canvas(ui);
         });
     }

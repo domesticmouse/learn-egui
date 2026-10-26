@@ -54,7 +54,7 @@
     <article class="tufte-article">
 <div class="prose-col">
 <h1>Lesson 0008: Split Viewports, <code>egui::Scene</code> &amp; Borrow-Checker State Splits</h1>
-<p class="subtitle">Cross-probing from a Schematic Symbol Bar into the 2D PCB camera using <code>TopBottomPanel</code>, <code>egui::Scene</code>, and disjoint struct borrowing (<code>&amp;BoardModel</code> + <code>&amp;mut ViewState</code>)</p>
+<p class="subtitle">Cross-probing from a Schematic Symbol Bar into the 2D PCB camera using <code>Panel::top</code>, <code>egui::Scene</code>, and disjoint struct borrowing (<code>&amp;BoardModel</code> + <code>&amp;mut ViewState</code>)</p>
 
 <p>When you are debugging a real hardware board, you almost always have <strong>two synchronised views</strong> open side by side: a <strong>Schematic View</strong> showing logical symbols and a <strong>PCB Layout View</strong> showing physical footprints. Click <code>U1</code> in the schematic, and you want the PCB viewport to immediately highlight <code>U1</code>'s electrical net <em>and</em> pan the PCB camera straight to <code>U1</code>'s physical coordinates.</p>
 <p>In <a href="./0007-schematic-symbols-and-text-rendering.html">Lesson 0007</a>, we added reference designators (<code>U1</code>, <code>R12</code>, <code>J1</code>) and verified our UI panels headlessly with <code>egui_kittest::Harness</code>. Now, let's build that schematic-to-PCB cross-prober—and solve one of the most classic Rust borrow-checker puzzles you will hit in <code>egui</code> along the way.</p>
@@ -106,9 +106,9 @@ impl ViewState {
         }
     }
 }</code></pre>
-<h2 id="2-multi-panel-layouts-with-topbottompanel-amp-egui-scene">2. Multi-Panel Layouts with <code>TopBottomPanel</code> &amp; <code>egui::Scene</code></h2>
+<h2 id="2-multi-panel-layouts-with-panel-top-amp-egui-scene">2. Multi-Panel Layouts with <code>Panel::top</code> &amp; <code>egui::Scene</code></h2>
 <p>Alongside our custom <code>TSTransform</code> canvas from Lesson 0004, <code>egui</code> also ships a built-in pan-and-zoom container called <a href="https://docs.rs/egui/latest/egui/containers/scene/struct.Scene.html"><code>egui::Scene</code></a>. You pass <code>&amp;mut self.view.pcb_scene_rect</code> into <code>Scene::new().show(...)</code>, and <code>Scene</code> automatically updates that <code>Rect</code> whenever the user drags or scrolls—or whenever our schematic cross-probe overwrites <code>pcb_scene_rect</code> to jump the camera straight to a component:</p>
-<pre><code class="language-rust">egui::TopBottomPanel::top("schematic_cross_probe_bar").show(ctx, |ui| {
+<pre><code class="language-rust">egui::Panel::top("schematic_cross_probe_bar").show(ui, |ui| {
     ui.horizontal(|ui| {
         ui.label("Schematic Symbols (Click to Cross-Probe):");
         for comp in &amp;self.board.components {
@@ -124,7 +124,7 @@ impl ViewState {
 <section class="full-width-panel" id="dual-scene-sim">
   <div class="panel-header">
     <span class="panel-title">Interactive Lab 1: Schematic-to-PCB Cross-Probing &amp; Split Borrowing</span>
-    <span class="panel-badge">TopBottomPanel • egui::Scene • &amp;BoardModel + &amp;mut ViewState</span>
+    <span class="panel-badge">Panel::top • egui::Scene • &amp;BoardModel + &amp;mut ViewState</span>
   </div>
   <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
     Click any schematic symbol button (<strong>Probe U1</strong>, <strong>Probe R12</strong>, or <strong>Probe J1</strong>) below. Watch how <code>self.view.focus_component(&amp;self.board, ref_des)</code> reads the component's physical coordinates from <code>&amp;self.board</code> and updates <code>self.view.pcb_scene_rect</code> to centre the PCB camera on that footprint.
@@ -146,7 +146,7 @@ impl ViewState {
     <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px;">
       <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="Dual Schematic and PCB Cross-Probe Viewport">
         <rect x="12" y="10" width="296" height="58" rx="4" fill="#161d26" stroke="#334458" stroke-width="1.5"/>
-        <text x="20" y="24" fill="#9da6b0" font-family="sans-serif" font-size="9">SCHEMATIC VIEW (TopBottomPanel)</text>
+        <text x="20" y="24" fill="#9da6b0" font-family="sans-serif" font-size="9">SCHEMATIC VIEW (Panel::top)</text>
         <line x1="70" y1="45" x2="250" y2="45" stroke="#6cb6ff" stroke-width="1.5"/>
         <rect data-sch-comp="U1" data-probe-ref="U1" x="52" y="30" width="38" height="28" rx="2" fill="#1e2936" stroke="#ffe664" stroke-width="3" style="cursor:pointer;"/>
         <text x="71" y="48" fill="#e8e6df" font-family="monospace" font-size="10" text-anchor="middle" style="pointer-events:none;">U1</text>
@@ -177,7 +177,7 @@ impl ViewState {
 <section class="full-width-panel">
   <div class="panel-header">
     <span class="panel-title">Interactive Lab 2: Complete the Split-Borrow Cross-Probe Call</span>
-    <span class="panel-badge">Borrow Checker • TopBottomPanel • Rect::from_center_size</span>
+    <span class="panel-badge">Borrow Checker • Panel::top • Rect::from_center_size</span>
   </div>
   <p>Fill in the three blanks below so that (1) <code>focus_component</code> borrows <code>board</code> immutably, (2) centres <code>self.pcb_scene_rect</code> around <code>comp.center_mm</code>, and (3) the top schematic bar passes <code>&amp;self.board</code> while mutating <code>self.view</code>:</p>
 <pre class="keep-markup"><code class="language-rust">impl ViewState {
@@ -193,7 +193,7 @@ impl ViewState {
     }
 }
 
-// Inside TopBottomPanel::top("schematic_bar"):
+// Inside Panel::top("schematic_bar"):
 for comp in &amp;self.board.components {
     let label = format!("Probe {} ({})", comp.ref_des, comp.value);
     if ui.button(label).clicked() {

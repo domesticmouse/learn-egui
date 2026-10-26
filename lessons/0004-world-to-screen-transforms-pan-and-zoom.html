@@ -118,7 +118,7 @@ impl BoardViewport {
     }
 }</code></pre>
 <h2 id="3-wiring-drag-to-pan-amp-scroll-to-zoom-in-centralpanel">3. Wiring Drag-to-Pan &amp; Scroll-to-Zoom in <code>CentralPanel</code></h2>
-<p>Now, inside <code>PcbReviewerApp::update</code>, we upgrade our canvas allocation from <code>Sense::hover()</code> to <a href="https://docs.rs/egui/latest/egui/struct.Sense.html#method.drag"><code>Sense::drag()</code></a> and inspect both <code>response.dragged()</code> and <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.input"><code>ui.input(|i| i.smooth_scroll_delta.y)</code></a>:</p>
+<p>Now, inside <code>PcbReviewerApp::ui</code>, we upgrade our canvas allocation from <code>Sense::hover()</code> to <a href="https://docs.rs/egui/latest/egui/struct.Sense.html#method.drag"><code>Sense::drag()</code></a> and inspect both <code>response.dragged()</code> and <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.input"><code>ui.input(|i| i.smooth_scroll_delta.y)</code></a>:</p>
 <pre><code class="language-rust">let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::drag());
 
 if response.dragged() {
@@ -200,7 +200,7 @@ if let Some(hover_pos) = response.hover_pos() {
     }
 }
 
-// Inside PcbReviewerApp::update:
+// Inside PcbReviewerApp::ui:
 if response.dragged() {
     self.viewport.pan_by(response.<input id="ex-blank-3" class="code-challenge-input" style="width:140px;" placeholder="/* 3: delta fn */" autocomplete="off">);
 }</code></pre>

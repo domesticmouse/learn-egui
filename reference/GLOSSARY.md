@@ -67,20 +67,20 @@ A Rust `enum` whose variants store variant-specific payload fields directly insi
 _Avoid_: "boolean flag + optional fields" (which permit contradictory states like `is_measuring = true` with `start_mm = None`).
 
 **`eframe::App`**:
-The root application trait in `eframe` whose core method, `fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame)`, is invoked on every repaint ([docs.rs/eframe](https://docs.rs/eframe/latest/eframe/trait.App.html)).
+The root application trait in `eframe` whose core method, `fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame)`, is invoked on every repaint ([docs.rs/eframe](https://docs.rs/eframe/latest/eframe/trait.App.html)).
 _Avoid_: "window controller" (`eframe::App` describes per-frame UI state transitions and rendering).
 
 **`egui::Context` (`ctx`)**:
-The top-level handle to `egui` for the entire window: manages input state, fonts, style, widget ID memory, and root panels (`SidePanel`, `TopBottomPanel`, `CentralPanel`) ([docs.rs/egui](https://docs.rs/egui/latest/egui/struct.Context.html)).
-_Avoid_: confusing `ctx: &egui::Context` (whole-window coordinator) with `ui: &mut egui::Ui` (a bounded region inside a panel).
+The top-level handle to `egui` for the entire window (accessible via `ui.ctx()`): manages input state, fonts, style, widget ID memory, and floating windows ([docs.rs/egui](https://docs.rs/egui/latest/egui/struct.Context.html)).
+_Avoid_: confusing `ctx: &egui::Context` (whole-window coordinator) with `ui: &mut egui::Ui` (a bounded region or root panel container).
 
 **`egui::Ui` (`ui`)**:
-A bounded rectangular region inside a panel or container with an automatic layout cursor on which you invoke widget methods (`ui.heading`, `ui.checkbox`, `ui.button`, `ui.allocate_painter`) ([docs.rs/egui](https://docs.rs/egui/latest/egui/struct.Ui.html)).
+A bounded rectangular region (passed directly to `eframe::App::ui`, `Panel::show`, or `CentralPanel::show`) with an automatic layout cursor on which you invoke widget methods (`ui.heading`, `ui.checkbox`, `ui.button`, `ui.allocate_painter`) ([docs.rs/egui](https://docs.rs/egui/latest/egui/struct.Ui.html)).
 _Avoid_: storing `Ui` across frames (`Ui` is a short-lived per-frame layout builder).
 
 **`egui::Response`**:
 The immediate return value of every widget call (e.g., `ui.button("Reset").clicked()` or `.hovered()`) reporting how the user interacted with that widget during the current frame ([docs.rs/egui](https://docs.rs/egui/latest/egui/struct.Response.html)).
-_Avoid_: "event listener" (`Response` is a plain value inspected synchronously inside `update`).
+_Avoid_: "event listener" (`Response` is a plain value inspected synchronously inside `ui`).
 
 **`egui::Painter`**:
 The 2D vector drawing API returned by `ui.allocate_painter(size, sense)` that emits clipped shapes (`rect_filled`, `line_segment`, `circle_filled`, `text`) in back-to-front painter's algorithm order ([docs.rs/egui](https://docs.rs/egui/latest/egui/struct.Painter.html)).
@@ -96,14 +96,14 @@ _Avoid_: equating "100% line coverage" with verified behaviour (line coverage on
 
 **Headless UI Harness (`egui_kittest`)**:
 The official testing library for `egui` that drives an app or widget closure without opening an OS window, supporting semantic AccessKit widget queries (`get_by_label`), simulated clicks/key presses, and offscreen visual snapshots ([docs.rs/egui_kittest](https://docs.rs/egui_kittest/latest/egui_kittest/)).
-_Avoid_: skipping `eframe::App::update` forever once headless UI testing is available in Act II+.
+_Avoid_: skipping `eframe::App::ui` forever once headless UI testing is available in Act II+.
 
 **Hash Map & `Entry` API (`HashMap<K, V>`)**:
 A hash-table collection mapping unique keys `K: Eq + Hash` to values `V`, whose `.entry(key)` method returns `Entry::Vacant` or `Entry::Occupied` for in-place inspection or insertion without double lookups or silent overwrites ([std::collections::HashMap](https://doc.rust-lang.org/std/collections/struct.HashMap.html)).
 _Avoid_: relying on `HashMap` iteration order in immediate-mode UIs (sort keys first so widget order is deterministic).
 
 **Floating Window & Widget Identity (`egui::Window`, `egui::Id`)**:
-`egui::Window` renders a floating, draggable overlay layer above panels, keyed by a deterministic `egui::Id::new(...)` hash so `egui` remembers window state without collisions ([docs.rs/egui](https://docs.rs/egui/latest/egui/containers/struct.Window.html)).
+`egui::Window` renders a floating, draggable overlay layer above panels, keyed by a deterministic `egui::Id::unique(...)` hash so `egui` remembers window state without collisions ([docs.rs/egui](https://docs.rs/egui/latest/egui/containers/struct.Window.html)).
 _Avoid_: creating multiple windows or grids with identical titles and no disambiguating `.id(...)`.
 
 **Struct Lifetime (`'a`) & `egui::Widget`**:
@@ -135,8 +135,8 @@ Testing each pad's or stroke-expanded trace's axis-aligned bounding box (`bounds
 _Avoid_: computing trace bounding boxes from centreline endpoints alone without expanding by `width_mm * 0.5`.
 
 **Non-Blocking Background Channel (`std::sync::mpsc::try_recv`)**:
-Offloading file parsing onto a worker thread (`std::thread::spawn`) that streams `ImportJobMessage` progress updates over an `mpsc::channel`, while `eframe::App::update` drains ready messages via `rx.try_recv()` and calls `ctx.request_repaint()` while `ImportJobState::Running` is active ([std::sync::mpsc](https://doc.rust-lang.org/std/sync/mpsc/index.html)).
-_Avoid_: calling blocking `rx.recv()` inside `eframe::App::update` (which freezes the UI thread).
+Offloading file parsing onto a worker thread (`std::thread::spawn`) that streams `ImportJobMessage` progress updates over an `mpsc::channel`, while `eframe::App::ui` drains ready messages via `rx.try_recv()` and calls `ctx.request_repaint()` while `ImportJobState::Running` is active ([std::sync::mpsc](https://doc.rust-lang.org/std/sync/mpsc/index.html)).
+_Avoid_: calling blocking `rx.recv()` inside `eframe::App::ui` (which freezes the UI thread).
 
 **Process-Wide GPU Lock & Frame Snapshot Digest (`gpu_lock`, `FrameSnapshotDigest`)**:
 A `OnceLock<Mutex<()>>` guard (`let _gpu = gpu_lock();` using `PoisonError::into_inner`) acquired on the first line of GPU/snapshot tests to serialize concurrent driver access, paired with a deterministic 64-bit FNV-1a `FrameSnapshotDigest` over visible layer masks, culled geometry counts, and DRC markers.
@@ -181,21 +181,21 @@ _Avoid_: shipping AI-controllable desktop tools without an offline workbench to 
 | Type / Method | Role in the Frame Loop | Introduced In |
 | --- | --- | --- |
 | `eframe::run_native` | Opens a native desktop OS window, initialises the renderer, constructs your app struct, and starts the frame loop. | [Lesson 0001](../lessons/0001-project-setup-and-eframe-boot.html) |
-| `SidePanel` / `CentralPanel` | Splits the window into a left/right inspector and a remaining central canvas (`SidePanel` must come before `CentralPanel`). | [Lesson 0002](../lessons/0002-the-immediate-mode-loop.html) |
+| `Panel` / `CentralPanel` | Splits the window into a left/right/top/bottom inspector and a remaining central canvas (`Panel` must come before `CentralPanel`). | [Lesson 0002](../lessons/0002-the-immediate-mode-loop.html) |
 | `ui.allocate_painter(size, sense)` | Reserves a 2D canvas `Rect`, tracks pointer interaction (`Response`), and returns a clipped `Painter`. | [Lesson 0003](../lessons/0003-custom-2d-canvas-and-painter.html) |
 | `TSTransform` & `Sense::drag()` | Maps world-space millimetres (`mm`) to screen points (`px`), pans via `drag_delta()`, and zooms around the cursor. | [Lesson 0004](../lessons/0004-world-to-screen-transforms-pan-and-zoom.html) |
 | `PcbLayer` & Z-Ordering | Encodes physical stackup layers (`BottomCopper`, `TopCopper`, `Silkscreen`, `Ratsnest`) and sorts primitives back-to-front. | [Lesson 0005](../lessons/0005-modeling-layers-traces-and-footprints.html) |
 | `Sense::click_and_drag()` & `Option<NetId>` | Inverse-transforms cursor positions to hit-test pads in top-down order and locks net cross-probing on click. | [Lesson 0006](../lessons/0006-hit-testing-and-net-cross-probing.html) |
 | `Painter::text`, `Align2`, `egui_kittest` | Draws anchored component reference designators (`U1`, `J1`) and verifies widgets headlessly in `cargo test`. | [Lesson 0007](../lessons/0007-schematic-symbols-and-text-rendering.html) |
-| `TopBottomPanel` & `egui::Scene` | Splits the window into a schematic bar and an infinite pan/zoom PCB scene with camera cross-probing. | [Lesson 0008](../lessons/0008-split-viewports-and-egui-scene.html) |
+| `Panel::top` & `egui::Scene` | Splits the window into a schematic bar and an infinite pan/zoom PCB scene with camera cross-probing. | [Lesson 0008](../lessons/0008-split-viewports-and-egui-scene.html) |
 | `TextEdit::singleline` & `ScrollArea::show_rows` | Filters the Bill of Materials live and virtualises scrolling so only visible rows are laid out. | [Lesson 0009](../lessons/0009-searchable-netlist-and-bom-inspector.html) |
 | `InputState::consume_key` & `ActiveTool` | Consumes single-key CAD hotkeys (`F`, `M`, `Esc`) and drives a point-to-point distance ruler state machine. | [Lesson 0010](../lessons/0010-keyboard-shortcuts-and-point-to-point-ruler.html) |
-| `HashMap::entry`, `egui::Window` & `Id::new` | Stores anchored review pins without silent overwrites and renders floating callout overlays. | [Lesson 0011](../lessons/0011-review-pins-and-sticky-note-callouts.html) |
+| `HashMap::entry`, `egui::Window` & `Id::unique` | Stores anchored review pins without silent overwrites and renders floating callout overlays. | [Lesson 0011](../lessons/0011-review-pins-and-sticky-note-callouts.html) |
 | `ui.selectable_value` & `ReviewStatus` | Enforces `Open` → `Resolved` → `Verified` sign-off transitions and filters pins by severity. | [Lesson 0012](../lessons/0012-review-status-workflow-and-popups.html) |
 | `Iterator::reduce(Rect::union)` & `f32::clamp` | Detects copper pad-to-pad DRC clearance violations and clamps minimap camera bounds. | [Lesson 0013](../lessons/0013-drc-violation-overlay-and-minimap.html) |
 | `impl<'a> egui::Widget` & `Harness::new_ui_state` | Packages a colour swatch, visibility toggle, and opacity slider into a custom widget tested in isolation. | [Lesson 0014](../lessons/0014-custom-layer-swatch-widget-and-design-tokens.html) |
 | `[workspace]` & `validate_l1_manifest_no_ui_deps` | Splits pure `L1` domain state (`crates/pcb-doc`) from the `L6`/`L7` `eframe` UI crate and enforces zero upward UI dependencies. | [Lesson 0015](../lessons/0015-multi-crate-workspace-doc-vs-ui-egui.html) |
-| `ReviewSessionEnvelope` & `SessionIoError` | Serializes and validates versioned JSON review sessions with `serde_json` and `thiserror`, surfacing errors in `SidePanel::right`. | [Lesson 0016](../lessons/0016-loading-board-and-review-files-serde.html) |
+| `ReviewSessionEnvelope` & `SessionIoError` | Serializes and validates versioned JSON review sessions with `serde_json` and `thiserror`, surfacing errors in `Panel::right`. | [Lesson 0016](../lessons/0016-loading-board-and-review-files-serde.html) |
 | `Arc::make_mut` & `Arc::ptr_eq` | Turns `BoardModel::clone()` into `O(1)` pointer sharing and clones only touched collections on mutation, verified with `proptest`. | [Lesson 0017](../lessons/0017-copy-on-write-arc-document-snapshots.html) |
 | `BoardHistory`, `coalesce_key` & `drag_stopped()` | Maintains a bounded `VecDeque` undo/redo stack and coalesces continuous 60-FPS slider drags into a single undo step. | [Lesson 0018](../lessons/0018-undo-redo-history-and-slider-coalescing.html) |
 | `CommandSpec`, `Key::K` Palette & `panic_hunt` | Dispatches commands through a static `COMMAND_SPECS` registry with `EnabledFn` guards and fuzzes JSON inputs. | [Lesson 0019](../lessons/0019-the-command-pattern-and-command-palette.html) |

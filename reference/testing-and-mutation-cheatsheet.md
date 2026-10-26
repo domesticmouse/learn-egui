@@ -6,7 +6,7 @@ page_type: reference
 
 ## 1. Why Mutation Testing Beats Line Coverage in `egui`
 
-Traditional line coverage only tells you whether a line of Rust code _executed_ during a test—not whether your test would fail if that line were wrong. Turns out, in an immediate-mode GUI, calling `app.update(...)` executes almost every line of your panel layout even if your test contains zero assertions!
+Traditional line coverage only tells you whether a line of Rust code _executed_ during a test—not whether your test would fail if that line were wrong. Turns out, in an immediate-mode GUI, calling `app.ui(...)` executes almost every line of your panel layout even if your test contains zero assertions!
 
 So, we use Martin Pool's [`cargo-mutants`](https://mutants.rs/) to test our tests: it copies your project to a scratch directory, systematically injects small faults (**mutants**—such as flipping `true` to `false`, replacing `+` with `-`, or emptying a method body), and runs `cargo test` against each mutant.
 
@@ -52,10 +52,10 @@ In a desktop application, `fn main()` opens a blocking OS window via `eframe::ru
 copy_target = true
 
 # Explicitly exclude the OS window launcher and raw panel draw loop in Act I;
-# we remove "update" from this list in Lesson 0007 when we add egui_kittest!
+# we remove "ui" from this list in Lesson 0007 when we add egui_kittest!
 exclude_re = [
     "replace main",
-    "<impl eframe::App for PcbReviewerApp>::update",
+    "<impl eframe::App for PcbReviewerApp>::ui",
 ]
 ```
 
@@ -129,7 +129,7 @@ In Act VII, we verify every layer of our Model Context Protocol (`rmcp`) stack w
 | Curriculum Stage | Testing Mechanism Introduced | What `cargo test` + `cargo mutants` Verifies |
 | --- | --- | --- |
 | **Lessons 0001–0002 & Act I (0003–0006)** | `#[cfg(test)]`, `#[test]`, `assert_eq!`, pure domain/maths methods | Default layer visibility flags, preset state transitions, `Rect` bounds, `TSTransform` pan/zoom round-trips, layer Z-ordering, and net hit-testing. |
-| **Act II (0007–0010)** | `egui_kittest::Harness` (headless UI queries & simulated key presses) | Un-skips `eframe::App::update`! Verifies rendered schematic labels, dual-viewport cross-probing, BOM filtering, and `F` / `M` / `Esc` hotkeys. |
+| **Act II (0007–0010)** | `egui_kittest::Harness` (headless UI queries & simulated key presses) | Un-skips `eframe::App::ui`! Verifies rendered schematic labels, dual-viewport cross-probing, BOM filtering, and `F` / `M` / `Esc` hotkeys. |
 | **Act III (0011–0014)** | Workflow state-machine tests & `Harness::new_ui` widget mounts | Review pin CRUD in `HashMap`, `Open` → `Resolved` → `Verified` triage rules, DRC clearance bounds, and custom `egui::Widget` layer swatches. |
 | **Act IV (0015–0018)** | Workspace layer gates, panic-free lints & `proptest!` | `#![deny(clippy::unwrap_used)]`, sub-second `cargo mutants -p pcb-doc`, corrupt JSON rejection, and `Arc::make_mut` undo/redo snapshot invariants. |
 | **Act V (0019–0022)** | `panic_hunt` command fuzzer, perf budgets & `gpu_lock()` snapshots | Adversarial JSON fuzzing of every `CommandSpec`, spatial culling equivalence, background worker cancellation, and offscreen `wgpu` PNG visual parity. |

@@ -54,13 +54,13 @@
     <article class="tufte-article">
 <div class="prose-col">
 <h1>0016. Loading &amp; Saving Board &amp; Review Session Files (<code>serde</code>, <code>serde_json</code> &amp; <code>thiserror</code>)</h1>
-<p class="subtitle">Serializing <code>BoardModel</code> and <code>ReviewNote</code> pins into a schema-versioned <code>ReviewSessionEnvelope</code> JSON payload, validating untrusted inputs with exhaustive destructuring, and surfacing <code>SessionIoError</code> banners in <code>egui::SidePanel::right</code> without panicking.</p>
+<p class="subtitle">Serializing <code>BoardModel</code> and <code>ReviewNote</code> pins into a schema-versioned <code>ReviewSessionEnvelope</code> JSON payload, validating untrusted inputs with exhaustive destructuring, and surfacing <code>SessionIoError</code> banners in <code>egui::Panel::right</code> without panicking.</p>
 
 <h2 id="versioned-envelope-persistence-and-exhaustive-destructuring">Versioned Envelope Persistence and Exhaustive Destructuring</h2>
 <p>A hardware design review tool is only useful if engineers can save their review pins (<code>ReviewNote</code> status, severity, author, and millimetre coordinates) to a file, share it in a pull request, and reload it without losing state.<span class="sidenote-number"></span><span class="sidenote"><strong>Why Wrap <code>BoardModel</code> in <code>ReviewSessionEnvelope</code>?</strong> Serializing a raw <code>BoardModel</code> directly leaves no metadata to detect format changes later. Wrapping it in <code>ReviewSessionEnvelope { schema_version: 1, board_id, board }</code> lets <code>from_session_json</code> reject incompatible schema versions with a clear, typed error before touching application state.</span></p>
 <p>Because <code>pcb-doc</code> (<code>L1</code>) owns all domain types, adding persistence requires zero changes to our <code>egui</code> rendering code:</p>
 <ol>
-<li><strong>Enable <code>emath</code>'s <code>&quot;serde&quot;</code> feature</strong>: In <code>crates/pcb-doc/Cargo.toml</code>, <code>emath = { version = &quot;0.33&quot;, features = [&quot;serde&quot;] }</code> enables <code>Serialize</code> and <code>Deserialize</code> on <code>Pos2</code>, <code>Vec2</code>, and <code>Rect</code>.</li>
+<li><strong>Enable <code>emath</code>'s <code>&quot;serde&quot;</code> feature</strong>: In <code>crates/pcb-doc/Cargo.toml</code>, <code>emath = { version = &quot;0.37&quot;, features = [&quot;serde&quot;] }</code> enables <code>Serialize</code> and <code>Deserialize</code> on <code>Pos2</code>, <code>Vec2</code>, and <code>Rect</code>.</li>
 <li><strong>Define a typed <code>SessionIoError</code> with <code>thiserror</code></strong>: Instead of returning opaque strings or panicking on corrupt files, <code>SessionIoError</code> models three explicit failure modes: <code>EmptyBoardId</code>, <code>UnsupportedSchemaVersion { found, expected }</code>, and <code>MalformedJson(String)</code>.</li>
 <li><strong>Destructure <code>ReviewSessionEnvelope</code> exhaustively</strong>: In <code>BoardModel::from_session_json</code>, we unpack <code>let ReviewSessionEnvelope { schema_version, board_id, board } = ...</code> <em>without</em> <code>..</code> so adding any new envelope field in the future triggers a compiler error until validation is wired.</li>
 </ol>
@@ -78,8 +78,8 @@ flowchart LR
     style EmptyId fill:#2a1418,stroke:#ff5555,color:#e6edf3
   </pre>
 </figure>
-<h2 id="non-destructive-error-recovery-in-egui-sidepanel-right">Non-Destructive Error Recovery in <code>egui::SidePanel::right</code></h2>
-<p>When a user attempts to load a corrupt or incompatible JSON file in <code>PcbReviewerApp::import_session_from_json(&amp;mut self, raw: &amp;str)</code>, the UI must <strong>never</strong> overwrite <code>self.board</code> with partial data or crash.<span class="sidenote-number"></span><span class="sidenote"><strong>Why <code>SidePanel::right(&quot;session_panel&quot;)</code>?</strong> Placing session persistence, snapshot controls, and error banners in a dedicated right-hand inspector panel keeps the left layer/BOM panel (<code>SidePanel::left</code>) and top cross-probe bar (<code>TopBottomPanel::top</code>) within their vertical and horizontal layout budgets inside <code>800x600</code> viewports.</span> On <code>Err(err)</code>, <code>import_session_from_json</code> leaves <code>self.board</code> untouched, stores <code>Some(err.to_string())</code> in <code>self.view.last_io_error</code>, and renders a dismissible <code>&quot;I/O Error: ...&quot;</code> banner inside <code>SidePanel::right(&quot;session_panel&quot;)</code>.</p>
+<h2 id="non-destructive-error-recovery-in-egui-panel-right">Non-Destructive Error Recovery in <code>egui::Panel::right</code></h2>
+<p>When a user attempts to load a corrupt or incompatible JSON file in <code>PcbReviewerApp::import_session_from_json(&amp;mut self, raw: &amp;str)</code>, the UI must <strong>never</strong> overwrite <code>self.board</code> with partial data or crash.<span class="sidenote-number"></span><span class="sidenote"><strong>Why <code>Panel::right(&quot;session_panel&quot;)</code>?</strong> Placing session persistence, snapshot controls, and error banners in a dedicated right-hand inspector panel keeps the left layer/BOM panel (<code>Panel::left</code>) and top cross-probe bar (<code>Panel::top</code>) within their vertical and horizontal layout budgets.</span> On <code>Err(err)</code>, <code>import_session_from_json</code> leaves <code>self.board</code> untouched, stores <code>Some(err.to_string())</code> in <code>self.view.last_io_error</code>, and renders a dismissible <code>&quot;I/O Error: ...&quot;</code> banner inside <code>Panel::right(&quot;session_panel&quot;)</code>.</p>
 <figure>
   <figcaption>Typed SessionIoError and exhaustive envelope validation in crates/pcb-doc/src/lib.rs</figcaption>
   <pre><code class="language-rust">pub const CURRENT_SCHEMA_VERSION: u32 = 1;
@@ -307,7 +307,7 @@ cargo mutants --manifest-path ./apps/0016-loading-board-and-review-files-serde/C
                   "By linking the `egui_glow` desktop shader compiler into `crates/pcb-doc` directly"
             ],
             "correctIndex": 1,
-            "explanation": "`emath = { version = \"0.33\", features = [\"serde\"] }` provides upstream `Serialize` and `Deserialize` implementations for `Pos2`, `Vec2`, `Rect`, and `TSTransform`.",
+            "explanation": "`emath = { version = \"0.37\", features = [\"serde\"] }` provides upstream `Serialize` and `Deserialize` implementations for `Pos2`, `Vec2`, `Rect`, and `TSTransform`.",
             "wrongHint": "Check `[dependencies]` in `apps/0016-loading-board-and-review-files-serde/crates/pcb-doc/Cargo.toml`."
       },
       {

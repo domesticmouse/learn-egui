@@ -194,8 +194,8 @@ impl PcbReviewerApp {
 }
 
 impl eframe::App for PcbReviewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::SidePanel::left("layer_panel").show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::Panel::left("layer_panel").show(ui, |ui| {
             ui.heading("PCB Layers");
             ui.checkbox(&mut self.show_top_copper, "Top Copper (F.Cu)");
             ui.checkbox(&mut self.show_bottom_copper, "Bottom Copper (B.Cu)");
@@ -217,7 +217,7 @@ impl eframe::App for PcbReviewerApp {
             }
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             let (response, painter) = ui.allocate_painter(ui.available_size(), Sense::drag());
 
             if response.dragged() {

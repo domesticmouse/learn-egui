@@ -113,7 +113,7 @@ impl ReviewStatus {
     }
 }</code></pre>
 <h2 id="2-multi-criteria-triage-filtering-amp-ui-selectable-value">2. Multi-Criteria Triage Filtering &amp; <code>ui.selectable_value</code></h2>
-<p>In <code>SidePanel</code>, we iterate over <code>PinSeverity::ALL</code> and call <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.selectable_value"><code>ui.selectable_value(&amp;mut self.view.min_pin_severity, sev, sev.label())</code></a> to render a three-way severity selector pill bar, paired with an <code>&quot;Open Pins Only&quot;</code> checkbox (<code>self.view.filter_only_open_pins</code>).</p>
+<p>In <code>Panel::left</code>, we iterate over <code>PinSeverity::ALL</code> and call <a href="https://docs.rs/egui/latest/egui/struct.Ui.html#method.selectable_value"><code>ui.selectable_value(&amp;mut self.view.min_pin_severity, sev, sev.label())</code></a> to render a three-way severity selector pill bar, paired with an <code>&quot;Open Pins Only&quot;</code> checkbox (<code>self.view.filter_only_open_pins</code>).</p>
 <p>Then <code>BoardModel::filter_review_pins</code> combines both criteria:</p>
 <pre><code class="language-rust">pub fn filter_review_pins(
     &amp;self,

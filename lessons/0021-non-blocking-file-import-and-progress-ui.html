@@ -57,12 +57,12 @@
 <p class="subtitle">Offloading board and session parsing onto a background worker thread (<code>std::thread::spawn</code>), streaming staged progress over an <code>mpsc::channel</code>, polling <code>try_recv()</code> without blocking the 60-FPS <code>egui</code> loop, and driving an <code>egui::ProgressBar</code> with <code>ctx.request_repaint()</code>.</p>
 
 <h2 id="why-synchronous-file-parsing-freezes-immediate-mode-guis">Why Synchronous File Parsing Freezes Immediate-Mode GUIs</h2>
-<p>In Lesson <code>0016</code>, <code>import_session_from_json</code> ran synchronously on the main UI thread inside <code>update(&amp;mut self, ctx, frame)</code>. For a small 2 KB review envelope, that takes microseconds—but when an engineer opens a 50 MB industrial <code>.kicad_pcb</code> board file with 100,000 trace segments, synchronous parsing blocks <code>update()</code> for ratusan milliseconds, freezing panning, zooming, and OS window events.<span class="sidenote-number"></span><span class="sidenote"><strong>Never Block <code>eframe::App::update</code>:</strong> Because <code>egui</code> runs on a single UI thread, any operation taking more than ~4 ms should run on a background thread (<code>std::thread::spawn</code>) and communicate back via non-blocking message passing (<code>std::sync::mpsc::Receiver::try_recv</code>).</span></p>
+<p>In Lesson <code>0016</code>, <code>import_session_from_json</code> ran synchronously on the main UI thread inside <code>ui(&amp;mut self, ui, frame)</code>. For a small 2 KB review envelope, that takes microseconds—but when an engineer opens a 50 MB industrial <code>.kicad_pcb</code> board file with 100,000 trace segments, synchronous parsing blocks <code>ui()</code> for hundreds of milliseconds, freezing panning, zooming, and OS window events.<span class="sidenote-number"></span><span class="sidenote"><strong>Never Block <code>eframe::App::ui</code>:</strong> Because <code>egui</code> runs on a single UI thread, any operation taking more than ~4 ms should run on a background thread (<code>std::thread::spawn</code>) and communicate back via non-blocking message passing (<code>std::sync::mpsc::Receiver::try_recv</code>).</span></p>
 <p>We keep the UI locked at 60 FPS with a three-part pattern:</p>
 <ol>
 <li><strong>Spawn &amp; Stream (<code>spawn_background_session_import</code>)</strong>: Creates a <code>std::sync::mpsc::channel::&lt;ImportJobMessage&gt;()</code>, spawns a worker thread owning the raw JSON <code>String</code> (<code>Send + 'static</code>), emits staged <code>ImportJobMessage::Progress</code> updates (<code>&quot;Validating envelope&quot;</code>, <code>&quot;Loading copper layers&quot;</code>), and finishes with <code>Completed { board_id, board }</code> or <code>Failed(SessionIoError)</code>.</li>
-<li><strong>Non-Blocking Poll (<code>poll_async_import</code>)</strong>: At the start of each frame, drains available messages with <code>while let Ok(msg) = rx.try_recv()</code>—never blocking <code>update()</code>!</li>
-<li><strong>Continuous Repaint &amp; Cancellation (<code>ctx.request_repaint()</code>)</strong>: In reactive desktop mode, <code>egui</code> sleeps when the mouse is idle. Calling <code>ctx.request_repaint()</code> while <code>matches!(self.import_state, ImportJobState::Running { .. })</code> ensures <code>update()</code> keeps polling the channel until the worker finishes, and dropping <code>self.import_rx = None</code> cancels an in-flight job cleanly.</li>
+<li><strong>Non-Blocking Poll (<code>poll_async_import</code>)</strong>: At the start of each frame, drains available messages with <code>while let Ok(msg) = rx.try_recv()</code>—never blocking <code>ui()</code>!</li>
+<li><strong>Continuous Repaint &amp; Cancellation (<code>ctx.request_repaint()</code>)</strong>: In reactive desktop mode, <code>egui</code> sleeps when the mouse is idle. Calling <code>ctx.request_repaint()</code> while <code>matches!(self.import_state, ImportJobState::Running { .. })</code> ensures <code>ui()</code> keeps polling the channel until the worker finishes, and dropping <code>self.import_rx = None</code> cancels an in-flight job cleanly.</li>
 </ol>
 <figure class="mermaid-figure">
   <pre class="mermaid">
@@ -209,7 +209,7 @@ if let ImportJobState::Running { fraction, phase } = &amp;self.import_state {
     <span class="panel-title">Lab 3: Background Worker <code>mpsc</code> Channel &amp; Progress UI Mutation Gate (<code>0021</code>)</span>
     <span class="panel-badge">cargo test --workspace + cargo mutants</span>
   </div>
-  <p>Run the workspace test suite and mutate the background import worker, progress fraction math, non-blocking <code>try_recv()</code> polling, and <code>SidePanel::right</code> controls:</p>
+  <p>Run the workspace test suite and mutate the background import worker, progress fraction math, non-blocking <code>try_recv()</code> polling, and <code>Panel::right</code> controls:</p>
 <figure>
   <figcaption>Run workspace tests and cargo-mutants on 0020 async import functions</figcaption>
   <pre><code class="language-bash">cargo test --manifest-path ./apps/0021-non-blocking-file-import-and-progress-ui/Cargo.toml --workspace
@@ -317,7 +317,7 @@ cargo mutants --manifest-path ./apps/0021-non-blocking-file-import-and-progress-
             ],
             "correctIndex": 1,
             "explanation": "`Receiver::recv()` blocks the calling thread until a message arrives, which would freeze the `egui` window; `try_recv()` returns `Err(TryRecvError::Empty)` immediately when no message is waiting.",
-            "wrongHint": "Think about what happens to a 60-FPS UI loop if `update()` blocks waiting on a thread."
+            "wrongHint": "Think about what happens to a 60-FPS UI loop if `ui()` blocks waiting on a thread."
       },
       {
             "question": "Why do we call `ctx.request_repaint()` whenever `self.import_state` is `ImportJobState::Running`?",

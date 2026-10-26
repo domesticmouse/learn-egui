@@ -22,9 +22,9 @@ flowchart LR
     Pads["board.pads: Vec&lt;SmdPad&gt;"] --> Pair["Same PcbLayer &amp;&amp; a.net != b.net"]
     Pair --> Gap["pad_edge_gap_mm(a, b)<br/>dx.max(0.0).hypot(dy.max(0.0))"]
     Gap -->|"gap &lt; min_clearance_mm"| Viol["DrcViolation { center_mm, measured_gap_mm, ... }"]
-    Viol --> Halo["Canvas: painter.circle_stroke(center_px, 14.0, red)<br/>SidePanel: Click violation -> center camera"]
+    Viol --> Halo["Canvas: painter.circle_stroke(center_px, 14.0, red)<br/>Panel::left: Click violation -> center camera"]
 ```
-_Figure 13.1: Same-layer pads on distinct nets are checked against `min_clearance_mm`, emitting `DrcViolation` markers rendered as red halos on the canvas and clickable jump buttons in the `SidePanel`._
+_Figure 13.1: Same-layer pads on distinct nets are checked against `min_clearance_mm`, emitting `DrcViolation` markers rendered as red halos on the canvas and clickable jump buttons in `Panel::left`._
 
 ## 1. Just-in-Time Rust: Bounding-Box Reduction (`Iterator::reduce`) & `f32::clamp`
 

@@ -156,7 +156,7 @@ fn visible_traces_in_z_order_filters_hidden_layers_and_sorts_back_to_front() {
 :::
 
 :::quiz title="Retrieval Practice: `enum`, `Vec<T>` & Z-Ordering"
-Q: Why do we iterate over `&self.traces` (or `self.traces.iter()`) inside `update()` instead of `for seg in self.traces`?
+Q: Why do we iterate over `&self.traces` (or `self.traces.iter()`) inside `ui()` instead of `for seg in self.traces`?
 - [ ] Consuming Vec copies all segments into memory
 - [x] Borrowing Vec preserves data across all draws
 - [ ] Consuming Vec corrupts a vertex buffer layout

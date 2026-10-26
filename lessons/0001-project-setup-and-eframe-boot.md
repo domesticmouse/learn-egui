@@ -22,17 +22,17 @@ Before we wire up the layer-visibility toggles in [Lesson 0002](./0002-the-immed
 Turns out, Emil Ernerfeldt's `egui` crate doesn't actually open OS windows or talk directly to Metal, Vulkan, or OpenGL.{{sidenote:Because [`egui`](https://docs.rs/egui/latest/egui/) only takes input events and outputs 2D triangles and textures, it can be embedded inside game engines, custom CAD renderers, or headless test runners.}}
 
 - **`egui` (The UI Core):** Computes widget layouts, processes pointer/keyboard state, and generates 2D vector shapes for a single frame.
-- **`eframe` (The App Shell):** The official framework wrapper ([`docs.rs/eframe`](https://docs.rs/eframe/latest/eframe/)) that creates a native desktop window (or WebAssembly canvas), initialises the GPU painter, and calls your app's `update()` method on every repaint.
+- **`eframe` (The App Shell):** The official framework wrapper ([`docs.rs/eframe`](https://docs.rs/eframe/latest/eframe/)) that creates a native desktop window (or WebAssembly canvas), initialises the GPU painter, and calls your app's `ui()` method on every repaint.
 
 ```mermaid
 flowchart LR
-    Cargo["Cargo.toml<br/>(eframe = 0.33)"] --> Main["fn main()<br/>eframe::run_native(...)"]
+    Cargo["Cargo.toml<br/>(eframe = 0.37)"] --> Main["fn main()<br/>eframe::run_native(...)"]
     Main -->|"Runs once at startup"| Init["PcbReviewerApp::default()<br/>(Initialises struct state)"]
     Init --> Loop["eframe Event & Render Loop"]
-    Loop -->|"Calls every frame (~60 Hz)"| Update["impl eframe::App for PcbReviewerApp<br/>fn update(&mut self, ctx, frame)"]
+    Loop -->|"Calls every frame (~60 Hz)"| Update["impl eframe::App for PcbReviewerApp<br/>fn ui(&mut self, ui, frame)"]
     Update -->|"Emits 2D shapes"| Loop
 ```
-_Figure 1.1: How Cargo and `eframe::run_native` initialise your state once, then drive the Lesson 0002 `update()` loop every frame._
+_Figure 1.1: How Cargo and `eframe::run_native` initialise your state once, then drive the Lesson 0002 `ui()` loop every frame._
 
 ## 2. Creating the Project & Configuring `Cargo.toml`
 
@@ -47,7 +47,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-eframe = "0.33"
+eframe = "0.37"
 
 # Optimise dependencies (like egui/eframe) even in debug builds so our
 # 2D PCB canvas renders at 60 FPS while keeping our own code fast to compile.
@@ -106,9 +106,9 @@ impl PcbReviewerApp {
 }
 
 impl eframe::App for PcbReviewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Lesson 0002's SidePanel and CentralPanel code lives right here!
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Lesson 0002's Panel::left and CentralPanel code lives right here!
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.heading("PCB Viewport Ready");
         });
     }
@@ -166,14 +166,14 @@ copy_target = true
 # introduces headless UI testing with egui_kittest.
 exclude_re = [
     "replace main",
-    "<impl eframe::App for PcbReviewerApp>::update",
+    "<impl eframe::App for PcbReviewerApp>::ui",
 ]
 ```
 
 :::verify title="Interactive Lab 1: Crate Setup & Cargo Verification Gate" badge="cargo test + cargo mutants" tier="Tier 2: Unit Tests" caught="1 / 1 (100%)" missed="0 Missed"
 Every lesson includes a **Cargo Verification & Mutation Coverage** gate. Check off each step in your terminal to establish your baseline:
 
-- [ ] **1. Scaffold the binary crate:** Run `cargo new pcb-reviewer && cd pcb-reviewer` and add `eframe = "0.33"` + `[profile.dev.package."*"] opt-level = 2` to `Cargo.toml`.
+- [ ] **1. Scaffold the binary crate:** Run `cargo new pcb-reviewer && cd pcb-reviewer` and add `eframe = "0.37"` + `[profile.dev.package."*"] opt-level = 2` to `Cargo.toml`.
 - [ ] **2. Paste `src/main.rs` and verify the unit test:** Run `cargo test` and confirm `test tests::default_enables_physical_layers_and_hides_ratsnest ... ok` passes.
 - [ ] **3. Run your first mutation coverage check:** Install `cargo install --locked cargo-mutants` (once), save `.cargo/mutants.toml` above, and run `cargo mutants`. Confirm it reports `1 mutant tested: 1 caught` (replacing `PcbReviewerApp::reset_layers` with `()`). Try commenting out the three `assert!(app.show_...);` lines in your test to watch that mutant flip from **Caught** to **Missed**!
 :::
@@ -193,8 +193,8 @@ fn main() -> eframe::Result {
     )
 }
 
-impl {{blank:eframe::App|Which trait from `eframe` defines the per-frame `update` method?|/* 3: trait */|145px}} for PcbReviewerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+impl {{blank:eframe::App|Which trait from `eframe` defines the per-frame `ui` method?|/* 3: trait */|145px}} for PcbReviewerApp {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Frame loop body
     }
 }
@@ -229,8 +229,8 @@ Q: When does the `Box::new(|_cc| Ok(Box::new(PcbReviewerApp::default())))` facto
 - [ ] Whenever your window resizes across the desk
 - [ ] Moments after your native window closes down
 - [x] Once during startup to initialise root state
-why: `eframe::run_native` invokes the creation closure once at startup after creating the window and GPU context, constructing your `PcbReviewerApp` state before the `update()` loop begins.
-hint: Contrast `PcbReviewerApp::default()` in `run_native` with `fn update(&mut self, ...)`.
+why: `eframe::run_native` invokes the creation closure once at startup after creating the window and GPU context, constructing your `PcbReviewerApp` state before the `ui()` loop begins.
+hint: Contrast `PcbReviewerApp::default()` in `run_native` with `fn ui(&mut self, ...)`.
 :::
 
 ## Recommended Primary Source
@@ -241,5 +241,5 @@ Compare the minimal `eframe::run_native` example in the official docs with our `
 :::
 
 :::teacher-prompt
-**Next Step & Questions:** Have any questions about `Cargo.toml`, `Box::new`, or how `eframe::run_native` hands off to `update()`? Ask me in chat! Otherwise, click straight through to [**Lesson 0002: The Immediate-Mode Loop & Mutable State (`&mut`)**](./0002-the-immediate-mode-loop.html) to build the interactive PCB Layer Inspector inside `update()`.
+**Next Step & Questions:** Have any questions about `Cargo.toml`, `Box::new`, or how `eframe::run_native` hands off to `ui()`? Ask me in chat! Otherwise, click straight through to [**Lesson 0002: The Immediate-Mode Loop & Mutable State (`&mut`)**](./0002-the-immediate-mode-loop.html) to build the interactive PCB Layer Inspector inside `ui()`.
 :::

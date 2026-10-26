@@ -54,10 +54,10 @@
     <article class="tufte-article">
 <div class="prose-col">
 <h1>Lesson 0006: Hit-Testing &amp; Net Cross-Probing (<code>Option&lt;NetId&gt;</code>)</h1>
-<p class="subtitle">Hovering and clicking PCB pads in physical world coordinates to highlight connected nets and drive the <code>SidePanel</code> Net Inspector</p>
+<p class="subtitle">Hovering and clicking PCB pads in physical world coordinates to highlight connected nets and drive the <code>Panel::left</code> Net Inspector</p>
 
 <p>Drawing a PCB in physical millimetres is a great start. Being able to hover over an SMD pad, see which electrical net it belongs to, and watch every connected trace light up across the board is when it starts feeling like a real CAD tool.</p>
-<p>In <a href="./0005-modeling-layers-traces-and-footprints.html">Lesson 0005</a>, we rendered our PCB traces in deterministic back-to-front Z-order. Now, we complete <strong>Act I</strong> by making the 2D board interactive: when you hover over or click an SMD pad on the canvas, our app converts the mouse pointer from screen pixels back into physical millimetres (<code>screen_to_world</code>), checks which visible pad contains that coordinate, highlights every trace and pad on that net across all layers, and updates the left <code>SidePanel</code>.</p>
+<p>In <a href="./0005-modeling-layers-traces-and-footprints.html">Lesson 0005</a>, we rendered our PCB traces in deterministic back-to-front Z-order. Now, we complete <strong>Act I</strong> by making the 2D board interactive: when you hover over or click an SMD pad on the canvas, our app converts the mouse pointer from screen pixels back into physical millimetres (<code>screen_to_world</code>), checks which visible pad contains that coordinate, highlights every trace and pad on that net across all layers, and updates the left <code>Panel</code>.</p>
 <figure class="mermaid-figure">
   <pre class="mermaid">
 flowchart LR
@@ -65,7 +65,7 @@ flowchart LR
     World --&gt;|"hit_test_net_at_mm(world_mm)"| Hit["hovered_net: Option&lt;NetId&gt;&lt;br/&gt;Some(NetId(1)) or None"]
     Hit --&gt;|"if response.clicked()"| Sel["selected_net = hovered_net"]
     Sel --&gt; Active["active_net()&lt;br/&gt;self.selected_net.or(self.hovered_net)"]
-    Active --&gt; Highlight["Highlights NET_1 pads &amp; traces on canvas&lt;br/&gt;+ Updates SidePanel Net Inspector"]
+    Active --&gt; Highlight["Highlights NET_1 pads &amp; traces on canvas&lt;br/&gt;+ Updates Panel::left Net Inspector"]
   </pre>
 </figure>
 <p><em>Figure 6.1: Pointer screen coordinates are inverted into physical millimetres, hit-tested against visible pads in Z-order, and stored as <code>Option&lt;NetId&gt;</code></em></p>
@@ -114,7 +114,7 @@ impl PcbReviewerApp {
     }
 }</code></pre>
 <h2 id="3-unpacking-option-lt-netid-gt-with-if-let-some">3. Unpacking <code>Option&lt;NetId&gt;</code> with <code>if let Some(...)</code></h2>
-<p>So, inside the left <code>SidePanel</code>, we use <a href="https://doc.rust-lang.org/book/ch06-03-if-let.html"><code>if let Some(net) = self.active_net()</code></a> to display the active net's name and a <strong>&quot;Clear Selection&quot;</strong> button only when a net is actually hovered or selected:</p>
+<p>So, inside the left <code>Panel</code>, we use <a href="https://doc.rust-lang.org/book/ch06-03-if-let.html"><code>if let Some(net) = self.active_net()</code></a> to display the active net's name and a <strong>&quot;Clear Selection&quot;</strong> button only when a net is actually hovered or selected:</p>
 <pre><code class="language-rust">ui.heading("Net Inspector");
 if let Some(net) = self.active_net() {
     ui.label(format!("Active Net: NET_{}", net.0));
@@ -132,12 +132,12 @@ if let Some(net) = self.active_net() {
     <span class="panel-badge">Option&lt;NetId&gt; • Sense::click_and_drag()</span>
   </div>
   <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-    <strong>Hover</strong> over the SMD pads on the simulated PCB canvas below to preview <code>hovered_net</code>, or <strong>click</strong> a pad to lock <code>selected_net</code>. Watch how all traces and pads sharing that <code>NetId</code> highlight across layers and update the <code>SidePanel</code> Net Inspector.
+    <strong>Hover</strong> over the SMD pads on the simulated PCB canvas below to preview <code>hovered_net</code>, or <strong>click</strong> a pad to lock <code>selected_net</code>. Watch how all traces and pads sharing that <code>NetId</code> highlight across layers and update the <code>Panel::left</code> Net Inspector.
   </p>
 
   <div class="sim-grid">
     <div class="sim-box">
-      <h4>1. Net Inspector (<code>SidePanel</code>)</h4>
+      <h4>1. Net Inspector (<code>Panel::left</code>)</h4>
       <div data-role="net-inspector" style="font-size:0.86rem; line-height:1.55; margin-bottom:0.85rem;"></div>
       <button type="button" class="egui-btn" data-action="clear-net">Clear Selection (<code>selected_net = None</code>)</button>
     </div>
@@ -177,7 +177,7 @@ if let Some(net) = self.active_net() {
     self.selected_net.<input id="ex-blank-1" class="code-challenge-input" style="width:175px;" placeholder="/* 1: fallback hover */" autocomplete="off">
 }
 
-// Inside PcbReviewerApp::update:
+// Inside PcbReviewerApp::ui:
 let (response, painter) =
     ui.allocate_painter(ui.available_size(), Sense::<input id="ex-blank-2" class="code-challenge-input" style="width:165px;" placeholder="/* 2: click+drag */" autocomplete="off">);
 

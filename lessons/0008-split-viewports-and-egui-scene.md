@@ -1,14 +1,14 @@
 ---
 title: "Lesson 0008: Split Viewports, `egui::Scene` & Borrow-Checker State Splits"
-subtitle: Cross-probing from a Schematic Symbol Bar into the 2D PCB camera using `TopBottomPanel`, `egui::Scene`, and disjoint struct borrowing (`&BoardModel` + `&mut ViewState`)
+subtitle: Cross-probing from a Schematic Symbol Bar into the 2D PCB camera using `Panel::top`, `egui::Scene`, and disjoint struct borrowing (`&BoardModel` + `&mut ViewState`)
 lesson_num: "0008"
 act_badge: "Act II: Schematic Views, Layout & egui_kittest"
 card:
   num: "Lesson 0008"
   mutants: "40 / 40 Mutants Caught"
   title: "Split Viewports, `egui::Scene` & Schematic-to-PCB Cross-Probing"
-  summary: "Add a top schematic symbol bar with `TopBottomPanel`, wrap the 2D board in `egui::Scene`, and cross-probe schematic components to centre the PCB camera rectangle."
-  egui_skill: "`TopBottomPanel`, `egui::Scene`, camera focusing"
+  summary: "Add a top schematic symbol bar with `Panel::top`, wrap the 2D board in `egui::Scene`, and cross-probe schematic components to centre the PCB camera rectangle."
+  egui_skill: "`Panel::top`, `egui::Scene`, camera focusing"
   rust_concept: "Disjoint struct borrows (`&BoardModel` vs. `&mut ViewState`)"
   app_dir: "apps/0008-split-viewports-and-egui-scene"
 ---
@@ -74,12 +74,12 @@ impl ViewState {
 }
 ```
 
-## 2. Multi-Panel Layouts with `TopBottomPanel` & `egui::Scene`
+## 2. Multi-Panel Layouts with `Panel::top` & `egui::Scene`
 
 Alongside our custom `TSTransform` canvas from Lesson 0004, `egui` also ships a built-in pan-and-zoom container called [`egui::Scene`](https://docs.rs/egui/latest/egui/containers/scene/struct.Scene.html). You pass `&mut self.view.pcb_scene_rect` into `Scene::new().show(...)`, and `Scene` automatically updates that `Rect` whenever the user drags or scrolls—or whenever our schematic cross-probe overwrites `pcb_scene_rect` to jump the camera straight to a component:
 
 ```rust
-egui::TopBottomPanel::top("schematic_cross_probe_bar").show(ctx, |ui| {
+egui::Panel::top("schematic_cross_probe_bar").show(ui, |ui| {
     ui.horizontal(|ui| {
         ui.label("Schematic Symbols (Click to Cross-Probe):");
         for comp in &self.board.components {
@@ -94,7 +94,7 @@ egui::TopBottomPanel::top("schematic_cross_probe_bar").show(ctx, |ui| {
 
 {{widget:dual-scene-sim}}
 
-:::exercise title="Interactive Lab 2: Complete the Split-Borrow Cross-Probe Call" badge="Borrow Checker • TopBottomPanel • Rect::from_center_size"
+:::exercise title="Interactive Lab 2: Complete the Split-Borrow Cross-Probe Call" badge="Borrow Checker • Panel::top • Rect::from_center_size"
 Fill in the three blanks below so that (1) `focus_component` borrows `board` immutably, (2) centres `self.pcb_scene_rect` around `comp.center_mm`, and (3) the top schematic bar passes `&self.board` while mutating `self.view`:
 
 ```rust
@@ -111,7 +111,7 @@ impl ViewState {
     }
 }
 
-// Inside TopBottomPanel::top("schematic_bar"):
+// Inside Panel::top("schematic_bar"):
 for comp in &self.board.components {
     let label = format!("Probe {} ({})", comp.ref_des, comp.value);
     if ui.button(label).clicked() {

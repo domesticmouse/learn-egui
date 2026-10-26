@@ -532,7 +532,7 @@ def widget_pcb_layer_sim(scripts_out: list[str]) -> str:
     return """<section class="full-width-panel" id="pcb-layer-sim">
   <div class="panel-header">
     <span class="panel-title">Interactive Lab 1: Trace the Immediate-Mode Frame Loop</span>
-    <span class="panel-badge" data-role="frame-badge">Frame #1 • update(&amp;mut self, ctx, frame)</span>
+    <span class="panel-badge" data-role="frame-badge">Frame #1 • ui(&amp;mut self, ui, frame)</span>
   </div>
   <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
     Toggle the checkboxes or click the preset buttons inside the simulated <code>egui</code> window below. Watch how each interaction immediately mutates <code>self</code> via <code>&amp;mut</code> and repaints the 2D PCB viewport in the very same frame.
@@ -770,12 +770,12 @@ def widget_hittest_sim(scripts_out: list[str]) -> str:
     <span class="panel-badge">Option&lt;NetId&gt; • Sense::click_and_drag()</span>
   </div>
   <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-    <strong>Hover</strong> over the SMD pads on the simulated PCB canvas below to preview <code>hovered_net</code>, or <strong>click</strong> a pad to lock <code>selected_net</code>. Watch how all traces and pads sharing that <code>NetId</code> highlight across layers and update the <code>SidePanel</code> Net Inspector.
+    <strong>Hover</strong> over the SMD pads on the simulated PCB canvas below to preview <code>hovered_net</code>, or <strong>click</strong> a pad to lock <code>selected_net</code>. Watch how all traces and pads sharing that <code>NetId</code> highlight across layers and update the <code>Panel::left</code> Net Inspector.
   </p>
 
   <div class="sim-grid">
     <div class="sim-box">
-      <h4>1. Net Inspector (<code>SidePanel</code>)</h4>
+      <h4>1. Net Inspector (<code>Panel::left</code>)</h4>
       <div data-role="net-inspector" style="font-size:0.86rem; line-height:1.55; margin-bottom:0.85rem;"></div>
       <button type="button" class="egui-btn" data-action="clear-net">Clear Selection (<code>selected_net = None</code>)</button>
     </div>
@@ -814,7 +814,7 @@ def widget_sch_text_sim(scripts_out: list[str]) -> str:
     <span class="panel-badge">Align2 • FontId • Harness::new_eframe</span>
   </div>
   <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
-    Adjust the <code>Align2</code> anchor mode, font size, and <code>show_silkscreen</code> toggle below. Observe how <code>Painter::text</code> repositions the reference designators on the canvas while <code>egui_kittest::Harness</code> inspects the live accessibility tree in the <code>SidePanel</code>.
+    Adjust the <code>Align2</code> anchor mode, font size, and <code>show_silkscreen</code> toggle below. Observe how <code>Painter::text</code> repositions the reference designators on the canvas while <code>egui_kittest::Harness</code> inspects the live accessibility tree in the <code>Panel::left</code>.
   </p>
 
   <div class="sim-grid">
@@ -876,7 +876,7 @@ def widget_dual_scene_sim(scripts_out: list[str]) -> str:
     return """<section class="full-width-panel" id="dual-scene-sim">
   <div class="panel-header">
     <span class="panel-title">Interactive Lab 1: Schematic-to-PCB Cross-Probing &amp; Split Borrowing</span>
-    <span class="panel-badge">TopBottomPanel • egui::Scene • &amp;BoardModel + &amp;mut ViewState</span>
+    <span class="panel-badge">Panel::top • egui::Scene • &amp;BoardModel + &amp;mut ViewState</span>
   </div>
   <p style="font-family: var(--font-sans); font-size: 0.9rem; margin-bottom: 1rem;">
     Click any schematic symbol button (<strong>Probe U1</strong>, <strong>Probe R12</strong>, or <strong>Probe J1</strong>) below. Watch how <code>self.view.focus_component(&amp;self.board, ref_des)</code> reads the component's physical coordinates from <code>&amp;self.board</code> and updates <code>self.view.pcb_scene_rect</code> to centre the PCB camera on that footprint.
@@ -898,7 +898,7 @@ def widget_dual_scene_sim(scripts_out: list[str]) -> str:
     <div class="egui-central-canvas" style="border-radius:6px; border:1px solid #3c3c3c; min-height:225px;">
       <svg viewBox="0 0 320 210" width="100%" height="210" aria-label="Dual Schematic and PCB Cross-Probe Viewport">
         <rect x="12" y="10" width="296" height="58" rx="4" fill="#161d26" stroke="#334458" stroke-width="1.5"/>
-        <text x="20" y="24" fill="#9da6b0" font-family="sans-serif" font-size="9">SCHEMATIC VIEW (TopBottomPanel)</text>
+        <text x="20" y="24" fill="#9da6b0" font-family="sans-serif" font-size="9">SCHEMATIC VIEW (Panel::top)</text>
         <line x1="70" y1="45" x2="250" y2="45" stroke="#6cb6ff" stroke-width="1.5"/>
         <rect data-sch-comp="U1" data-probe-ref="U1" x="52" y="30" width="38" height="28" rx="2" fill="#1e2936" stroke="#ffe664" stroke-width="3" style="cursor:pointer;"/>
         <text x="71" y="48" fill="#e8e6df" font-family="monospace" font-size="10" text-anchor="middle" style="pointer-events:none;">U1</text>
@@ -1041,7 +1041,7 @@ def widget_review_pins_sim(scripts_out: list[str]) -> str:
 
   <div class="sim-grid">
     <div class="sim-box">
-      <h4>1. Sorted Review Pins (<code>SidePanel</code>)</h4>
+      <h4>1. Sorted Review Pins (<code>Panel::left</code>)</h4>
       <div data-role="pin-list" style="display:flex; flex-direction:column; margin-bottom:0.6rem;"></div>
       <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
         <button type="button" class="egui-btn" data-action="add-pin-r12">+ Insert Pin #3 at R12</button>
@@ -1177,15 +1177,15 @@ def widget_workspace_layers_sim(scripts_out: list[str]) -> str:
       <h4>1. <code>crates/pcb-doc/Cargo.toml</code></h4>
       <label class="egui-checkbox" style="margin-bottom:0.45rem;">
         <input type="checkbox" checked disabled>
-        <code>emath = "0.33"</code> (L0 math — allowed)
+        <code>emath = "0.37"</code> (L0 math — allowed)
       </label>
       <label class="egui-checkbox" style="margin-bottom:0.45rem;">
         <input type="checkbox" data-dep="egui">
-        Inject <code>egui = "0.33"</code> (L6 UI — forbidden!)
+        Inject <code>egui = "0.37"</code> (L6 UI — forbidden!)
       </label>
       <label class="egui-checkbox" style="margin-bottom:0.45rem;">
         <input type="checkbox" data-dep="eframe">
-        Inject <code>eframe = "0.33"</code> (L7 Shell — forbidden!)
+        Inject <code>eframe = "0.37"</code> (L7 Shell — forbidden!)
       </label>
       <label class="egui-checkbox">
         <input type="checkbox" data-dep="rfd">

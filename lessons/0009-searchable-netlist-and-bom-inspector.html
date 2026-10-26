@@ -98,10 +98,11 @@ impl BoardModel {
 }</code></pre>
 <h2 id="2-virtualised-scrolling-with-scrollarea-show-rows-amp-grid">2. Virtualised Scrolling with <code>ScrollArea::show_rows</code> &amp; <code>Grid</code></h2>
 <p>Now, even in an immediate-mode GUI, laying out 10,000 offscreen table rows on every 60 Hz frame is a great way to warm up your laptop fan for no reason.</p>
-<p>Turns out, <a href="https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows"><code>ScrollArea::show_rows</code></a> makes virtualised scrolling almost ridiculously simple: it calculates the exact <code>row_range: Range&lt;usize&gt;</code> currently visible inside the scroll viewport based on <code>row_height_sans_spacing</code> and calls your closure for <em>only those visible rows</em>:</p>
+<p>Turns out, <a href="https://docs.rs/egui/latest/egui/containers/scroll_area/struct.ScrollArea.html#method.show_rows"><code>ScrollArea::show_rows</code></a> makes virtualised scrolling almost ridiculously simple: it calculates the exact <code>row_range: Range&lt;usize&gt;</code> currently visible inside the scroll viewport based on <code>row_height_sans_spacing</code> and calls your closure for <em>only those visible rows</em>:<span class="sidenote-number"></span><span class="sidenote">Notice how we chain <code>.labelled_by(bom_label.id)</code> onto <code>ui.text_edit_singleline(...)</code>. In <code>egui_kittest 0.37</code>, <code>Harness::run()</code> automatically audits AccessKit nodes and panics if any interactive <code>TextInput</code> lacks an accessible name!</span></p>
 <pre><code class="language-rust">ui.horizontal(|ui| {
-    ui.label("Filter BOM:");
-    ui.text_edit_singleline(&amp;mut self.view.bom_search_query);
+    let bom_label = ui.label("Filter BOM:");
+    ui.text_edit_singleline(&amp;mut self.view.bom_search_query)
+        .labelled_by(bom_label.id);
     if ui.button("Clear Filter").clicked() {
         self.view.clear_bom_query();
     }
@@ -182,7 +183,9 @@ egui::ScrollArea::vertical()
 }
 
 // Inside render_side_panel():
-ui.<input id="ex-blank-2" class="code-challenge-input" style="width:185px;" placeholder="/* 2: singleline edit */" autocomplete="off">(&amp;mut self.view.bom_search_query);
+let bom_label = ui.label("Filter BOM:");
+ui.<input id="ex-blank-2" class="code-challenge-input" style="width:185px;" placeholder="/* 2: singleline edit */" autocomplete="off">(&amp;mut self.view.bom_search_query)
+    .labelled_by(bom_label.id);
 
 let matching = self.board.filter_components(&amp;self.view.bom_search_query);
 egui::ScrollArea::vertical()
