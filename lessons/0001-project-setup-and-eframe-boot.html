@@ -111,10 +111,27 @@ fn main() -&gt; eframe::Result {
     )
 }</code></pre>
 <ul>
-<li><strong><code>use eframe::egui;</code></strong>: Instead of pulling in a separate <code>egui</code> crate in <code>Cargo.toml</code>, we import <code>eframe</code>'s re-exported <code>egui</code> module so our UI code and window runner are guaranteed to use the exact same <code>egui</code> version.</li>
-<li><strong><code>fn main() -&gt; eframe::Result</code></strong>: Every Rust binary starts at <code>fn main()</code>. Returning <code>eframe::Result</code> allows <code>eframe</code> to report any window-creation or GPU initialisation errors cleanly back to the OS.<span class="sidenote-number"></span><span class="sidenote">In Rust, <a href="https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html"><code>Result&lt;T, E&gt;</code></a> represents an operation that either succeeds (<code>Ok(T)</code>) or fails (<code>Err(E)</code>). <code>eframe::Result</code> is a type alias for <code>Result&lt;(), eframe::Error&gt;</code>.</span></li>
-<li><strong>Configuring <code>NativeOptions</code> &amp; <code>ViewportBuilder</code></strong>: In Rust, variables are immutable by default, so we write <code>let mut options</code> to make the struct mutable. We then replace <code>options.viewport</code> using the <strong>builder pattern</strong>: <code>egui::ViewportBuilder::default().with_inner_size([1024.0, 720.0])</code> starts from standard window defaults and chains <code>.with_inner_size(...)</code> to request a <code>1024×720</code> logical-point canvas.</li>
-<li><strong><code>eframe::run_native(...)</code></strong>: Notice there is <strong>no semicolon</strong> after <code>eframe::run_native(...)</code>—in Rust, the final expression of a function without a trailing semicolon is automatically its return value. It takes three arguments:
+<li>
+<p><strong><code>use eframe::egui;</code></strong>: Instead of pulling in a separate <code>egui</code> crate in <code>Cargo.toml</code>, we import <code>eframe</code>'s re-exported <code>egui</code> module so our UI code and window runner are guaranteed to use the exact same <code>egui</code> version.</p>
+</li>
+<li>
+<p><strong><code>fn main() -&gt; eframe::Result</code></strong>: Every Rust binary starts at <code>fn main()</code>. Returning <code>eframe::Result</code> allows <code>eframe</code> to report any window-creation or GPU initialisation errors cleanly back to the OS.<span class="sidenote-number"></span><span class="sidenote">In Rust, <a href="https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html"><code>Result&lt;T, E&gt;</code></a> represents an operation that either succeeds (<code>Ok(T)</code>) or fails (<code>Err(E)</code>). <code>eframe::Result</code> is a type alias for <code>Result&lt;(), eframe::Error&gt;</code>.</span></p>
+</li>
+<li>
+<p><strong>Configuring <code>NativeOptions</code> &amp; <code>ViewportBuilder</code></strong>: In Rust, variables are immutable by default, so we write <code>let mut options</code> to make the struct mutable. We then replace <code>options.viewport</code> using the <strong>builder pattern</strong>: <code>egui::ViewportBuilder::default().with_inner_size([1024.0, 720.0])</code> starts from standard window defaults and chains <code>.with_inner_size(...)</code> to request a <code>1024×720</code> logical-point canvas.</p>
+</li>
+<li>
+<p><strong>Alternative—Keeping <code>options</code> Immutable with Struct Update Syntax (<code>..Default::default()</code>)</strong>: You might wonder why <code>options</code> couldn't stay immutable via a <code>.with_viewport(...)</code> chain of its own. Unlike <code>egui::ViewportBuilder</code> (which defines <code>.with_*</code> builder methods that consume <code>mut self</code> and return <code>Self</code>), <a href="https://docs.rs/eframe/latest/eframe/struct.NativeOptions.html"><code>eframe::NativeOptions</code></a> is a plain configuration struct with public fields and an <code>impl Default</code>. In Rust, you can initialise a struct like <code>NativeOptions</code> without <code>mut</code> using <a href="https://doc.rust-lang.org/book/ch05-01-defining-structs.html#creating-instances-from-other-instances-with-struct-update-syntax"><strong>struct update syntax</strong></a>:</p>
+<pre><code class="language-rust">let options = eframe::NativeOptions {
+    viewport: egui::ViewportBuilder::default()
+        .with_inner_size([1024.0, 720.0]),
+    ..Default::default()
+};
+</code></pre>
+<p>Here, <code>viewport: ...</code> sets the one field we care about, and <code>..Default::default()</code> (placed last, with no trailing comma) tells Rust to fill every remaining field (<code>vsync</code>, <code>multisampling</code>, <code>renderer</code>, etc.) from <code>eframe::NativeOptions::default()</code>. Both styles compile to identical code—<code>let mut options</code> is handy when you want to conditionally tweak fields across several statements, whereas <code>..Default::default()</code> keeps <code>options</code> immutable from the moment it's bound.</p>
+</li>
+<li>
+<p><strong><code>eframe::run_native(...)</code></strong>: Notice there is <strong>no semicolon</strong> after <code>eframe::run_native(...)</code>—in Rust, the final expression of a function without a trailing semicolon is automatically its return value. It takes three arguments:</p>
 <ol>
 <li><code>&quot;Schematic &amp; PCB Design Reviewer&quot;</code>: The native OS window title.</li>
 <li><code>options</code>: The <code>NativeOptions</code> we just configured.</li>

@@ -88,6 +88,17 @@ fn main() -> eframe::Result {
 - **`use eframe::egui;`**: Instead of pulling in a separate `egui` crate in `Cargo.toml`, we import `eframe`'s re-exported `egui` module so our UI code and window runner are guaranteed to use the exact same `egui` version.
 - **`fn main() -> eframe::Result`**: Every Rust binary starts at `fn main()`. Returning `eframe::Result` allows `eframe` to report any window-creation or GPU initialisation errors cleanly back to the OS.{{sidenote:In Rust, [`Result<T, E>`](https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html) represents an operation that either succeeds (`Ok(T)`) or fails (`Err(E)`). `eframe::Result` is a type alias for `Result<(), eframe::Error>`.}}
 - **Configuring `NativeOptions` & `ViewportBuilder`**: In Rust, variables are immutable by default, so we write `let mut options` to make the struct mutable. We then replace `options.viewport` using the **builder pattern**: `egui::ViewportBuilder::default().with_inner_size([1024.0, 720.0])` starts from standard window defaults and chains `.with_inner_size(...)` to request a `1024×720` logical-point canvas.
+- **Alternative—Keeping `options` Immutable with Struct Update Syntax (`..Default::default()`)**: You might wonder why `options` couldn't stay immutable via a `.with_viewport(...)` chain of its own. Unlike `egui::ViewportBuilder` (which defines `.with_*` builder methods that consume `mut self` and return `Self`), [`eframe::NativeOptions`](https://docs.rs/eframe/latest/eframe/struct.NativeOptions.html) is a plain configuration struct with public fields and an `impl Default`. In Rust, you can initialise a struct like `NativeOptions` without `mut` using [**struct update syntax**](https://doc.rust-lang.org/book/ch05-01-defining-structs.html#creating-instances-from-other-instances-with-struct-update-syntax):
+
+  ```rust
+  let options = eframe::NativeOptions {
+      viewport: egui::ViewportBuilder::default()
+          .with_inner_size([1024.0, 720.0]),
+      ..Default::default()
+  };
+  ```
+
+  Here, `viewport: ...` sets the one field we care about, and `..Default::default()` (placed last, with no trailing comma) tells Rust to fill every remaining field (`vsync`, `multisampling`, `renderer`, etc.) from `eframe::NativeOptions::default()`. Both styles compile to identical code—`let mut options` is handy when you want to conditionally tweak fields across several statements, whereas `..Default::default()` keeps `options` immutable from the moment it's bound.
 - **`eframe::run_native(...)`**: Notice there is **no semicolon** after `eframe::run_native(...)`—in Rust, the final expression of a function without a trailing semicolon is automatically its return value. It takes three arguments:
   1. `"Schematic & PCB Design Reviewer"`: The native OS window title.
   2. `options`: The `NativeOptions` we just configured.
