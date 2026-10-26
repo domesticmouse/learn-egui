@@ -156,7 +156,9 @@ impl eframe::App for PcbReviewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Lesson 0002's Panel and CentralPanel code lives right here!
         egui::CentralPanel::default().show(ui, |ui| {
-            ui.heading("PCB Viewport Ready");
+            ui.centered_and_justified(|ui| {
+                ui.heading("PCB Viewport Ready");
+            });
         });
     }
 }
@@ -167,7 +169,8 @@ impl eframe::App for PcbReviewerApp {
   - `&mut self`: Gives us mutable access to our `PcbReviewerApp` state so checkboxes and buttons can modify fields in place.
   - `ui: &mut egui::Ui`: The root UI region handle for the current frame, which tracks layout, input events, styling, and fonts across the window.
   - `_frame: &mut eframe::Frame`: Provides integration hooks into the surrounding `eframe` shell. Prefixing the parameter name with an underscore (`_frame`) tells the Rust compiler we intentionally aren't using it yet, keeping our build free of unused-variable warnings.
-- **`egui::CentralPanel::default().show(ui, |ui| { ... })`**: Claims the main canvas area of the window and invokes our closure `|ui| { ... }`, passing in a scoped `&mut egui::Ui` region builder where `ui.heading("PCB Viewport Ready")` emits our startup heading.
+- **`egui::CentralPanel::default().show(ui, |ui| { ... })`**: Claims the main canvas area of the window and invokes our closure `|ui| { ... }`, passing in a scoped `&mut egui::Ui` region builder.
+- **`ui.centered_and_justified(|ui| { ... })`**: By default, `CentralPanel` lays out widgets from the top-left corner (`Layout::top_down(Align::Min)`). Wrapping `ui.heading("PCB Viewport Ready")` inside [`ui.centered_and_justified`](https://docs.rs/egui/latest/egui/struct.Ui.html#method.centered_and_justified) expands the single child region to fill the viewport and centers our startup heading both horizontally and vertically.
 
 ### Block 5: Inline Unit Tests (`#[cfg(test)] mod tests`)
 
@@ -243,7 +246,9 @@ impl eframe::App for PcbReviewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Lesson 0002's Panel and CentralPanel code lives right here!
         egui::CentralPanel::default().show(ui, |ui| {
-            ui.heading("PCB Viewport Ready");
+            ui.centered_and_justified(|ui| {
+                ui.heading("PCB Viewport Ready");
+            });
         });
     }
 }

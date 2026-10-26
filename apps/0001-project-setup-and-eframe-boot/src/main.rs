@@ -45,7 +45,9 @@ impl eframe::App for PcbReviewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Lesson 0002's Panel and CentralPanel code lives right here!
         egui::CentralPanel::default().show(ui, |ui| {
-            ui.heading("PCB Viewport Ready");
+            ui.centered_and_justified(|ui| {
+                ui.heading("PCB Viewport Ready");
+            });
         });
     }
 }
